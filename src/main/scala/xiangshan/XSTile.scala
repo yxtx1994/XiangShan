@@ -1,7 +1,7 @@
 package xiangshan
 
 import chisel3._
-import chipsalliance.rocketchip.config.{Config, Parameters}
+import org.chipsalliance.cde.config.{Config, Parameters}
 import chisel3.util.{Valid, ValidIO}
 import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.interrupts._
@@ -67,10 +67,12 @@ class XSTileMisc()(implicit p: Parameters) extends LazyModule
   beu.node := TLBuffer.chainNode(3) := mmio_xbar
   mmio_port := TLBuffer.chainNode(3) := mmio_xbar
 
-  lazy val module = new LazyModuleImp(this){
-    val beu_errors = IO(Input(chiselTypeOf(beu.module.io.errors)))
-    beu.module.io.errors <> beu_errors
-  }
+  lazy val module = new XSTileMiscImp(this)
+}
+
+class XSTileMiscImp(outer: XSTileMisc)(implicit p: Parameters) extends LazyModuleImp(outer) {
+  val beu_errors = IO(Input(chiselTypeOf(outer.beu.module.io.errors)))
+  outer.beu.module.io.errors <> beu_errors
 }
 
 class XSTile()(implicit p: Parameters) extends LazyModule
@@ -144,14 +146,7 @@ class XSTile()(implicit p: Parameters) extends LazyModule
   misc.i_mmio_port := core.frontend.instrUncache.clientNode
   misc.d_mmio_port := core.memBlock.uncache.clientNode
 
-  lazy val module = new LazyModuleImp(this){
-    val io = IO(new Bundle {
-      val hartId = Input(UInt(64.W))
-      val cpu_halt = Output(Bool())
-    })
-
-    dontTouch(io.hartId)
-
+  lazy val module = new XSTileImp(this) {
     val core_soft_rst = core_reset_sink.in.head._1
 
     core.module.io.hartId := io.hartId
@@ -186,4 +181,13 @@ class XSTile()(implicit p: Parameters) extends LazyModule
     )
     ResetGen(resetChain, reset, !debugOpts.FPGAPlatform)
   }
+}
+
+class XSTileImp(outer: XSTile) extends LazyModuleImp(outer) {
+  val io = IO(new Bundle {
+    val hartId = Input(UInt(64.W))
+    val cpu_halt = Output(Bool())
+  })
+
+  dontTouch(io.hartId)
 }

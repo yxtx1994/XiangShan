@@ -16,7 +16,7 @@
 
 package xiangshan.backend
 
-import chipsalliance.rocketchip.config.Parameters
+import org.chipsalliance.cde.config.Parameters
 import chisel3._
 import chisel3.util._
 import freechips.rocketchip.diplomacy.{BundleBridgeSource, LazyModule, LazyModuleImp}
@@ -292,7 +292,7 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
 
   // LoadUnit
   for (i <- 0 until exuParameters.LduCnt) {
-    loadUnits(i).io.redirect <> redirect
+    loadUnits(i).io.redirect := redirect
     loadUnits(i).io.feedbackSlow <> io.rsfeedback(i).feedbackSlow
     loadUnits(i).io.feedbackFast <> io.rsfeedback(i).feedbackFast
     loadUnits(i).io.rsIdx := io.rsfeedback(i).rsIdx
@@ -392,7 +392,7 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
   for (i <- 0 until exuParameters.StuCnt) {
     val stu = storeUnits(i)
 
-    stdExeUnits(i).io.redirect <> redirect
+    stdExeUnits(i).io.redirect := redirect
     stdExeUnits(i).io.fromInt <> io.issue(i + exuParameters.LduCnt + exuParameters.StuCnt)
     stdExeUnits(i).io.fromFp := DontCare
     stdExeUnits(i).io.out := DontCare
@@ -576,7 +576,7 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
   atomicsUnit.io.storeDataIn.valid := st0_data_atomics || st1_data_atomics
   atomicsUnit.io.storeDataIn.bits  := Mux(st0_data_atomics, stData(0).bits, stData(1).bits)
   atomicsUnit.io.rsIdx    := Mux(st0_atomics, io.rsfeedback(atomic_rs0).rsIdx, io.rsfeedback(atomic_rs1).rsIdx)
-  atomicsUnit.io.redirect <> redirect
+  atomicsUnit.io.redirect := redirect
 
   // TODO: complete amo's pmp support
   val amoTlb = dtlb_ld(0).requestor(0)

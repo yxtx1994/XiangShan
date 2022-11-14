@@ -16,7 +16,7 @@
 
 package xiangshan.backend
 
-import chipsalliance.rocketchip.config.Parameters
+import org.chipsalliance.cde.config.Parameters
 import chisel3._
 import chisel3.experimental.hierarchy.Instance
 import chisel3.util._
@@ -79,7 +79,7 @@ class FUBlock(configs: Seq[(ExuConfig, Int)])(implicit p: Parameters) extends XS
   }
 
   for ((exu, i) <- exeUnits.zipWithIndex) {
-    exu.io.redirect <> RegNextWithEnable(io.redirect)
+    exu.io.redirect := RegNextWithEnable(io.redirect)
 
     if (exu.csrio.isDefined) {
       exu.csrio.get <> io.extra.csrio.get

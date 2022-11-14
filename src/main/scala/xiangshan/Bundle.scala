@@ -35,7 +35,7 @@ import utils._
 
 import scala.math.max
 import Chisel.experimental.chiselName
-import chipsalliance.rocketchip.config.Parameters
+import org.chipsalliance.cde.config.Parameters
 import chisel3.util.BitPat.bitPatToUInt
 import xiangshan.backend.exu.ExuConfig
 import xiangshan.backend.fu.PMPEntry

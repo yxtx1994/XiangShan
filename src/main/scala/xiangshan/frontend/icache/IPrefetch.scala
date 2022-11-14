@@ -16,7 +16,7 @@
 
 package xiangshan.frontend.icache
 
-import chipsalliance.rocketchip.config.Parameters
+import org.chipsalliance.cde.config.Parameters
 import chisel3._
 import chisel3.util._
 import freechips.rocketchip.tilelink._
@@ -176,7 +176,7 @@ class IPrefetchPipe(implicit p: Parameters) extends  IPrefetchModule
   io.pmp.req.bits.size  := 3.U
   io.pmp.req.bits.cmd   := TlbCmd.exec
 
-  val p3_except_pmp_af = DataHoldBypass(pmpExcpAF, p3_pmp_fire) 
+  val p3_except_pmp_af = DataHoldBypass(pmpExcpAF, p3_pmp_fire)
   val p3_check_in_mshr = RegEnable(next = p2_check_in_mshr,  enable = p2_fire)
   val p3_mmio      = DataHoldBypass(io.pmp.resp.mmio && !p3_except_pmp_af, p3_pmp_fire)
 

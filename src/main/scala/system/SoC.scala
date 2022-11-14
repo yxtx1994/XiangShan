@@ -16,7 +16,7 @@
 
 package system
 
-import chipsalliance.rocketchip.config.{Field, Parameters}
+import org.chipsalliance.cde.config.{Field, Parameters}
 import chisel3._
 import chisel3.util._
 import device.{DebugModule, TLPMA, TLPMAIO}
@@ -258,10 +258,12 @@ class SoCMisc()(implicit p: Parameters) extends BaseSoC
   val clint = LazyModule(new CLINT(CLINTParams(0x38000000L), 8))
   clint.node := peripheralXbar
 
+  class IntSourceNodeToModuleImp(num: Int, outer: IntSourceNodeToModule)(implicit p: Parameters) extends LazyModuleImp(outer) {
+    val in = IO(Input(Vec(num, Bool())))
+  }
   class IntSourceNodeToModule(val num: Int)(implicit p: Parameters) extends LazyModule {
     val sourceNode = IntSourceNode(IntSourcePortSimple(num, ports = 1, sources = 1))
-    lazy val module = new LazyModuleImp(this){
-      val in = IO(Input(Vec(num, Bool())))
+    lazy val module = new IntSourceNodeToModuleImp(num, this){
       in.zip(sourceNode.out.head._1).foreach{ case (i, s) => s := i }
     }
   }
@@ -291,14 +293,7 @@ class SoCMisc()(implicit p: Parameters) extends BaseSoC
     TLBuffer.chainNode(4) :=
     peripheralXbar
 
-  lazy val module = new LazyModuleImp(this){
-
-    val debug_module_io = IO(chiselTypeOf(debugModule.module.io))
-    val ext_intrs = IO(Input(UInt(NrExtIntr.W)))
-    val pll0_lock = IO(Input(Bool()))
-    val pll0_ctrl = IO(Output(Vec(6, UInt(32.W))))
-    val cacheable_check = IO(new TLPMAIO)
-
+  lazy val module = new SoCMiscImp(this) {
     debugModule.module.io <> debug_module_io
 
     // sync external interrupts
@@ -337,4 +332,12 @@ class SoCMisc()(implicit p: Parameters) extends BaseSoC
       )
     )
   }
+}
+
+class SoCMiscImp(outer: SoCMisc)(implicit p: Parameters) extends LazyModuleImp(outer) {
+  val debug_module_io = IO(chiselTypeOf(outer.debugModule.module.io))
+  val ext_intrs = IO(Input(UInt(outer.NrExtIntr.W)))
+  val pll0_lock = IO(Input(Bool()))
+  val pll0_ctrl = IO(Output(Vec(6, UInt(32.W))))
+  val cacheable_check = IO(new TLPMAIO)
 }

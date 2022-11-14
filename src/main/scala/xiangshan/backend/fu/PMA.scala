@@ -214,7 +214,7 @@ trait PMAMethod extends PMAConst {
     })
     val addr = addr_list.reverse
     val mask = mask_list.reverse
-    (VecInit(cfgInitMerge), VecInit(addr), VecInit(mask))
+    (VecInit(cfgInitMerge), VecInit(addr.toSeq), VecInit(mask.toSeq))
   }
 
   def get_napot(base: BigInt, range: BigInt): BigInt = {

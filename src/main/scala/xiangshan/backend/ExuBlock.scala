@@ -16,7 +16,7 @@
 
 package xiangshan.backend
 
-import chipsalliance.rocketchip.config.Parameters
+import org.chipsalliance.cde.config.Parameters
 import chisel3._
 import chisel3.util._
 import freechips.rocketchip.diplomacy.{LazyModule, LazyModuleImp}
@@ -83,7 +83,7 @@ class ExuBlockImp(outer: ExuBlock)(implicit p: Parameters) extends LazyModuleImp
 
   // IO for the scheduler
   scheduler.io.hartId := io.hartId
-  scheduler.io.redirect <> io.redirect
+  scheduler.io.redirect := io.redirect
   scheduler.io.allocPregs <> io.allocPregs
   scheduler.io.in <> io.in
   scheduler.io.fastUopOut <> io.fastUopOut
@@ -101,7 +101,7 @@ class ExuBlockImp(outer: ExuBlock)(implicit p: Parameters) extends LazyModuleImp
   }
 
   // IO for the function units
-  fuBlock.io.redirect <> io.redirect
+  fuBlock.io.redirect := io.redirect
   fuBlock.io.writeback <> io.fuWriteback
   fuBlock.io.extra <> io.fuExtra
 

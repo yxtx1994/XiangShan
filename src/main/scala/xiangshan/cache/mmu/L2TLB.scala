@@ -16,7 +16,7 @@
 
 package xiangshan.cache.mmu
 
-import chipsalliance.rocketchip.config.Parameters
+import org.chipsalliance.cde.config.Parameters
 import chisel3._
 import chisel3.experimental.ExtModule
 import chisel3.util._
@@ -458,17 +458,20 @@ class PTWWrapper()(implicit p: Parameters) extends LazyModule with HasXSParamete
     node := ptw.node
   }
 
-  lazy val module = new LazyModuleImp(this) with HasPerfEvents {
-    val io = IO(new PtwIO)
-    val perfEvents = if (useSoftPTW) {
-      val fake_ptw = Module(new FakePTW())
-      io <> fake_ptw.io
-      Seq()
-    }
-    else {
-        io <> ptw.module.io
-        ptw.module.getPerfEvents
-    }
-    generatePerfEvent()
+  lazy val module = new PTWWrapperImp(this)
+}
+
+class PTWWrapperImp(outer: PTWWrapper)(implicit p: Parameters) extends LazyModuleImp(outer) with HasPerfEvents {
+  val io = IO(new PtwIO)
+  val perfEvents = if (outer.useSoftPTW) {
+    val fake_ptw = Module(new FakePTW())
+    io <> fake_ptw.io
+    Seq()
   }
+  else {
+      io <> outer.ptw.module.io
+      outer.ptw.module.getPerfEvents
+  }
+
+  generatePerfEvent()
 }

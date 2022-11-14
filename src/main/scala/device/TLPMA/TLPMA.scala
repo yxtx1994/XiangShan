@@ -1,7 +1,7 @@
 package device
 
 import freechips.rocketchip.diplomacy.{AddressSet, LazyModule, LazyModuleImp, SimpleDevice}
-import chipsalliance.rocketchip.config.Parameters
+import org.chipsalliance.cde.config.Parameters
 import chisel3._
 import chisel3.util._
 import xiangshan._
@@ -15,6 +15,10 @@ class TLPMAIO(implicit val p: Parameters) extends Bundle with PMAConst {
   val resp = Vec(mmpma.num, new PMPRespBundle())
 }
 
+class TLPMAImp(outer: TLPMA)(implicit p: Parameters) extends LazyModuleImp(outer) {
+  val io = IO(new TLPMAIO)
+}
+
 class TLPMA(implicit p: Parameters) extends LazyModule with PMAConst with MMPMAMethod{
   val node = TLRegisterNode(
     address = Seq(AddressSet(mmpma.address/*pmaParam.address*/, mmpma.mask)),
@@ -23,9 +27,8 @@ class TLPMA(implicit p: Parameters) extends LazyModule with PMAConst with MMPMAM
     beatBytes = 8
   )
 
-  lazy val module = new LazyModuleImp(this) {
+  lazy val module = new TLPMAImp(this) {
 
-    val io = IO(new TLPMAIO)
     val req = io.req
     val resp = io.resp
 

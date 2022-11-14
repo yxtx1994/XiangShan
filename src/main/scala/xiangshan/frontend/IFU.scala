@@ -16,7 +16,7 @@
 
 package xiangshan.frontend
 
-import chipsalliance.rocketchip.config.Parameters
+import org.chipsalliance.cde.config.Parameters
 import chisel3._
 import chisel3.util._
 import freechips.rocketchip.rocket.RVCDecoder
@@ -310,7 +310,7 @@ class NewIFU(implicit p: Parameters) extends XSModule
   for(i <- 0 until 4){
     val preDecoderIn  = preDecoders(i).io.in
     preDecoderIn.data := f2_cut_data(i)
-    preDecoderIn.frontendTrigger := io.frontendTrigger  
+    preDecoderIn.frontendTrigger := io.frontendTrigger
     preDecoderIn.pc  := f2_pc
   }
 
@@ -354,7 +354,7 @@ class NewIFU(implicit p: Parameters) extends XSModule
 
   //val f3_expd_instr     = RegEnable(next = f2_expd_instr,  enable = f2_fire)
   val f3_instr          = RegEnable(next = f2_instr, enable = f2_fire)
-  val f3_expd_instr     = VecInit((0 until PredictWidth).map{ i => 
+  val f3_expd_instr     = VecInit((0 until PredictWidth).map{ i =>
     val expander       = Module(new RVCExpander)
     expander.io.in := f3_instr(i)
     expander.io.out.bits
@@ -700,18 +700,18 @@ class NewIFU(implicit p: Parameters) extends XSModule
 
   f3_wb_not_flush := wb_ftq_req.ftqIdx === f3_ftq_req.ftqIdx && f3_valid && wb_valid
 
-  /** if a req with a last half but miss predicted enters in wb stage, and this cycle f3 stalls,  
+  /** if a req with a last half but miss predicted enters in wb stage, and this cycle f3 stalls,
     * we set a flag to notify f3 that the last half flag need not to be set.
     */
   //f3_fire is after wb_valid
-  when(wb_valid && RegNext(f3_hasLastHalf,init = false.B) 
+  when(wb_valid && RegNext(f3_hasLastHalf,init = false.B)
         && wb_check_result_stage2.fixedMissPred(PredictWidth - 1) && !f3_fire  && !RegNext(f3_fire,init = false.B) && !f3_flush
       ){
     f3_lastHalf_disable := true.B
   }
 
   //wb_valid and f3_fire are in same cycle
-  when(wb_valid && RegNext(f3_hasLastHalf,init = false.B) 
+  when(wb_valid && RegNext(f3_hasLastHalf,init = false.B)
         && wb_check_result_stage2.fixedMissPred(PredictWidth - 1) && f3_fire
       ){
     f3_lastHalf.valid := false.B
@@ -797,4 +797,3 @@ class NewIFU(implicit p: Parameters) extends XSModule
   XSPerfAccumulate("miss_0_except_1",   f3_perf_info.miss_0_except_1 && io.toIbuffer.fire() )
   XSPerfAccumulate("except_0",   f3_perf_info.except_0 && io.toIbuffer.fire() )
 }
-

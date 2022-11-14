@@ -16,7 +16,7 @@
 
 package xiangshan.backend.exu
 
-import chipsalliance.rocketchip.config.Parameters
+import org.chipsalliance.cde.config.Parameters
 import chisel3._
 import chisel3.experimental.hierarchy.{IsLookupable, instantiable, public}
 import chisel3.util._
@@ -147,7 +147,7 @@ abstract class Exu(cfg: ExuConfig)(implicit p: Parameters) extends XSModule {
 
     if (fuCfg.hasInputBuffer._1) {
       val buffer = Module(new InputBuffer(fuCfg.hasInputBuffer._2, fuCfg.hasInputBuffer._3))
-      buffer.io.redirect <> io.redirect
+      buffer.io.redirect := io.redirect
       buffer.io.in.valid := in.valid && sel
       buffer.io.in.bits.uop := in.bits.uop
       buffer.io.in.bits.src := in.bits.src
@@ -246,7 +246,7 @@ abstract class Exu(cfg: ExuConfig)(implicit p: Parameters) extends XSModule {
     out.debug.isMMIO := false.B
     out.debug.isPerfCnt := false.B
     out.debug.paddr := DontCare
-    out.redirect <> DontCare
+    out.redirect := DontCare
     out.redirectValid := false.B
   }
 

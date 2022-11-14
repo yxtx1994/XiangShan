@@ -17,7 +17,7 @@
 package xiangshan.mem
 
 
-import chipsalliance.rocketchip.config.Parameters
+import org.chipsalliance.cde.config.Parameters
 import chisel3._
 import chisel3.util._
 import xiangshan._
@@ -67,7 +67,7 @@ class LsPipelineBundle(implicit p: Parameters) extends XSBundle {
   val forwardData = Vec(8, UInt(8.W))
 
   //softprefetch
-  val isSoftPrefetch = Bool() 
+  val isSoftPrefetch = Bool()
 
   // For debug usage
   val isFirstIssue = Bool()
@@ -141,7 +141,7 @@ class PipeLoadForwardQueryIO(implicit p: Parameters) extends LoadForwardQueryIO 
 }
 
 // Query load queue for ld-ld violation
-// 
+//
 // Req should be send in load_s1
 // Resp will be generated 1 cycle later
 //

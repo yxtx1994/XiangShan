@@ -16,14 +16,14 @@
 
 package top
 
-import chipsalliance.rocketchip.config.{Config, Parameters}
+import org.chipsalliance.cde.config.{Config, Parameters}
 import chisel3.stage.ChiselGeneratorAnnotation
 import chisel3._
 import device.{AXI4RAMWrapper, SimJTAG}
 import freechips.rocketchip.diplomacy.{DisableMonitors, LazyModule, LazyModuleImp}
 import utils.GTimer
 import xiangshan.{DebugOptions, DebugOptionsKey}
-import chipsalliance.rocketchip.config._
+import org.chipsalliance.cde.config._
 import freechips.rocketchip.devices.debug._
 import difftest._
 import freechips.rocketchip.util.ElaborationArtefacts
@@ -95,19 +95,19 @@ class SimTop(implicit p: Parameters) extends Module {
   // Check and dispaly all source and sink connections
   ExcitingUtils.fixConnections()
   ExcitingUtils.checkAndDisplay()
+
+  DifftestModule.finish(cpu = "XiangShan")
 }
 
 object SimTop extends App {
-  override def main(args: Array[String]): Unit = {
-    // Keep this the same as TopMain except that SimTop is used here instead of XSTop
-    val (config, firrtlOpts) = ArgParser.parse(args)
-    XiangShanStage.execute(firrtlOpts, Seq(
-      ChiselGeneratorAnnotation(() => {
-        DisableMonitors(p => new SimTop()(p))(config)
-      })
-    ))
-    ElaborationArtefacts.files.foreach{ case (extension, contents) =>
-      writeOutputFile("./build", s"XSTop.${extension}", contents())
-    }
+  // Keep this the same as TopMain except that SimTop is used here instead of XSTop
+  val (config, firrtlOpts) = ArgParser.parse(args)
+  XiangShanStage.execute(firrtlOpts, Seq(
+    ChiselGeneratorAnnotation(() => {
+      DisableMonitors(p => new SimTop()(p))(config)
+    })
+  ))
+  ElaborationArtefacts.files.foreach{ case (extension, contents) =>
+    writeOutputFile("./build", s"XSTop.${extension}", contents())
   }
 }

@@ -16,7 +16,7 @@
 
 package  xiangshan.frontend.icache
 
-import chipsalliance.rocketchip.config.Parameters
+import org.chipsalliance.cde.config.Parameters
 import chisel3._
 import chisel3.util.{DecoupledIO, _}
 import freechips.rocketchip.diplomacy.{IdRange, LazyModule, LazyModuleImp, TransferSizes}
@@ -147,7 +147,7 @@ class ICacheMetaArray()(implicit p: Parameters) extends ICacheArray
     val write    = Flipped(DecoupledIO(new ICacheMetaWriteBundle))
     val read     = Flipped(DecoupledIO(new ICacheReadBundle))
     val readResp = Output(new ICacheMetaRespBundle)
-    val cacheOp  = Flipped(new L1CacheInnerOpIO) // customized cache op port 
+    val cacheOp  = Flipped(new L1CacheInnerOpIO) // customized cache op port
   }}
 
   io.read.ready := !io.write.valid
@@ -208,7 +208,7 @@ class ICacheMetaArray()(implicit p: Parameters) extends ICacheArray
       tagArrays(i).io.w.req.valid :=  RegNext(tag_sram_write(i).valid, init = false.B)
       tagArrays(i).io.w.req.bits  := RegEnable(tag_sram_write(i).bits, enable =tag_sram_write(i).valid )
 
-    }  
+    }
   }
 
   io.read.ready := !io.write.valid && tagArrays.map(_.io.r.req.ready).reduce(_&&_)
@@ -249,7 +249,7 @@ class ICacheMetaArray()(implicit p: Parameters) extends ICacheArray
   // deal with customized cache op
   require(nWays <= 32)
   io.cacheOp.resp.bits := DontCare
-  val cacheOpShouldResp = WireInit(false.B) 
+  val cacheOpShouldResp = WireInit(false.B)
   when(io.cacheOp.req.valid){
     when(
       CacheInstrucion.isReadTag(io.cacheOp.req.bits.opCode) ||
@@ -265,8 +265,8 @@ class ICacheMetaArray()(implicit p: Parameters) extends ICacheArray
       for (i <- 0 until 2) {
         tag_sram_write(i).valid := true.B
         tag_sram_write(i).bits.apply(
-          data = io.cacheOp.req.bits.write_tag_low, 
-          setIdx = io.cacheOp.req.bits.index, 
+          data = io.cacheOp.req.bits.write_tag_low,
+          setIdx = io.cacheOp.req.bits.index,
           waymask = UIntToOH(io.cacheOp.req.bits.wayNum(4, 0))
         )
       }
@@ -284,7 +284,7 @@ class ICacheMetaArray()(implicit p: Parameters) extends ICacheArray
     // }
   }
   io.cacheOp.resp.valid := RegNext(io.cacheOp.req.valid && cacheOpShouldResp)
-  io.cacheOp.resp.bits.read_tag_low := Mux(io.cacheOp.resp.valid, 
+  io.cacheOp.resp.bits.read_tag_low := Mux(io.cacheOp.resp.valid,
     tagArrays(0).io.r.resp.asTypeOf(Vec(nWays, UInt(tagBits.W)))(io.cacheOp.req.bits.wayNum),
     0.U
   )
@@ -379,12 +379,12 @@ class ICacheDataArray(implicit p: Parameters) extends ICacheArray
   // val write_data_code = Wire(UInt(dataCodeEntryBits.W))
   val write_bank_0 = WireInit(io.write.valid && !io.write.bits.bankIdx)
   val write_bank_1 = WireInit(io.write.valid &&  io.write.bits.bankIdx)
-  
+
 
   val bank_0_idx = bank_0_idx_vec.last
   val bank_1_idx = bank_1_idx_vec.last
 
-  
+
   io.read.ready := !io.write.valid &&
                     dataArrays.map(_.io.read.req.map(_.ready).reduce(_&&_)).reduce(_&&_)
 
@@ -402,7 +402,7 @@ class ICacheDataArray(implicit p: Parameters) extends ICacheArray
   require(nWays <= 32)
   io.cacheOp.resp.bits := DontCare
   io.cacheOp.resp.valid := false.B
-  val cacheOpShouldResp = WireInit(false.B) 
+  val cacheOpShouldResp = WireInit(false.B)
   val dataresp = Wire(Vec(nWays,UInt(blockBits.W) ))
   dataresp := DontCare
 
@@ -431,7 +431,7 @@ class ICacheDataArray(implicit p: Parameters) extends ICacheArray
       }
     }
   }
-  
+
   io.cacheOp.resp.valid := RegNext(RegNext(cacheOpShouldResp, init = false.B), init = false.B)
   val numICacheLineWords = blockBits / 64
   require(blockBits >= 64 && isPow2(blockBits))
@@ -668,7 +668,7 @@ class ICacheImp(outer: ICache) extends LazyModuleImp(outer) with HasICacheParame
 
   missUnit.io.release_resp <> replacePipe.io.pipe_resp
 
-  
+
   mainPipe.io.fetch.req <> io.fetch.req //&& !fetchShouldBlock(i)
   // in L1ICache, we only expect GrantData and ReleaseAck
   bus.d.ready := false.B
@@ -696,7 +696,7 @@ class ICacheImp(outer: ICache) extends LazyModuleImp(outer) with HasICacheParame
   dataArray.io.cache_req_dup(3) := cacheOpDecoder.io.cache_req_dup(3)
 
   metaArray.io.cacheOp.req := cacheOpDecoder.io.cache.req
-  cacheOpDecoder.io.cache.resp.valid := 
+  cacheOpDecoder.io.cache.resp.valid :=
     dataArray.io.cacheOp.resp.valid ||
     metaArray.io.cacheOp.resp.valid
   cacheOpDecoder.io.cache.resp.bits := Mux1H(List(

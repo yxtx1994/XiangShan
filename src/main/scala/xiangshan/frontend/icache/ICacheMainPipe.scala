@@ -16,7 +16,7 @@
 
 package xiangshan.frontend.icache
 
-import chipsalliance.rocketchip.config.Parameters
+import org.chipsalliance.cde.config.Parameters
 import chisel3._
 import chisel3.util._
 import freechips.rocketchip.tilelink.ClientStates
@@ -95,7 +95,7 @@ class ICacheMainPipeInterface(implicit p: Parameters) extends ICacheBundle {
   val errors      = Output(Vec(PortNumber, new L1CacheErrorInfo))
   /*** outside interface ***/
   //val fetch       = Vec(PortNumber, new ICacheMainPipeBundle)
-  /* when ftq.valid is high in T + 1 cycle 
+  /* when ftq.valid is high in T + 1 cycle
    * the ftq component must be valid in T cycle
    */
   val fetch       = new ICacheMainPipeBundle
@@ -124,7 +124,7 @@ class ICacheMainPipe(implicit p: Parameters) extends ICacheModule
 
   //Ftq RegNext Register
   val fromFtqReq = fromFtq.bits.pcMemRead
-  
+
   /** pipeline control signal */
   val s0_ready, s1_ready, s2_ready = WireInit(false.B)
   val s0_fire,  s1_fire , s2_fire  = WireInit(false.B)
@@ -210,7 +210,7 @@ class ICacheMainPipe(implicit p: Parameters) extends ICacheModule
   toMeta.bits.vSetIdx             := Mux(tlb_slot.valid,tlb_slot.req_vsetIdx ,ftq_req_to_meta_vset_idx)
   toMeta.bits.readValid           := DontCare
 
-  toITLB(0).valid         := s0_valid  
+  toITLB(0).valid         := s0_valid
   toITLB(0).bits.size     := 3.U // TODO: fix the size
   toITLB(0).bits.vaddr    := ftq_req_to_itlb_vaddr(0)
   toITLB(0).bits.debug.pc := ftq_req_to_itlb_vaddr(0)
@@ -265,7 +265,7 @@ class ICacheMainPipe(implicit p: Parameters) extends ICacheModule
   }
 
   /** latch tlb resp when pipeline stops */
-  (0 until PortNumber).map{i => 
+  (0 until PortNumber).map{i =>
     when(RegNext(tlb_resp(i)) && !s0_can_go){
       tlb_slot.tlb_resp_paddr(i) := fromITLB(i + PortNumber).bits.paddr(0)
       tlb_slot.tlb_resp_pf(i)    := fromITLB(i + PortNumber).bits.excp(0).pf.instr && fromITLB(i + PortNumber).valid
@@ -493,7 +493,7 @@ class ICacheMainPipe(implicit p: Parameters) extends ICacheModule
   val s2_has_except = s2_valid && (s2_except_tlb_af.reduce(_||_) || s2_except_pf.reduce(_||_))
   //MMIO
   val s2_mmio      = DataHoldBypass(io.pmp(0).resp.mmio && !s2_except_tlb_af(0) && !s2_except_pmp_af(0) && !s2_except_pf(0), RegNext(s1_fire)).asBool() && s2_valid
- 
+
   //send physical address to PMP
   io.pmp.zipWithIndex.map { case (p, i) =>
     p.req.valid := s2_valid && !missSwitchBit
@@ -719,7 +719,7 @@ class ICacheMainPipe(implicit p: Parameters) extends ICacheModule
 
 
   /*** send request to MissUnit ***/
-  (0 until 4).map{j => 
+  (0 until 4).map{j =>
       (0 until 2).map { i =>
       if(i == 1) toMSHR(i).valid   := (hit_0_miss_1_latch || miss_0_miss_1_latch) && wait_state === wait_queue_ready && !s2_mmio
           else     toMSHR(i).valid := (only_0_miss_latch || miss_0_hit_1_latch || miss_0_miss_1_latch || miss_0_except_1_latch) && wait_state === wait_queue_ready && !s2_mmio

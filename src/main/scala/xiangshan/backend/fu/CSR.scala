@@ -16,11 +16,10 @@
 
 package xiangshan.backend.fu
 
-import chipsalliance.rocketchip.config.Parameters
+import org.chipsalliance.cde.config.Parameters
 import chisel3._
 import chisel3.util._
 import difftest._
-import freechips.rocketchip.util._
 import utils.MaskedRegMap.WritableMask
 import utils._
 import xiangshan.ExceptionNO._
@@ -207,7 +206,7 @@ class CSR(implicit p: Parameters) extends FunctionUnit with HasCSRConst with PMP
   private val tdata2WireVec = tdata2RegVec
   private val tdata1Selected = tdata1RegVec(tselectPhy).asTypeOf(new Tdata1Bundle)
   private val tdata2Selected = tdata2RegVec(tselectPhy)
-  private val newTriggerChainVec = UIntToOH(tselectPhy, TriggerNum).asBools | tdata1WireVec.map(_.data.asTypeOf(new MControlData).chain)
+  private val newTriggerChainVec = (UIntToOH(tselectPhy, TriggerNum) | VecInit(tdata1WireVec.map(_.data.asTypeOf(new MControlData).chain)).asUInt).asBools
   private val newTriggerChainIsLegal = TriggerCheckChainLegal(newTriggerChainVec, TriggerChainMaxLength)
   val tinfo = RegInit((BigInt(1) << TrigTypeEnum.MCONTROL.litValue.toInt).U(XLEN.W)) // This value should be 4.U
 
@@ -426,12 +425,13 @@ class CSR(implicit p: Parameters) extends FunctionUnit with HasCSRConst with PMP
 
   // smblockctl: memory block configurations
   // bits 0-3: store buffer flush threshold (default: 8 entries)
+  def toInt(x: Boolean): Int = if (x) 1 else 0
   val smblockctl_init_val =
     (0xf & StoreBufferThreshold) |
-    (EnableLdVioCheckAfterReset.toInt << 4) |
-    (EnableSoftPrefetchAfterReset.toInt << 5) |
-    (EnableCacheErrorAfterReset.toInt << 6) |
-    (EnablePTWPreferCache.toInt << 7)
+    (toInt(EnableLdVioCheckAfterReset) << 4) |
+    (toInt(EnableSoftPrefetchAfterReset) << 5) |
+    (toInt(EnableCacheErrorAfterReset) << 6) |
+    (toInt(EnablePTWPreferCache) << 7)
   val smblockctl = RegInit(UInt(XLEN.W), smblockctl_init_val.U)
   csrio.customCtrl.sbuffer_threshold := smblockctl(3, 0)
   // bits 4: enable load load violation check
@@ -778,7 +778,7 @@ class CSR(implicit p: Parameters) extends FunctionUnit with HasCSRConst with PMP
   csrio.customCtrl.frontend_trigger.tUpdate.valid := RegNext(RegNext(frontendTriggerUpdate))
   csrio.customCtrl.mem_trigger.tUpdate.valid := RegNext(RegNext(memTriggerUpdate))
   XSDebug(triggerEnableVec.reduce(_ || _), p"Debug Mode: At least 1 trigger is enabled," +
-    p"trigger enable is ${Binary(triggerEnableVec.asUInt)}\n")
+    p"trigger enable is ${Binary(VecInit(triggerEnableVec).asUInt)}\n")
 
   // CSR inst decode
   val isEbreak = addr === privEbreak && func === CSROpType.jmp
@@ -972,8 +972,8 @@ class CSR(implicit p: Parameters) extends FunctionUnit with HasCSRConst with PMP
   val hasTriggerFire        = hasException && csrio.exception.bits.uop.cf.trigger.canFire
   val triggerFrontendHitVec = csrio.exception.bits.uop.cf.trigger.frontendHit
   val triggerMemHitVec      = csrio.exception.bits.uop.cf.trigger.backendHit
-  val triggerHitVec         = triggerFrontendHitVec | triggerMemHitVec // Todo: update mcontrol.hit
-  val triggerCanFireVec     = csrio.exception.bits.uop.cf.trigger.frontendCanFire | csrio.exception.bits.uop.cf.trigger.backendCanFire
+  val triggerHitVec         = (triggerFrontendHitVec.asUInt | triggerMemHitVec.asUInt).asBools // Todo: update mcontrol.hit
+  val triggerCanFireVec     = (csrio.exception.bits.uop.cf.trigger.frontendCanFire.asUInt | csrio.exception.bits.uop.cf.trigger.backendCanFire.asUInt).asBools
   // More than one triggers can hit at the same time, but only fire one
   // We select the first hit trigger to fire
   val triggerFireOH = PriorityEncoderOH(triggerCanFireVec)
@@ -1165,55 +1165,54 @@ class CSR(implicit p: Parameters) extends FunctionUnit with HasCSRConst with PMP
 
   def readWithScala(addr: Int): UInt = mapping(addr)._1
 
-  val difftestIntrNO = Mux(hasIntr, causeNO, 0.U)
-
   // Always instantiate basic difftest modules.
   if (env.AlwaysBasicDiff || env.EnableDifftest) {
-    val difftest = Module(new DifftestArchEvent)
-    difftest.io.clock := clock
-    difftest.io.coreid := csrio.hartId
-    difftest.io.intrNO := RegNext(RegNext(RegNext(difftestIntrNO)))
-    difftest.io.cause  := RegNext(RegNext(RegNext(Mux(csrio.exception.valid, causeNO, 0.U))))
-    difftest.io.exceptionPC := RegNext(RegNext(RegNext(dexceptionPC)))
+    val difftest = DifftestModule(new DiffArchEvent, delay = 3)
+    difftest.clock       := clock
+    difftest.coreid      := csrio.hartId
+    difftest.valid       := hasIntr || csrio.exception.valid
+    difftest.interrupt   := Mux(hasIntr, causeNO, 0.U)
+    difftest.exception   := Mux(csrio.exception.valid, causeNO, 0.U)
+    difftest.exceptionPC := dexceptionPC
     if (env.EnableDifftest) {
-      difftest.io.exceptionInst := RegNext(RegNext(RegNext(csrio.exception.bits.uop.cf.instr)))
+      difftest.exceptionInst := csrio.exception.bits.uop.cf.instr
     }
   }
 
   // Always instantiate basic difftest modules.
   if (env.AlwaysBasicDiff || env.EnableDifftest) {
-    val difftest = Module(new DifftestCSRState)
-    difftest.io.clock := clock
-    difftest.io.coreid := csrio.hartId
-    difftest.io.priviledgeMode := priviledgeMode
-    difftest.io.mstatus := mstatus
-    difftest.io.sstatus := mstatus & sstatusRmask
-    difftest.io.mepc := mepc
-    difftest.io.sepc := sepc
-    difftest.io.mtval:= mtval
-    difftest.io.stval:= stval
-    difftest.io.mtvec := mtvec
-    difftest.io.stvec := stvec
-    difftest.io.mcause := mcause
-    difftest.io.scause := scause
-    difftest.io.satp := satp
-    difftest.io.mip := mipReg
-    difftest.io.mie := mie
-    difftest.io.mscratch := mscratch
-    difftest.io.sscratch := sscratch
-    difftest.io.mideleg := mideleg
-    difftest.io.medeleg := medeleg
+    val difftest = DifftestModule(new DiffCSRState)
+    difftest.clock := clock
+    difftest.coreid := csrio.hartId
+    difftest.priviledgeMode := priviledgeMode
+    difftest.mstatus := mstatus
+    difftest.sstatus := mstatus & sstatusRmask
+    difftest.mepc := mepc
+    difftest.sepc := sepc
+    difftest.mtval:= mtval
+    difftest.stval:= stval
+    difftest.mtvec := mtvec
+    difftest.stvec := stvec
+    difftest.mcause := mcause
+    difftest.scause := scause
+    difftest.satp := satp
+    difftest.mip := mipReg
+    difftest.mie := mie
+    difftest.mscratch := mscratch
+    difftest.sscratch := sscratch
+    difftest.mideleg := mideleg
+    difftest.medeleg := medeleg
   }
 
   if(env.AlwaysBasicDiff || env.EnableDifftest) {
-    val difftest = Module(new DifftestDebugMode)
-    difftest.io.clock := clock
-    difftest.io.coreid := csrio.hartId
-    difftest.io.debugMode := debugMode
-    difftest.io.dcsr := dcsr
-    difftest.io.dpc := dpc
-    difftest.io.dscratch0 := dscratch0
-    difftest.io.dscratch1 := dscratch1
+    val difftest = DifftestModule(new DiffDebugMode)
+    difftest.clock := clock
+    difftest.coreid := csrio.hartId
+    difftest.debugMode := debugMode
+    difftest.dcsr := dcsr
+    difftest.dpc := dpc
+    difftest.dscratch0 := dscratch0
+    difftest.dscratch1 := dscratch1
   }
 }
 

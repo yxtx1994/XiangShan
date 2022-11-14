@@ -16,7 +16,7 @@
 
 package xiangshan.cache.mmu
 
-import chipsalliance.rocketchip.config.Parameters
+import org.chipsalliance.cde.config.Parameters
 import chisel3._
 import chisel3.util._
 import chisel3.internal.naming.chiselName
@@ -221,7 +221,7 @@ class PtwCache()(implicit p: Parameters) extends XSModule with HasPtwConst with 
   }
   // NOTE: not actually bypassed, just check if hit, re-access the page cache
   def refill_bypass(vpn: UInt, level: Int) = {
-    io.refill.valid && (level.U === io.refill.bits.level_dup(0)) && vpn_match(io.refill.bits.req_info_dup(0).vpn, vpn, level),
+    io.refill.valid && (level.U === io.refill.bits.level_dup(0)) && vpn_match(io.refill.bits.req_info_dup(0).vpn, vpn, level)
   }
 
   // l1

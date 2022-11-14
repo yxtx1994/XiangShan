@@ -16,7 +16,7 @@
 
 package xiangshan.backend
 
-import chipsalliance.rocketchip.config.Parameters
+import org.chipsalliance.cde.config.Parameters
 import chisel3._
 import chisel3.util._
 import freechips.rocketchip.diplomacy.{LazyModule, LazyModuleImp}
@@ -240,7 +240,7 @@ class CtrlBlockImp(outer: CtrlBlock)(implicit p: Parameters) extends LazyModuleI
         wb_next.bits.uop.debugInfo.writebackTime := timer
       }
       exuOutput
-    }))
+    }).toSeq)
   }
 
   val decode = Module(new DecodeStage)
@@ -368,7 +368,7 @@ class CtrlBlockImp(outer: CtrlBlock)(implicit p: Parameters) extends LazyModuleI
 
   // LFST lookup and update
   val lfst = Module(new LFST)
-  lfst.io.redirect <> RegNext(io.redirect)
+  lfst.io.redirect := RegNext(io.redirect)
   lfst.io.storeIssue <> RegNext(io.stIn)
   lfst.io.csrCtrl <> RegNext(io.csrCtrl)
   lfst.io.dispatch <> dispatch.io.lfst
@@ -424,7 +424,7 @@ class CtrlBlockImp(outer: CtrlBlock)(implicit p: Parameters) extends LazyModuleI
     }
   }
 
-  rename.io.redirect <> stage2Redirect
+  rename.io.redirect := stage2Redirect
   rename.io.robCommits <> rob.io.commits
   rename.io.ssit <> ssit.io.rdata
 
@@ -434,7 +434,7 @@ class CtrlBlockImp(outer: CtrlBlock)(implicit p: Parameters) extends LazyModuleI
   }
 
   dispatch.io.hartId := io.hartId
-  dispatch.io.redirect <> stage2Redirect
+  dispatch.io.redirect := stage2Redirect
   dispatch.io.enqRob <> rob.io.enq
   dispatch.io.toIntDq <> intDq.io.enq
   dispatch.io.toFpDq <> fpDq.io.enq
@@ -442,9 +442,9 @@ class CtrlBlockImp(outer: CtrlBlock)(implicit p: Parameters) extends LazyModuleI
   dispatch.io.allocPregs <> io.allocPregs
   dispatch.io.singleStep := RegNext(io.csrCtrl.singlestep)
 
-  intDq.io.redirect <> redirectForExu
-  fpDq.io.redirect <> redirectForExu
-  lsDq.io.redirect <> redirectForExu
+  intDq.io.redirect := redirectForExu
+  fpDq.io.redirect := redirectForExu
+  lsDq.io.redirect := redirectForExu
 
   val dpqOut = intDq.io.deq ++ lsDq.io.deq ++ fpDq.io.deq
   io.dispatch <> dpqOut
@@ -459,7 +459,7 @@ class CtrlBlockImp(outer: CtrlBlock)(implicit p: Parameters) extends LazyModuleI
     }
     if (dp2.enqLsq.isDefined) {
       val lsqCtrl = Module(new LsqEnqCtrl)
-      lsqCtrl.io.redirect <> redirectForExu
+      lsqCtrl.io.redirect := redirectForExu
       lsqCtrl.io.enq <> dp2.enqLsq.get
       lsqCtrl.io.lcommit := rob.io.lsq.lcommit
       lsqCtrl.io.scommit := io.sqDeq
@@ -500,10 +500,10 @@ class CtrlBlockImp(outer: CtrlBlock)(implicit p: Parameters) extends LazyModuleI
 
   rob.io.hartId := io.hartId
   io.cpu_halt := DelayN(rob.io.cpu_halt, 5)
-  rob.io.redirect <> stage2Redirect
+  rob.io.redirect := stage2Redirect
   outer.rob.generateWritebackIO(Some(outer), Some(this))
 
-  io.redirect <> stage2Redirect
+  io.redirect := stage2Redirect
 
   // rob to int block
   io.robio.toCSR <> rob.io.csr

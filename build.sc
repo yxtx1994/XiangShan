@@ -19,17 +19,18 @@ import mill._
 import scalalib._
 import publish._
 import coursier.maven.MavenRepository
+import $file.`rocket-chip`.cde.common
 import $file.`rocket-chip`.common
-import $file.`rocket-chip`.`api-config-chipsalliance`.`build-rules`.mill.build
 import $file.`rocket-chip`.hardfloat.build
+import $file.difftest.build
+import $file.difftest.instrumentation.instrumentation.build
 
 object ivys {
-  val sv = "2.12.13"
-  val chisel3 = ivy"edu.berkeley.cs::chisel3:3.5.0"
-  val chisel3Plugin = ivy"edu.berkeley.cs:::chisel3-plugin:3.5.0"
-  val chiseltest = ivy"edu.berkeley.cs::chiseltest:0.5.1"
+  val sv = "2.13.10"
+  val chisel3 = ivy"edu.berkeley.cs::chisel3:3.5.6"
+  val chisel3Plugin = ivy"edu.berkeley.cs:::chisel3-plugin:3.5.6"
+  val chiseltest = ivy"edu.berkeley.cs::chiseltest:0.5.4"
   val scalatest = ivy"org.scalatest::scalatest:3.2.2"
-  val macroParadise = ivy"org.scalamacros:::paradise:2.1.1"
 }
 
 trait XSModule extends ScalaModule with PublishModule {
@@ -39,11 +40,9 @@ trait XSModule extends ScalaModule with PublishModule {
 
   override def scalaVersion = ivys.sv
 
-  override def compileIvyDeps = Agg(ivys.macroParadise)
+  override def scalacPluginIvyDeps = Agg(ivys.chisel3Plugin)
 
-  override def scalacPluginIvyDeps = Agg(ivys.macroParadise, ivys.chisel3Plugin)
-
-  override def scalacOptions = Seq("-Xsource:2.11")
+  override def scalacOptions = Seq("-Ymacro-annotations")
 
   override def ivyDeps = if(chiselOpt.isEmpty) Agg(ivys.chisel3) else Agg.empty[Dep]
 
@@ -68,12 +67,10 @@ object rocketchip extends `rocket-chip`.common.CommonRocketChip {
 
   override def scalaVersion = ivys.sv
 
-  override def scalacOptions = Seq("-Xsource:2.11")
-
   override def millSourcePath = rcPath
 
-  object configRocket extends `rocket-chip`.`api-config-chipsalliance`.`build-rules`.mill.build.config with PublishModule {
-    override def millSourcePath = rcPath / "api-config-chipsalliance" / "design" / "craft"
+  object cdeRocket extends `rocket-chip`.cde.common.CDEModule with PublishModule {
+    override def millSourcePath = rcPath / "cde" / "cde"
 
     override def scalaVersion = T {
       rocketchip.scalaVersion()
@@ -98,14 +95,13 @@ object rocketchip extends `rocket-chip`.common.CommonRocketChip {
     def chisel3IvyDeps = if(chisel3Module.isEmpty) Agg(
       common.getVersion("chisel3")
     ) else Agg.empty[Dep]
-    
+
     def chisel3PluginIvyDeps = Agg(common.getVersion("chisel3-plugin", cross=true))
   }
 
   def hardfloatModule = hardfloatRocket
 
-  def configModule = configRocket
-
+  def cdeModule = cdeRocket
 }
 
 object huancun extends XSModule with SbtModule {
@@ -117,7 +113,16 @@ object huancun extends XSModule with SbtModule {
   )
 }
 
-object difftest extends XSModule with SbtModule {
+object difftestDep extends difftest.build.CommonDiffTest {
+
+  object fuzz extends difftest.instrumentation.instrumentation.build.CommonRFuzz {
+    def sourceRoot = T.sources { T.workspace / "difftest" / "instrumentation" / "instrumentation" / "src" }
+
+    def allSources = T { sourceRoot().flatMap(p => os.walk(p.path)).map(PathRef(_)) }
+  }
+
+  override def fuzzModule: PublishModule = fuzz
+
   override def millSourcePath = os.pwd / "difftest"
 }
 
@@ -134,7 +139,7 @@ trait CommonXiangShan extends XSModule with SbtModule { m =>
 
   override def millSourcePath = os.pwd
 
-  override def forkArgs = Seq("-Xmx64G", "-Xss256m")
+  override def forkArgs = Seq("-Xmx20G", "-Xss256m")
 
   override def ivyDeps = super.ivyDeps() ++ Seq(ivys.chiseltest)
 
@@ -159,7 +164,7 @@ trait CommonXiangShan extends XSModule with SbtModule { m =>
 
 object XiangShan extends CommonXiangShan {
   override def rocketModule = rocketchip
-  override def difftestModule = difftest
+  override def difftestModule = difftestDep
   override def huancunModule = huancun
   override def fudianModule = fudian
 }

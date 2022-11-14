@@ -23,7 +23,7 @@ import utils._
 import system._
 import device._
 import chisel3.stage.ChiselGeneratorAnnotation
-import chipsalliance.rocketchip.config._
+import org.chipsalliance.cde.config._
 import device.{AXI4Plic, DebugModule, TLTimer}
 import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.tilelink._
@@ -111,7 +111,8 @@ class XSTop()(implicit p: Parameters) extends BaseXSSoc() with HasSoCParameter
     case None =>
   }
 
-  lazy val module = new LazyRawModuleImp(this) {
+  lazy val module = new Impl
+  class Impl extends LazyRawModuleImp(this) {
     ElaborationArtefacts.add("dts", dts)
     ElaborationArtefacts.add("graphml", graphML)
     ElaborationArtefacts.add("json", json)
@@ -205,16 +206,14 @@ class XSTop()(implicit p: Parameters) extends BaseXSSoc() with HasSoCParameter
 }
 
 object TopMain extends App with HasRocketChipStageUtils {
-  override def main(args: Array[String]): Unit = {
-    val (config, firrtlOpts) = ArgParser.parse(args)
-    val soc = DisableMonitors(p => LazyModule(new XSTop()(p)))(config)
-    XiangShanStage.execute(firrtlOpts, Seq(
-      ChiselGeneratorAnnotation(() => {
-        soc.module
-      })
-    ))
-    ElaborationArtefacts.files.foreach{ case (extension, contents) =>
-      writeOutputFile("./build", s"XSTop.${extension}", contents())
-    }
+  val (config, firrtlOpts) = ArgParser.parse(args)
+  val soc = DisableMonitors(p => LazyModule(new XSTop()(p)))(config)
+  XiangShanStage.execute(firrtlOpts, Seq(
+    ChiselGeneratorAnnotation(() => {
+      soc.module
+    })
+  ))
+  ElaborationArtefacts.files.foreach{ case (extension, contents) =>
+    writeOutputFile("./build", s"XSTop.${extension}", contents())
   }
 }

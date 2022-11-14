@@ -16,8 +16,8 @@
 
 package xiangshan
 
-import chipsalliance.rocketchip.config
-import chipsalliance.rocketchip.config.Parameters
+import org.chipsalliance.cde.config
+import org.chipsalliance.cde.config.Parameters
 import chisel3._
 import chisel3.util._
 import freechips.rocketchip.diplomacy.{BundleBridgeSource, LazyModule, LazyModuleImp}
@@ -37,7 +37,6 @@ import scala.collection.mutable.ListBuffer
 abstract class XSModule(implicit val p: Parameters) extends MultiIOModule
   with HasXSParameter
   with HasFPUParameters {
-  def io: Record
 }
 
 //remove this trait after impl module logic
@@ -98,7 +97,7 @@ trait HasWritebackSink {
   }
 
   def writebackSinksParams: Seq[WritebackSourceParams] = {
-    writebackSinks.map{ case (s, i) => s.zip(i).map(x => x._1.writebackSourceParams(x._2)).reduce(_ ++ _) }
+    writebackSinks.map{ case (s, i) => s.zip(i).map(x => x._1.writebackSourceParams(x._2)).reduce(_ ++ _) }.toSeq
   }
   final def writebackSinksMod(
      thisMod: Option[HasWritebackSource] = None,
@@ -106,8 +105,8 @@ trait HasWritebackSink {
    ): Seq[Seq[HasWritebackSourceImp]] = {
     require(thisMod.isDefined == thisModImp.isDefined)
     writebackSinks.map(_._1.map(source =>
-      if (thisMod.isDefined && source == thisMod.get) thisModImp.get else source.writebackSourceImp)
-    )
+      if (thisMod.isDefined && source == thisMod.get) thisModImp.get else source.writebackSourceImp).toSeq
+    ).toSeq
   }
   final def writebackSinksImp(
     thisMod: Option[HasWritebackSource] = None,
@@ -116,7 +115,7 @@ trait HasWritebackSink {
     val sourceMod = writebackSinksMod(thisMod, thisModImp)
     writebackSinks.zip(sourceMod).map{ case ((s, i), m) =>
       s.zip(i).zip(m).flatMap(x => x._1._1.writebackSource(x._2)(x._1._2))
-    }
+    }.toSeq
   }
   def selWritebackSinks(func: WritebackSourceParams => Int): Int = {
     writebackSinksParams.zipWithIndex.minBy(params => func(params._1))._2
@@ -258,7 +257,6 @@ class XSCoreImp(outer: XSCoreBase) extends LazyModuleImp(outer)
   val wb2Ctrl = outer.wb2Ctrl.module
   val memBlock = outer.memBlock.module
   val ptw = outer.ptw.module
-  val ptw_to_l2_buffer = outer.ptw_to_l2_buffer.module
   val exuBlocks = outer.exuBlocks.map(_.module)
 
   frontend.io.hartId  := io.hartId
@@ -269,7 +267,7 @@ class XSCoreImp(outer: XSCoreBase) extends LazyModuleImp(outer)
 
   io.cpu_halt := ctrlBlock.io.cpu_halt
 
-  outer.wbArbiter.module.io.redirect <> ctrlBlock.io.redirect
+  outer.wbArbiter.module.io.redirect := ctrlBlock.io.redirect
   val allWriteback = exuBlocks.flatMap(_.io.fuWriteback) ++ memBlock.io.writeback
   require(exuConfigs.length == allWriteback.length, s"${exuConfigs.length} != ${allWriteback.length}")
   outer.wbArbiter.module.io.in <> allWriteback
@@ -278,7 +276,7 @@ class XSCoreImp(outer: XSCoreBase) extends LazyModuleImp(outer)
   // memblock error exception writeback, 1 cycle after normal writeback
   wb2Ctrl.io.s3_delayed_load_error <> memBlock.io.s3_delayed_load_error
 
-  wb2Ctrl.io.redirect <> ctrlBlock.io.redirect
+  wb2Ctrl.io.redirect := ctrlBlock.io.redirect
   outer.wb2Ctrl.generateWritebackIO()
 
   io.beu_errors.icache <> frontend.io.error.toL1BusErrorUnitInfo()
@@ -343,7 +341,7 @@ class XSCoreImp(outer: XSCoreBase) extends LazyModuleImp(outer)
 
   val stdIssue = exuBlocks(0).io.issue.get.takeRight(exuParameters.StuCnt)
   exuBlocks.map(_.io).foreach { exu =>
-    exu.redirect <> ctrlBlock.io.redirect
+    exu.redirect := ctrlBlock.io.redirect
     exu.allocPregs <> ctrlBlock.io.allocPregs
     exu.rfWriteback <> rfWriteback
     exu.fastUopIn <> allFastUop1
@@ -406,7 +404,7 @@ class XSCoreImp(outer: XSCoreBase) extends LazyModuleImp(outer)
   fenceio.sfence <> memBlock.io.sfence
   fenceio.sbuffer <> memBlock.io.fenceToSbuffer
 
-  memBlock.io.redirect <> ctrlBlock.io.redirect
+  memBlock.io.redirect := ctrlBlock.io.redirect
   memBlock.io.rsfeedback <> exuBlocks(0).io.scheExtra.feedback.get
   memBlock.io.csrCtrl <> csrioIn.customCtrl
   memBlock.io.tlbCsr <> csrioIn.tlb
@@ -433,7 +431,7 @@ class XSCoreImp(outer: XSCoreBase) extends LazyModuleImp(outer)
         ModuleNode(itlbRepeater2),
         ModuleNode(ptw),
         ModuleNode(dtlbRepeater2),
-        ModuleNode(ptw_to_l2_buffer),
+        ModuleNode(outer.ptw_to_l2_buffer.module),
       )),
       ResetGenNode(Seq(
         ModuleNode(exuBlocks.head),

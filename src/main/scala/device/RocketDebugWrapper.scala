@@ -21,7 +21,7 @@ import xiangshan._
 import chisel3.experimental.{ExtModule, IntParam, noPrefix}
 import chisel3.util._
 import chisel3.util.HasExtModuleResource
-import freechips.rocketchip.config.{Field, Parameters}
+import org.chipsalliance.cde.config.{Field, Parameters}
 import freechips.rocketchip.subsystem._
 import freechips.rocketchip.amba.apb._
 import freechips.rocketchip.diplomacy._
@@ -36,6 +36,14 @@ import freechips.rocketchip.devices.debug._
 // to simplify the code we remove options for apb, cjtag and dmi
 // this module creates wrapped dm and dtm
 
+class DebugModuleImp(numCores: Int, outer: DebugModule)(implicit p: Parameters) extends LazyRawModuleImp(outer) {
+  val io = IO(new Bundle{
+    val resetCtrl = new ResetCtrlIO(numCores)(p)
+    val debugIO = new DebugIO()(p)
+    val clock = Input(Bool())
+    val reset = Input(Reset())
+  })
+}
 
 class DebugModule(numCores: Int)(implicit p: Parameters) extends LazyModule {
 
@@ -49,13 +57,7 @@ class DebugModule(numCores: Int)(implicit p: Parameters) extends LazyModule {
 //    l2xbar := TLBuffer() := TLWidthWidget(1) := sb2tl.node
 //  }
 
-  lazy val module = new LazyRawModuleImp(this) {
-    val io = IO(new Bundle{
-      val resetCtrl = new ResetCtrlIO(numCores)(p)
-      val debugIO = new DebugIO()(p)
-      val clock = Input(Bool())
-      val reset = Input(Reset())
-    })
+  lazy val module = new DebugModuleImp(numCores, this) {
     debug.module.io.tl_reset := io.reset // this should be TL reset
     debug.module.io.tl_clock := io.clock.asClock // this should be TL clock
     withClock(io.clock.asClock) {

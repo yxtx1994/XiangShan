@@ -16,7 +16,7 @@
 
 package xiangshan.backend.issue
 
-import chipsalliance.rocketchip.config.Parameters
+import org.chipsalliance.cde.config.Parameters
 import chisel3._
 import chisel3.util._
 import freechips.rocketchip.diplomacy.{LazyModule, LazyModuleImp}
@@ -134,29 +134,7 @@ class ReservationStationWrapper(implicit p: Parameters) extends LazyModule with 
   val maxRsDeq = 2
   def numRS = (params.numDeq + (maxRsDeq - 1)) / maxRsDeq
 
-  lazy val module = new LazyModuleImp(this) with HasPerfEvents {
-    require(params.numEnq < params.numDeq || params.numEnq % params.numDeq == 0)
-    require(params.numEntries % params.numDeq == 0)
-    val rs = (0 until numRS).map(i => {
-      val numDeq = Seq(params.numDeq - maxRsDeq * i, maxRsDeq).min
-      val numEnq = params.numEnq / numRS
-      val numEntries = numDeq * params.numEntries / params.numDeq
-      val rsParam = params.copy(numEnq = numEnq, numDeq = numDeq, numEntries = numEntries)
-      val updatedP = p.alter((site, here, up) => {
-        case XSCoreParamsKey => up(XSCoreParamsKey).copy(
-          IssQueSize = numEntries
-        )
-      })
-      Module(new ReservationStation(rsParam)(updatedP))
-    })
-
-    val updatedP = p.alter((site, here, up) => {
-      case XSCoreParamsKey => up(XSCoreParamsKey).copy(
-        IssQueSize = rs.map(_.size).max
-      )
-    })
-    val io = IO(new ReservationStationIO(params)(updatedP))
-
+  lazy val module = new ReservationStationWrapperImp(this) {
     rs.foreach(_.io.redirect := RegNextWithEnable(io.redirect))
     io.fromDispatch <> rs.flatMap(_.io.fromDispatch)
     io.srcRegValue <> rs.flatMap(_.io.srcRegValue)
@@ -201,6 +179,31 @@ class ReservationStationWrapper(implicit p: Parameters) extends LazyModule with 
       connectFastWakeup(u, d)
     }
   }
+}
+
+abstract class ReservationStationWrapperImp(outer: ReservationStationWrapper)(implicit p: Parameters) extends LazyModuleImp(outer) with HasPerfEvents {
+  val params = outer.params
+  require(params.numEnq < params.numDeq || params.numEnq % params.numDeq == 0)
+  require(params.numEntries % params.numDeq == 0)
+  val rs = (0 until outer.numRS).map(i => {
+    val numDeq = Seq(params.numDeq - outer.maxRsDeq * i, outer.maxRsDeq).min
+    val numEnq = params.numEnq / outer.numRS
+    val numEntries = numDeq * params.numEntries / params.numDeq
+    val rsParam = params.copy(numEnq = numEnq, numDeq = numDeq, numEntries = numEntries)
+    val updatedP = p.alter((site, here, up) => {
+      case XSCoreParamsKey => up(XSCoreParamsKey).copy(
+        IssQueSize = numEntries
+      )
+    })
+    Module(new ReservationStation(rsParam)(updatedP))
+  })
+
+  val updatedP = p.alter((site, here, up) => {
+    case XSCoreParamsKey => up(XSCoreParamsKey).copy(
+      IssQueSize = rs.map(_.size).max
+    )
+  })
+  val io = IO(new ReservationStationIO(params)(updatedP))
 }
 
 class ReservationStationIO(params: RSParams)(implicit p: Parameters) extends XSBundle {

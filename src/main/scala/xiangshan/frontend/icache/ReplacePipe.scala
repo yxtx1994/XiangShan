@@ -16,7 +16,7 @@
 
 package xiangshan.frontend.icache
 
-import chipsalliance.rocketchip.config.Parameters
+import org.chipsalliance.cde.config.Parameters
 import chisel3._
 import chisel3.util._
 import freechips.rocketchip.tilelink.{ClientMetadata, ClientStates, TLPermissions}
@@ -58,7 +58,7 @@ class ICacheReplacePipe(implicit p: Parameters) extends ICacheModule{
     val release_finish = Input(Bool())
 
     val pipe_resp = ValidIO(UInt(ReplaceIdWid.W))
-    
+
     val status = new Bundle() {
       val r0_set, r1_set, r2_set, r3_set = ValidIO(UInt(idxBits.W))
     }
@@ -78,7 +78,7 @@ class ICacheReplacePipe(implicit p: Parameters) extends ICacheModule{
     ******************************************************************************
     * ReplacePipe Stage 0
     ******************************************************************************
-    */  
+    */
   val r0_valid = generatePipeControl(lastFire = io.pipe_req.fire(), thisFire = r0_fire, thisFlush = false.B, lastFlush = false.B)
 
   val r0_req         = RegEnable(io.pipe_req.bits, enable = io.pipe_req.fire())
@@ -108,7 +108,7 @@ class ICacheReplacePipe(implicit p: Parameters) extends ICacheModule{
   toMeta.bits.readValid         := DontCare
 
   io.pipe_req.ready := array_req(0).ready && array_req(1).ready && r1_ready
-  
+
   io.status.r0_set.valid := r0_valid
   io.status.r0_set.bits  := r0_req.vidx
 
@@ -116,8 +116,8 @@ class ICacheReplacePipe(implicit p: Parameters) extends ICacheModule{
     ******************************************************************************
     * ReplacePipe Stage 1
     ******************************************************************************
-    */  
-  
+    */
+
   val r1_valid = generatePipeControl(lastFire = r0_fire, thisFire = r1_fire, thisFlush = false.B, lastFlush = false.B)
   r1_ready := r2_ready  || !r1_valid
   r1_fire  := r1_valid && r2_ready
@@ -155,7 +155,7 @@ class ICacheReplacePipe(implicit p: Parameters) extends ICacheModule{
     * ReplacePipe Stage 2
     ******************************************************************************
     */
-    
+
   val r2_valid          = generatePipeControl(lastFire = r1_fire, thisFire = r2_fire, thisFlush = false.B, lastFlush = false.B)
   val r2_valid_dup_1    = generatePipeControl(lastFire = r1_fire, thisFire = r2_fire, thisFlush = false.B, lastFlush = false.B)
   val r2_valid_dup_2    = generatePipeControl(lastFire = r1_fire, thisFire = r2_fire, thisFlush = false.B, lastFlush = false.B)
@@ -188,20 +188,20 @@ class ICacheReplacePipe(implicit p: Parameters) extends ICacheModule{
 
   val read_datas = r2_data_cacheline.asTypeOf(Vec(nWays,Vec(dataCodeUnitNum, UInt(dataCodeUnit.W))))
   val read_codes = r2_data_errorBits.asTypeOf(Vec(nWays,Vec(dataCodeUnitNum, UInt(dataCodeBits.W))))
-  val data_full_wayBits = VecInit((0 until nWays).map( w => 
-                                VecInit((0 until dataCodeUnitNum).map(u => 
+  val data_full_wayBits = VecInit((0 until nWays).map( w =>
+                                VecInit((0 until dataCodeUnitNum).map(u =>
                                       Cat(read_codes(w)(u), read_datas(w)(u))))))
-  val data_error_wayBits = VecInit((0 until nWays).map( w => 
-                                VecInit((0 until dataCodeUnitNum).map(u => 
+  val data_error_wayBits = VecInit((0 until nWays).map( w =>
+                                VecInit((0 until dataCodeUnitNum).map(u =>
                                       cacheParams.dataCode.decode(data_full_wayBits(w)(u)).error ))))
-  (0 until nWays).map{ w => r2_data_errors(w) := RegNext(RegNext(r1_fire)) && RegNext(data_error_wayBits(w)).reduce(_||_) } 
+  (0 until nWays).map{ w => r2_data_errors(w) := RegNext(RegNext(r1_fire)) && RegNext(data_error_wayBits(w)).reduce(_||_) }
 
   val r2_parity_meta_error = r2_meta_errors.reduce(_||_) && io.csr_parity_enable
   val r2_parity_data_error = r2_data_errors.reduce(_||_) && io.csr_parity_enable
   val r2_parity_error      = RegNext(r2_parity_meta_error) || r2_parity_data_error
 
 
-  io.error.valid                := RegNext(r2_parity_error &&  RegNext(RegNext(r1_fire))) 
+  io.error.valid                := RegNext(r2_parity_error &&  RegNext(RegNext(r1_fire)))
   io.error.report_to_beu        := RegNext(r2_parity_error &&  RegNext(RegNext(r1_fire)))
   io.error.paddr                := RegNext(RegNext(r2_req.paddr))
   io.error.source.tag           := RegNext(RegNext(r2_parity_meta_error))
@@ -267,11 +267,11 @@ class ICacheReplacePipe(implicit p: Parameters) extends ICacheModule{
   val r3_release_need_send = RegEnable(next = release_need_send, enable = r2_fire && r2_req.isRelease)
 
   r3_ready      := r3_fire  || !r3_valid
-  r3_fire       := (r3_valid && RegNext(io.release_finish) && r3_release_need_send) || (r3_valid && !r3_release_need_send) 
+  r3_fire       := (r3_valid && RegNext(io.release_finish) && r3_release_need_send) || (r3_valid && !r3_release_need_send)
 
   val r3_req = RegEnable(next = r2_req, enable = r2_fire && r2_req.isRelease)
 
-  io.pipe_resp.valid := r3_fire 
+  io.pipe_resp.valid := r3_fire
   io.pipe_resp.bits  := r3_req.id
 
   io.status.r3_set.valid := r3_valid
