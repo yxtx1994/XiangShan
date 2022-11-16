@@ -41,24 +41,24 @@ class FauFTBWay(implicit p: Parameters) extends XSModule with FauFTBParams {
   val io = IO(new Bundle{
     val req_tag = Input(UInt(tagSize.W))
     val resp = Output(new FauFTBEntry)
-    val resp_is_loop = Output(Bool())
+    // val resp_is_loop = Output(Bool())
     val resp_hit = Output(Bool())
     val update_req_tag = Input(UInt(tagSize.W))
     val update_hit = Output(Bool())
     val write_valid = Input(Bool())
     val write_entry = Input(new FauFTBEntry)
     val write_tag = Input(UInt(tagSize.W))
-    val write_is_loop = Input(Bool())
+    // val write_is_loop = Input(Bool())
     val tag_read = Output(UInt(tagSize.W))
   })
 
   val data = Reg(new FauFTBEntry)
   val tag = Reg(UInt(tagSize.W))
   val valid = RegInit(false.B)
-  val is_loop = RegInit(false.B)
+  // val is_loop = RegInit(false.B)
 
   io.resp := data
-  io.resp_is_loop := is_loop
+  // io.resp_is_loop := is_loop
   io.resp_hit := tag === io.req_tag && valid
   // write bypass to avoid multiple hit
   io.update_hit := ((tag === io.update_req_tag) && valid) ||
@@ -71,9 +71,9 @@ class FauFTBWay(implicit p: Parameters) extends XSModule with FauFTBParams {
     }
     tag   := io.write_tag
     data  := io.write_entry
-    is_loop := io.write_is_loop
+    // is_loop := io.write_is_loop
   }
-  XSPerfAccumulate(f"fauftb_loop_identified", io.write_valid && io.write_is_loop)
+  // XSPerfAccumulate(f"fauftb_loop_identified", io.write_valid && io.write_is_loop)
 }
 
 
@@ -92,7 +92,7 @@ class FauFTB(implicit p: Parameters) extends BasePredictor with FauFTBParams {
       val req_tag = Input(UInt(tagSize.W))
       val resp_hit_oh = Output(Vec(numWays, Bool()))
       val resp_entries = Output(Vec(numWays, new FTBEntry))
-      val resp_is_loops = Output(Vec(numWays, Bool()))
+      // val resp_is_loops = Output(Vec(numWays, Bool()))
       val resp_ctrs = Output(Vec(numWays, Vec(numBr, UInt(2.W))))
       val update_req_tag = Input(UInt(tagSize.W))
       val update_hit_oh = Output(Vec(numWays, Bool()))
@@ -100,7 +100,7 @@ class FauFTB(implicit p: Parameters) extends BasePredictor with FauFTBParams {
       val write_valid_oh = Input(Vec(numWays, Bool()))
       val write_tag = Input(UInt(tagSize.W))
       val write_entry = Input(new FTBEntry)
-      val write_is_loop = Input(Bool())
+      // val write_is_loop = Input(Bool())
 
       val write_ctrs_valid = Input(Vec(numWays, Vec(numBr, Bool())))
       val write_ctrs = Input(Vec(numWays, Vec(numBr, UInt(2.W))))
@@ -116,7 +116,7 @@ class FauFTB(implicit p: Parameters) extends BasePredictor with FauFTBParams {
     // pred resp
     io.resp_hit_oh  := VecInit(ways.map(_.io.resp_hit))
     io.resp_entries := VecInit(ways.map(_.io.resp))
-    io.resp_is_loops := VecInit(ways.map(_.io.resp_is_loop))
+    // io.resp_is_loops := VecInit(ways.map(_.io.resp_is_loop))
     io.resp_ctrs    := VecInit(ctrs.map(VecInit(_)))
 
     // update req
@@ -127,7 +127,7 @@ class FauFTB(implicit p: Parameters) extends BasePredictor with FauFTBParams {
     ways.zip(io.write_valid_oh).foreach{ case (w, v) => w.io.write_valid := v }
     ways.foreach(_.io.write_tag   := io.write_tag)
     ways.foreach(_.io.write_entry := io.write_entry)
-    ways.foreach(_.io.write_is_loop := io.write_is_loop)
+    // ways.foreach(_.io.write_is_loop := io.write_is_loop)
 
     // write ctrs
     for (ctr & valid & w_ctr <- ctrs zip io.write_ctrs_valid zip io.write_ctrs) {
@@ -161,13 +161,13 @@ class FauFTB(implicit p: Parameters) extends BasePredictor with FauFTBParams {
   val s1_possible_full_preds_dup = Wire(Vec(numDup_local, Vec(numWays, new FullBranchPrediction)))
   
   val s1_all_entries_dup = VecInit(banks.map(_.io.resp_entries))
-  val s1_all_is_loops_dup = VecInit(banks.map(_.io.resp_is_loops))
+  // val s1_all_is_loops_dup = VecInit(banks.map(_.io.resp_is_loops))
   for (b <- 0 until numDup_local) {
     for (w <- 0 until numWays) {
       val fp = s1_possible_full_preds_dup(b)(w)
       val entry = s1_all_entries_dup(b)(w)
       val s1_pc = if (b == 0) s1_pc_dup(dupForUbtb) else s1_pc_dup(special_idx_for_dup)
-      fp.fromFtbEntry(entry, s1_pc, s1_all_is_loops_dup(b)(w))
+      fp.fromFtbEntry(entry, s1_pc)
       fp.hit := DontCare
       for (i <- 0 until numBr) {
         val ctr = banks(b).io.resp_ctrs(w)(i)
@@ -214,13 +214,13 @@ class FauFTB(implicit p: Parameters) extends BasePredictor with FauFTBParams {
   // s0
   val us = Wire(Vec(numDup_local, io.update(0).cloneType))
   val u_valids = Wire(Vec(numDup_local, Bool()))
-  val u_is_loop = Wire(Vec(numDup_local, Bool()))
+  // val u_is_loop = Wire(Vec(numDup_local, Bool()))
   u_valids(0) := io.update(dupForUbtb).valid
   u_valids(1) := io.update(dupForTageSC).valid
   us(0) := io.update(dupForUbtb)
   us(1) := io.update(dupForTageSC)
-  u_is_loop(0) := io.update(dupForUbtb).bits.is_loop
-  u_is_loop(1) := io.update(dupForTageSC).bits.is_loop
+  // u_is_loop(0) := io.update(dupForUbtb).bits.is_loop
+  // u_is_loop(1) := io.update(dupForTageSC).bits.is_loop
   val u_meta_dup = us.map(_.bits.meta.asTypeOf(new FauFTBMeta))
   val u_s0_tag_dup = us.map(u => getTag(u.bits.pc))
   for (b <- 0 until numDup_local) {
@@ -244,14 +244,14 @@ class FauFTB(implicit p: Parameters) extends BasePredictor with FauFTBParams {
       yield Mux(u_s1_hit, u_s1_hit_oh, UIntToOH(u_s1_alloc_way))
   val u_s1_ftb_entry_dup = us.map(u => RegEnable(u.bits.ftb_entry, u.valid))
   val u_s1_ways_write_valid_dup = Wire(Vec(numDup_local, Vec(numWays, Bool())))
-  val u_s1_is_loop_dup = u_valids.zip(u_is_loop).map{case (v, is) => RegEnable(is, v)}
+  // val u_s1_is_loop_dup = u_valids.zip(u_is_loop).map{case (v, is) => RegEnable(is, v)}
   for (b <- 0 until numDup_local) {
     u_s1_ways_write_valid_dup(b) := VecInit((0 until numWays).map(w => u_s1_write_way_oh_dup(b)(w).asBool && u_s1_valid_dup(b)(w)))
     for (w <- 0 until numWays) {
       banks(b).io.write_valid_oh(w) := u_s1_ways_write_valid_dup(b)(w)
       banks(b).io.write_tag         := u_s1_tag_dup(b)
       banks(b).io.write_entry       := u_s1_ftb_entry_dup(b)
-      banks(b).io.write_is_loop     := u_s1_is_loop_dup(b)
+      // banks(b).io.write_is_loop     := u_s1_is_loop_dup(b)
     }
   }
 

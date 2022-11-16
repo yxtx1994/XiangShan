@@ -71,6 +71,8 @@ case class XSCoreParameters
   RasSize: Int = 32,
   CacheLineSize: Int = 512,
   FtbWays: Int = 4,
+  LoopCacheSpecSize: Int = 16,
+  LoopCacheMaxInst: Int = 8,
   TageTableInfos: Seq[Tuple3[Int,Int,Int]] =
   //       Sets  Hist   Tag
     // Seq(( 2048,    2,    8),
@@ -310,6 +312,8 @@ trait HasXSParameter {
   val FtbSize = coreParams.FtbSize
   val FtbWays = coreParams.FtbWays
   val RasSize = coreParams.RasSize
+  val LoopCacheSpecSize = coreParams.LoopCacheSpecSize
+  val LoopCacheMaxInst = coreParams.LoopCacheMaxInst
 
   def getBPDComponents(resp_in: BranchPredictionResp, p: Parameters) = {
     coreParams.branchPredictor(resp_in, p)

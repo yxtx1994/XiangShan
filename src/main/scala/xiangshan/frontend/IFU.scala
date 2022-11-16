@@ -163,7 +163,7 @@ class NewIFU(implicit p: Parameters) extends XSModule
 
   io.iTLBInter.resp.ready := true.B
 
-  val loopCache = Module(new LoopCache)
+  // val loopCache = Module(new LoopCache)
   /**
     ******************************************************************************
     * IFU Stage 0
@@ -176,10 +176,10 @@ class NewIFU(implicit p: Parameters) extends XSModule
   val f0_doubleLine                        = fromFtq.req.bits.crossCacheline
   val f0_vSetIdx                           = VecInit(get_idx((f0_ftq_req.startAddr)), get_idx(f0_ftq_req.nextlineStart))
   val f0_fire                              = fromFtq.req.fire()
-  val f0_is_loop                           = fromFtq.req.bits.is_loop
+  // val f0_is_loop                           = fromFtq.req.bits.is_loop
 
-  XSPerfAccumulate(f"ifu_loop_identified", f0_valid && f0_is_loop)
-  XSPerfAccumulate(f"ifu_loop_cache_hit", f0_valid && loopCache.io.valid && f0_ftq_req.startAddr === loopCache.io.startAddr)
+  // XSPerfAccumulate(f"ifu_loop_identified", f0_valid && f0_is_loop)
+  // XSPerfAccumulate(f"ifu_loop_cache_hit", f0_valid && loopCache.io.valid && f0_ftq_req.startAddr === loopCache.io.startAddr)
 
   val f0_flush, f1_flush, f2_flush, f3_flush = WireInit(false.B)
   val from_bpu_f0_flush, from_bpu_f1_flush, from_bpu_f2_flush, from_bpu_f3_flush = WireInit(false.B)
@@ -650,7 +650,7 @@ class NewIFU(implicit p: Parameters) extends XSModule
     io.toIbuffer.bits.valid     := f3_lastHalf_mask & f3_instr_valid.asUInt
   }
 
-  loopCache.io.updateValid := io.toIbuffer.valid && f3_ftq_req.is_loop
+  /*loopCache.io.updateValid := io.toIbuffer.valid && f3_ftq_req.is_loop
   loopCache.io.updateStartAddr := f3_ftq_req.startAddr
   loopCache.io.updateData.instrs      := f3_expd_instr
   loopCache.io.updateData.valid       := f3_instr_valid.asUInt
@@ -664,6 +664,7 @@ class NewIFU(implicit p: Parameters) extends XSModule
   loopCache.io.updateData.acf         := f3_af_vec
   loopCache.io.updateData.crossPageIPFFix := f3_crossPageFault
   loopCache.io.updateData.triggered   := f3_triggered
+   */
 
 
 

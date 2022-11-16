@@ -31,6 +31,8 @@ class IbufPtr(implicit p: Parameters) extends CircularQueuePtr[IbufPtr](
 class IBufferIO(implicit p: Parameters) extends XSBundle {
   val flush = Input(Bool())
   val in = Flipped(DecoupledIO(new FetchToIBuffer))
+  val loop_peek = Flipped(new FtqToIBuffer)
+  val loop_out = new IBufferToFtq
   val out = Vec(DecodeWidth, DecoupledIO(new CtrlFlow))
   val full = Output(Bool())
 }
@@ -86,6 +88,10 @@ class IBufEntry(implicit p: Parameters) extends XSBundle {
   }
 }
 
+class LoopCacheSpecEntry(implicit p: Parameters) extends XSBundle  {
+  val instEntry = Vec(LoopCacheMaxInst, new IBufEntry())
+}
+
 class Ibuffer(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelper with HasPerfEvents {
   val io = IO(new IBufferIO)
 
@@ -121,6 +127,60 @@ class Ibuffer(implicit p: Parameters) extends XSModule with HasCircularQueuePtrH
     ibuf.io.wdata(i) := enqData(i)
     ibuf.io.wen(i)   := io.in.bits.enqEnable(i) && io.in.fire && !io.flush
   }
+
+  // val loopCacheInstSize = Vec(LoopCacheSpecSize, Reg(UInt(log2Ceil(LoopCacheMaxInst).W)))
+  val loopCachePc = Reg(Vec(LoopCacheSpecSize, UInt(VAddrBits.W)))
+  val loopCacheValid = RegInit(VecInit(Seq.fill(LoopCacheSpecSize)(0.B)))
+
+  val loopCacheInstBody = Module(new SRAMTemplate(new LoopCacheSpecEntry, LoopCacheSpecSize, 1, true, false))
+  val loopCacheSpecReplacer = ReplacementPolicy.fromString("plru", LoopCacheSpecSize)
+  val loopCacheReplacer_touch_ways = Wire(Vec(1, Valid(UInt(log2Ceil(LoopCacheSpecSize).W))))
+
+  val loopCacheEnqData = Wire(new LoopCacheSpecEntry)
+
+  for (i <- 0 until LoopCacheMaxInst) {
+    loopCacheEnqData.instEntry(i) := enqData(i)
+  }
+
+  loopCacheInstBody.io.w(
+    io.in.bits.valid.orR && io.in.fire && !io.flush,
+    loopCacheEnqData,
+    loopCacheSpecReplacer.way,
+    1.U
+  )
+
+  val peek_valid_reg = RegInit(0.B)
+  val peek_pc_reg = Reg(UInt(VAddrBits.W))
+  val peek_pc = Mux(io.loop_peek.pc.valid, io.loop_peek.pc.bits, peek_pc_reg)
+  when (io.loop_peek.pc.valid && !loopCacheInstBody.io.r.req.fire) {
+    peek_valid_reg := true.B
+    peek_pc_reg := io.loop_peek.pc.bits
+  } .elsewhen (loopCacheInstBody.io.r.req.fire) {
+    peek_valid_reg := false.B
+  }
+
+  loopCacheInstBody.io.r.req.valid := io.loop_peek.pc.valid || peek_valid_reg
+  loopCacheInstBody.io.r.req.bits.setIdx := OHToUInt((loopCacheValid zip loopCachePc).map{case (v,p) => v && p === peek_pc})
+
+  io.loop_out.update.valid := RegNext(loopCacheInstBody.io.r.req.fire)
+  io.loop_out.update.bits.hit_data := loopCacheInstBody.io.r.resp.data(0)
+  io.loop_out.update.bits.pc := Mux(io.loop_peek.pc.valid, io.loop_peek.pc.bits, peek_pc_reg)
+
+  /*
+  io.loop_out.specReq.ready := loopCacheInstBody.io.r.req.ready
+  loopCacheInstBody.io.r.req.valid := io.loop_out.specReq.valid
+  loopCacheInstBody.io.r.req.bits.setIdx := io.loop_out.specReq.bits
+   */
+
+
+  when (io.in.bits.valid.orR && io.in.fire && !io.flush) {
+    // fixme: proper conditions here
+    loopCachePc(loopCacheSpecReplacer.way) := enqData(0).pc
+    loopCacheValid(loopCacheSpecReplacer.way) := true.B
+  }
+
+  loopCacheReplacer_touch_ways(0).valid := RegNext(io.in.bits.enqEnable.orR && io.in.fire && !io.flush)
+  loopCacheReplacer_touch_ways(0).bits := RegEnable(loopCacheSpecReplacer.way, io.in.bits.enqEnable.orR && io.in.fire && !io.flush)
 
   when (io.in.fire && !io.flush) {
     enqPtrVec := VecInit(enqPtrVec.map(_ + PopCount(io.in.bits.enqEnable)))

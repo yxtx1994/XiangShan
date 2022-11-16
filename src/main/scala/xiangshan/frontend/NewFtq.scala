@@ -70,7 +70,7 @@ class Ftq_RF_Components(implicit p: Parameters) extends XSBundle with BPUUtils w
   val nextLineAddr = UInt(VAddrBits.W)
   val isNextMask = Vec(PredictWidth, Bool())
   val fallThruError = Bool()
-  val is_loop = Bool()
+  // val is_loop = Bool()
   // val carry = Bool()
   def getPc(offset: UInt) = {
     def getHigher(pc: UInt) = pc(VAddrBits-1, log2Ceil(PredictWidth)+instOffsetBits+1)
@@ -86,11 +86,122 @@ class Ftq_RF_Components(implicit p: Parameters) extends XSBundle with BPUUtils w
       (resp.pc(dupForFtq)(log2Ceil(PredictWidth), 1) +& i.U)(log2Ceil(PredictWidth)).asBool()
     ))
     this.fallThruError := resp.fallThruError(dupForFtq)
-    this.is_loop := resp.full_pred(dupForFtq).is_loop
+    // this.is_loop := resp.full_pred(dupForFtq).is_loop
     this
   }
   override def toPrintable: Printable = {
     p"startAddr:${Hexadecimal(startAddr)}"
+  }
+}
+
+class LoopCacheSpecInfo(implicit p: Parameters) extends XSBundle {
+  val pc = UInt(VAddrBits.W)
+  val hit_data = new LoopCacheSpecEntry
+}
+
+class LoopCacheQuery(implicit p: Parameters) extends XSBundle {
+  val pc = UInt(VAddrBits.W)
+  val cfiIndex = UInt(log2Ceil(PredictWidth).W)
+}
+
+class LoopCacheResp(implicit p: Parameters) extends XSBundle {
+  val entry = new LoopCacheSpecEntry
+  val valids = Vec(LoopCacheSpecSize, Bool())
+}
+
+class LoopCacheNonSpecIO(implicit p: Parameters) extends XSBundle {
+  val query = Flipped(Valid(new LoopCacheQuery))
+  val l0_hit = Output(Bool())
+  val out_entry = Decoupled(new LoopCacheResp)
+
+  val update = Flipped(Valid(new LoopCacheSpecInfo))
+}
+
+class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule {
+  val io = IO(new LoopCacheNonSpecIO)
+
+  val cache_valid = RegInit(0.B)
+  val cache_pc = Reg(UInt(VAddrBits.W))
+  val cache_data = Reg(new LoopCacheSpecEntry)
+
+  val l0_fire = Wire(Bool())
+  val l1_fire = Wire(Bool())
+  val l2_fire = Wire(Bool())
+  /*
+  * l0: accept req and generate hit info
+  * */
+  val l0_hit = Wire(Bool())
+  val l0_pc = Wire(UInt(VAddrBits.W))
+  val l0_data = Wire(new LoopCacheSpecEntry)
+  val l0_taken_pc = Wire(UInt(VAddrBits.W))
+
+  l0_pc := DontCare
+  l0_data := DontCare
+  l0_hit := false.B
+  when (io.query.valid) {
+    when (cache_valid && io.query.bits.pc === cache_pc) {
+      l0_hit := true.B
+      l0_data := cache_data
+    }
+  }
+  io.l0_hit := l0_hit
+  l0_taken_pc := io.query.bits.pc + io.query.bits.cfiIndex
+  val l0_pc_hit = VecInit(cache_data.instEntry.map(_.pc === l0_taken_pc))
+
+  /*
+  * l1: identify taken instruction position
+  * */
+  val l1_hit = RegInit(0.B)
+  val l1_pc = Reg(UInt(VAddrBits.W))
+  val l1_data = Reg(new LoopCacheSpecEntry)
+  val l1_taken_pc = Reg(UInt(VAddrBits.W))
+  val l1_pc_hit = Reg(l0_pc_hit.cloneType)
+  l0_fire := l0_hit && (!l1_hit || l1_fire)
+
+  when (l0_fire) {
+    l1_hit := l0_hit
+    l1_pc := l0_pc
+    l1_data := l0_data
+    l1_pc_hit := l0_pc_hit
+  }
+  val l1_pc_hit_pos = PopCount(l1_pc_hit)
+
+  /*
+  * l2: cut instruction flow after loop hit position
+  * */
+  val l2_hit = RegInit(0.B)
+  val l2_pc = Reg(UInt(VAddrBits.W))
+  val l2_data = Reg(new LoopCacheSpecEntry)
+  l2_fire := l2_hit && io.out_entry.ready
+  val l2_pc_hit_pos = Reg(l1_pc_hit_pos.cloneType)
+  l1_fire := l1_hit && (!l2_hit || l2_fire)
+
+  when (l1_fire) {
+    l2_hit := l1_hit
+    l2_pc := l1_pc
+    l2_data := l1_data
+  } .elsewhen (l2_fire) {
+    l2_hit := false.B
+  }
+
+  val l2_valids = Wire(Vec(LoopCacheSpecSize, Bool()))
+  for (i <- 0 until LoopCacheSpecSize) {
+    l2_valids(i) := i.U <= l2_pc_hit_pos
+  }
+  l2_data.instEntry(l2_pc_hit_pos).pred_taken := true.B
+  io.out_entry.valid := l2_hit
+  io.out_entry.bits.entry := l2_data
+  io.out_entry.bits.valids := l2_valids
+  // TODO: adjust ftqptr
+  XSPerfAccumulate("loop_cache_spec_fill_hit", l2_hit);
+
+  /*
+   * update
+   */
+  when (io.update.valid) {
+    cache_valid := true.B
+    cache_pc := io.update.bits.pc
+    cache_data := io.update.bits.hit_data
   }
 }
 
@@ -439,6 +550,9 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
     val toBackend = new FtqToCtrlIO
 
     val toPrefetch = new FtqPrefechBundle
+
+    val toIBuffer = new FtqToIBuffer
+    val fromIBuffer = Flipped(new IBufferToFtq)
 
     val bpuInfo = new Bundle {
       val bpRight = Output(UInt(XLEN.W))
@@ -1088,6 +1202,24 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   val prev_commit_pc = RegInit(0.U.asTypeOf(UInt(VAddrBits.W)))
   val commit_is_loop = commit_target === prev_commit_target && commit_cfi.bits === prev_commit_cfi_idx.bits && commit_cfi.valid && prev_commit_cfi_idx.valid && commit_pc_bundle.startAddr === prev_commit_pc
 
+  val valid_loop = RegInit(0.B)
+  val valid_loop_pc = Reg(UInt(VAddrBits.W))
+  val valid_loop_cfiIndex = Reg(UInt(log2Ceil(PredictWidth).W))
+
+  io.toIBuffer.pc.valid := false.B
+  io.toIBuffer.pc.bits := DontCare
+  when (commit_is_loop) {
+    valid_loop := true.B
+    valid_loop_pc := prev_commit_target
+    valid_loop_cfiIndex := prev_commit_cfi_idx.bits
+
+    io.toIBuffer.pc.valid := true.B
+    io.toIBuffer.pc.bits := valid_loop_pc
+  }
+
+  val loopMainCache = Module(new LoopCacheNonSpecEntry)
+  loopMainCache.io.update := io.fromIBuffer.update
+
   io.toBpu.update := DontCare
   io.toBpu.update.valid := commit_valid && do_commit
   val update = io.toBpu.update.bits
@@ -1098,7 +1230,12 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   update.full_target := commit_target
   update.from_stage  := commit_stage
   update.spec_info   := commit_spec_meta
-  update.is_loop     := commit_is_loop
+
+  loopMainCache.io.query.valid := io.toIfu.req.valid
+  loopMainCache.io.query.bits.pc := io.toIfu.req.bits.startAddr
+  loopMainCache.io.query.bits.cfiIndex := Mux(io.toIfu.req.bits.ftqOffset.valid, io.toIfu.req.bits.ftqOffset.bits, 0xfffffff.U)
+  loopMainCache.io.out_entry.ready := true.B
+  // update.is_loop     := commit_is_loop
 
   when (commit_valid && do_commit) {
     prev_commit_target := commit_target

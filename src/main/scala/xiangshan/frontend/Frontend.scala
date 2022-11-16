@@ -172,6 +172,10 @@ class FrontendImp (outer: Frontend) extends LazyModuleImp(outer)
 
   icache.io.hartId := io.hartId
 
+  // Ftq-IBuffer
+  ftq.io.fromIBuffer <> ibuffer.io.loop_out
+  ibuffer.io.loop_peek <> ftq.io.toIBuffer
+
   val frontendBubble = PopCount((0 until DecodeWidth).map(i => io.backend.cfVec(i).ready && !ibuffer.io.out(i).valid))
   XSPerfAccumulate("FrontendBubble", frontendBubble)
   io.frontendInfo.ibufFull := RegNext(ibuffer.io.full)

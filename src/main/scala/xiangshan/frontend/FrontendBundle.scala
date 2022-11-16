@@ -36,14 +36,14 @@ class FetchRequestBundle(implicit p: Parameters) extends XSBundle with HasICache
   val ftqIdx          = new FtqPtr
   val ftqOffset       = ValidUndirectioned(UInt(log2Ceil(PredictWidth).W))
 
-  val is_loop         = Bool()
+  // val is_loop         = Bool()
 
   def crossCacheline =  startAddr(blockOffBits - 1) === 1.U
 
   def fromFtqPcBundle(b: Ftq_RF_Components) = {
     this.startAddr := b.startAddr
     this.nextlineStart := b.nextLineAddr
-    this.is_loop := b.is_loop
+    // this.is_loop := b.is_loop
     when (b.fallThruError) {
       val nextBlockHigherTemp = Mux(startAddr(log2Ceil(PredictWidth)+instOffsetBits), b.startAddr, b.nextLineAddr)
       val nextBlockHigher = nextBlockHigherTemp(VAddrBits-1, log2Ceil(PredictWidth)+instOffsetBits+1)
@@ -124,6 +124,14 @@ class FetchToIBuffer(implicit p: Parameters) extends XSBundle {
   val acf          = Vec(PredictWidth, Bool())
   val crossPageIPFFix = Vec(PredictWidth, Bool())
   val triggered    = Vec(PredictWidth, new TriggerCf)
+}
+
+class IBufferToFtq(implicit p: Parameters) extends XSBundle {
+  val update = Valid(new LoopCacheSpecInfo)
+}
+
+class FtqToIBuffer(implicit p: Parameters) extends XSBundle {
+  val pc = Valid(UInt(VAddrBits.W))
 }
 
 // class BitWiseUInt(val width: Int, val init: UInt) extends Module {
@@ -423,7 +431,7 @@ class FullBranchPrediction(implicit p: Parameters) extends XSBundle with HasBPUC
   val last_may_be_rvi_call = Bool()
   val is_br_sharing = Bool()
 
-  val is_loop = Bool()
+  // val is_loop = Bool()
 
   // val call_is_rvc = Bool()
   val hit = Bool()
@@ -504,7 +512,7 @@ class FullBranchPrediction(implicit p: Parameters) extends XSBundle with HasBPUC
 
   def taken = br_taken_mask.reduce(_||_) || slot_valids.last // || (is_jal || is_jalr)
 
-  def fromFtbEntry(entry: FTBEntry, pc: UInt, loop: Bool, last_stage: Option[Tuple2[UInt, Bool]] = None) = {
+  def fromFtbEntry(entry: FTBEntry, pc: UInt, last_stage: Option[Tuple2[UInt, Bool]] = None) = {
     slot_valids := entry.brSlots.map(_.valid) :+ entry.tailSlot.valid
     targets := entry.getTargetVec(pc)
     jalr_target := targets.last
@@ -513,7 +521,6 @@ class FullBranchPrediction(implicit p: Parameters) extends XSBundle with HasBPUC
     is_jalr := entry.tailSlot.valid && entry.isJalr
     is_call := entry.tailSlot.valid && entry.isCall
     is_ret := entry.tailSlot.valid && entry.isRet
-    is_loop := loop
     last_may_be_rvi_call := entry.last_may_be_rvi_call
     is_br_sharing := entry.tailSlot.valid && entry.tailSlot.sharing
     
