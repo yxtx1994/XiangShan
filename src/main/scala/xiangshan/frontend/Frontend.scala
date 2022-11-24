@@ -66,10 +66,17 @@ class FrontendImp (outer: Frontend) extends LazyModuleImp(outer)
   val ifu     = Module(new NewIFU)
   val ibuffer =  Module(new Ibuffer)
   val ftq = Module(new Ftq)
+  val loopArbiter = Module(new LoopIFUArbiter)
 
   val tlbCsr = DelayN(io.tlbCsr, 2)
   val csrCtrl = DelayN(io.csrCtrl, 2)
   val sfence = RegNext(RegNext(io.sfence))
+
+  val fenceio = Wire(new LoopCacheFenceBundle)
+  fenceio.fencei_valid := io.fencei
+  fenceio.sfence_valid := io.sfence.valid
+  ibuffer.io.fence := fenceio
+  ftq.io.fence := fenceio
 
   // trigger
   ifu.io.frontendTrigger := csrCtrl.frontend_trigger
@@ -154,7 +161,11 @@ class FrontendImp (outer: Frontend) extends LazyModuleImp(outer)
   icache.io.csr_parity_enable := RegNext(csrCtrl.icache_parity_enable)
 
   //IFU-Ibuffer
-  ifu.io.toIbuffer    <> ibuffer.io.in
+  // ifu.io.toIbuffer    <> ibuffer.io.in
+  ifu.io.toIbuffer    <> loopArbiter.io.fromIFU
+  ftq.io.loopToIBuffer    <> loopArbiter.io.fromLoop
+  loopArbiter.io.toIBuffer <> ibuffer.io.in
+  ibuffer.io.PdWb <> ifu.io.ftqInter.toFtq.pdWb
 
   ftq.io.fromBackend <> io.backend.toFtq
   io.backend.fromFtq <> ftq.io.toBackend

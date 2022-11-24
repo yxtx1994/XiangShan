@@ -97,11 +97,13 @@ class Ftq_RF_Components(implicit p: Parameters) extends XSBundle with BPUUtils w
 class LoopCacheSpecInfo(implicit p: Parameters) extends XSBundle {
   val pc = UInt(VAddrBits.W)
   val hit_data = new LoopCacheSpecEntry
+  val pd = new PredecodeWritebackBundle
 }
 
 class LoopCacheQuery(implicit p: Parameters) extends XSBundle {
   val pc = UInt(VAddrBits.W)
   val cfiIndex = UInt(log2Ceil(PredictWidth).W)
+  val ftqPtr = new FtqPtr
 }
 
 class LoopCacheResp(implicit p: Parameters) extends XSBundle {
@@ -109,12 +111,24 @@ class LoopCacheResp(implicit p: Parameters) extends XSBundle {
   val valids = Vec(LoopCacheSpecSize, Bool())
 }
 
+class LoopCacheFenceBundle(implicit p: Parameters) extends XSBundle {
+  val sfence_valid = Bool()
+  val fencei_valid = Bool()
+}
+
+
 class LoopCacheNonSpecIO(implicit p: Parameters) extends XSBundle {
   val query = Flipped(Valid(new LoopCacheQuery))
   val l0_hit = Output(Bool())
   val out_entry = Decoupled(new LoopCacheResp)
 
   val update = Flipped(Valid(new LoopCacheSpecInfo))
+
+  val fence = Input(new LoopCacheFenceBundle)
+  val flush = Input(Bool())
+  val pd_valid = Output(Bool())
+  // val pd_ftqIdx = Output(new FtqPtr)
+  val pd_data = Output(new PredecodeWritebackBundle)
 }
 
 class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule {
@@ -123,6 +137,7 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule {
   val cache_valid = RegInit(0.B)
   val cache_pc = Reg(UInt(VAddrBits.W))
   val cache_data = Reg(new LoopCacheSpecEntry)
+  val cache_pd = Reg(new PredecodeWritebackBundle)
 
   val l0_fire = Wire(Bool())
   val l1_fire = Wire(Bool())
@@ -145,7 +160,7 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule {
     }
   }
   io.l0_hit := l0_hit
-  l0_taken_pc := io.query.bits.pc + io.query.bits.cfiIndex
+  l0_taken_pc := io.query.bits.pc + Cat(io.query.bits.cfiIndex, 0.U.asTypeOf(UInt(1.W)))
   val l0_pc_hit = VecInit(cache_data.instEntry.map(_.pc === l0_taken_pc))
 
   /*
@@ -156,6 +171,8 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule {
   val l1_data = Reg(new LoopCacheSpecEntry)
   val l1_taken_pc = Reg(UInt(VAddrBits.W))
   val l1_pc_hit = Reg(l0_pc_hit.cloneType)
+  val l1_ftqPtr = Reg(new FtqPtr)
+  val l1_pd = Reg(new PredecodeWritebackBundle)
   l0_fire := l0_hit && (!l1_hit || l1_fire)
 
   when (l0_fire) {
@@ -163,8 +180,10 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule {
     l1_pc := l0_pc
     l1_data := l0_data
     l1_pc_hit := l0_pc_hit
+    l1_ftqPtr := io.query.bits.ftqPtr
+    l1_pd := cache_pd
   }
-  val l1_pc_hit_pos = PopCount(l1_pc_hit)
+  val l1_pc_hit_pos = OHToUInt(l1_pc_hit)
 
   /*
   * l2: cut instruction flow after loop hit position
@@ -174,12 +193,17 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule {
   val l2_data = Reg(new LoopCacheSpecEntry)
   l2_fire := l2_hit && io.out_entry.ready
   val l2_pc_hit_pos = Reg(l1_pc_hit_pos.cloneType)
+  val l2_ftqPtr = Reg(new FtqPtr)
+  val l2_pd = Reg(new PredecodeWritebackBundle())
   l1_fire := l1_hit && (!l2_hit || l2_fire)
 
   when (l1_fire) {
     l2_hit := l1_hit
     l2_pc := l1_pc
     l2_data := l1_data
+    l2_pc_hit_pos := l1_pc_hit_pos
+    l2_ftqPtr := l1_ftqPtr
+    l2_pd := l1_pd
   } .elsewhen (l2_fire) {
     l2_hit := false.B
   }
@@ -195,6 +219,11 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule {
   // TODO: adjust ftqptr
   XSPerfAccumulate("loop_cache_spec_fill_hit", l2_hit);
 
+  io.pd_valid := RegNext(l2_fire)
+  // io.pd_ftqIdx := RegNext(l2_ftqPtr)
+  io.pd_data := RegNext(l2_pd)
+  io.pd_data.ftqIdx := l2_ftqPtr
+
   /*
    * update
    */
@@ -202,7 +231,124 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule {
     cache_valid := true.B
     cache_pc := io.update.bits.pc
     cache_data := io.update.bits.hit_data
+    cache_pd := io.update.bits.pd
   }
+  when (io.fence.sfence_valid || io.fence.fencei_valid || io.flush) {
+    cache_valid := false.B
+    l1_hit := false.B
+    l2_hit := false.B
+    io.out_entry.valid := false.B
+    // TODO: should cancel resp
+  }
+}
+
+class LoopToArbiter(implicit p: Parameters) extends LoopCacheResp {
+  def toFetchToIBuffer(ptr: FtqPtr) = {
+    val ret = Wire(new FetchToIBuffer)
+    val _instr = Seq.tabulate(LoopCacheMaxInst)(i => entry.instEntry(i).inst)
+    val _instrPad = Seq.tabulate(PredictWidth - LoopCacheMaxInst)(i => 0.U.asTypeOf(UInt(32.W)))
+
+    val _valid = Seq.tabulate(LoopCacheMaxInst)(i => true.B)
+    val _validPad = Seq.tabulate(PredictWidth - LoopCacheMaxInst)(i => false.B)
+
+    val _enqEnable = Seq.tabulate(LoopCacheMaxInst)(i => valids(i))
+    val _enqPad = Seq.tabulate(PredictWidth - LoopCacheMaxInst)(i => false.B)
+
+    val _pd = Seq.tabulate(LoopCacheMaxInst)(i => entry.instEntry(i).pd)
+    val _pdPad = Seq.tabulate(PredictWidth - LoopCacheMaxInst)(i => 0.U.asTypeOf(new PreDecodeInfo))
+
+    val _pc = Seq.tabulate(LoopCacheMaxInst)(i => entry.instEntry(i).pc)
+    val _pcPad = Seq.tabulate(PredictWidth - LoopCacheMaxInst)(i => 0.U.asTypeOf(UInt(VAddrBits.W)))
+
+    val _foldpc = Seq.tabulate(LoopCacheMaxInst)(i => entry.instEntry(i).foldpc)
+    val _foldpcPad = Seq.tabulate(PredictWidth - LoopCacheMaxInst)(i => 0.U.asTypeOf(UInt(VAddrBits.W)))
+
+    val _predTaken = Seq.tabulate(LoopCacheMaxInst)(i => entry.instEntry(i).pred_taken)
+    val _predTakenPad = Seq.tabulate(PredictWidth - LoopCacheMaxInst)(i => false.B)
+
+    //val _ftqPtr = Seq.tabulate(LoopCacheMaxInst)(i => ptr)
+    //val _ftqPtrPad = Seq.tabulate(PredictWidth - LoopCacheMaxInst)(i => 0.U.asTypeOf(new FtqPtr))
+
+    val _ftqOffset = Seq.tabulate(LoopCacheMaxInst)(i => entry.instEntry(i).ftqOffset)
+    val _ftqOffsetPad = Seq.tabulate(PredictWidth - LoopCacheMaxInst)(i => 0.U.asTypeOf(UInt(log2Ceil(PredictWidth).W)))
+
+    val _trigger = Seq.tabulate(LoopCacheMaxInst)(i => entry.instEntry(i).triggered)
+    val _triggerPad = Seq.tabulate(PredictWidth - LoopCacheMaxInst)(i => 0.U.asTypeOf(new TriggerCf))
+
+    // should never trigger
+    val _ipf = Seq.tabulate(PredictWidth)(i => false.B)
+    val _acf = Seq.tabulate(PredictWidth)(i => false.B)
+    val _crossPageIPFFix = Seq.tabulate(PredictWidth)(i => false.B)
+
+    val _instr_t = _instr ++ _instrPad
+    val _valid_t = _valid ++ _validPad
+    val _enqEnable_t = _enqEnable ++ _enqPad
+    val _pd_t = _pd ++ _pdPad
+    val _pc_t = _pc ++ _pcPad
+    val _foldpc_t = _foldpc ++ _foldpcPad
+    //val _ftqPtr_t = _ftqPtr ++ _ftqPtrPad
+    val _ftqOffset_t = _ftqOffset ++ _ftqOffsetPad
+    val _trigger_t = _trigger ++ _triggerPad
+    val _predTaken_t = _predTaken ++ _predTakenPad
+
+    ret.instrs := VecInit(_instr_t)
+    ret.valid := VecInit(_valid_t).asUInt
+    ret.enqEnable := VecInit(_enqEnable_t).asUInt
+    ret.pd := VecInit(_pd_t)
+    ret.pc := VecInit(_pc_t)
+    ret.foldpc := VecInit(_foldpc_t)
+    ret.ftqPtr := ptr
+    // fixme: valid seems to be related with pred_taken in Ibuffer
+    ret.ftqOffset.zipWithIndex.map{case (a,i) => (a.valid := _predTaken_t(i), a.bits := _ftqOffset_t(i))} // := VecInit(_ftqOffset_t)
+    ret.crossPageIPFFix := VecInit(_crossPageIPFFix)
+    ret.triggered := VecInit(_trigger_t)
+
+    ret.ipf := VecInit(_ipf)
+    ret.acf := VecInit(_acf)
+    ret.crossPageIPFFix := VecInit(_crossPageIPFFix)
+
+    ret
+  }
+}
+
+class LoopIFUArbiterIO(implicit p: Parameters) extends XSBundle {
+  val fromLoop = Flipped(Decoupled(new LoopToArbiter))
+  val fromIFU = Flipped(Decoupled(new FetchToIBuffer))
+  val toIBuffer = Decoupled(new FetchToIBuffer())
+}
+
+class LoopIFUArbiter(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelper {
+  val io = IO(new LoopIFUArbiterIO)
+
+  //val arbiterEnable = RegInit(0.B)
+  //val ifuEndPtr = RegInit(0.U.asTypeOf(new FtqPtr))
+  //val loopEndPtr = RegInit(0.U.asTypeOf(new FtqPtr))
+  val currentPtr = RegInit(0.U.asTypeOf(new FtqPtr))
+  // val ifuEndPlusTwoPtr = Wire(ifuEndPtr + 2.U)
+  //val ifuEndPlusPtr = WireInit(ifuEndPtr + 1.U)
+  //val loopEndPlusPtr = Wire(loopEndPtr + 1.U)
+
+  io.fromLoop.ready := /*arbiterEnable &&*/ io.toIBuffer.ready // && isBefore(ifuEndPtr, currentPtr) /*isBefore(currentPtr, loopEndPlusPtr) && */
+  io.fromIFU.ready := (/*!arbiterEnable &&*/ io.toIBuffer.ready) // || (io.toIBuffer.ready && isBefore(ifuEndPlusPtr, currentPtr))
+
+  //when (/*!arbiterEnable &&*/ io.fromLoop.valid) {
+    //arbiterEnable := true.B
+    //ifuEndPtr := io.fromLoop.bits.entry.instEntry(0).ftqPtr - 1.U
+  //} .elsewhen (arbiterEnable && io.fromIFU.valid /*&& isBefore(ifuEndPlusPtr, io.fromIFU.bits.ftqPtr)*/) {
+    //arbiterEnable := false.B
+  //}
+  when (io.toIBuffer.fire) {
+    currentPtr := io.toIBuffer.bits.ftqPtr
+  }
+
+  // instruction flow must be consecutive
+  // assert(io.toIBuffer.fire && io.toIBuffer.bits.ftqPtr === currentPtr + 1.U)
+
+  // TODO: select from Ibuffer and IFU
+  val select_loop = /*arbiterEnable &&*/ !io.fromIFU.valid
+
+  io.toIBuffer.bits := Mux(select_loop, io.fromLoop.bits.toFetchToIBuffer(currentPtr + 1.U), io.fromIFU.bits)
+  io.toIBuffer.valid := Mux(select_loop, io.fromLoop.valid, io.fromIFU.valid)
 }
 
 class Ftq_pd_Entry(implicit p: Parameters) extends XSBundle {
@@ -552,6 +698,7 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
     val toPrefetch = new FtqPrefechBundle
 
     val toIBuffer = new FtqToIBuffer
+    val loopToIBuffer = Decoupled(new LoopToArbiter)
     val fromIBuffer = Flipped(new IBufferToFtq)
 
     val bpuInfo = new Bundle {
@@ -560,9 +707,15 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
     }
 
     val mmioCommitRead = Flipped(new mmioCommitRead)
+    val fence = Input(new LoopCacheFenceBundle)
   })
   io.bpuInfo := DontCare
 
+  val loop_cache_hit = Wire(Bool())
+  val loop_cache_pd_valid = Wire(Bool())
+  val loop_cache_pd_data = Wire(new PredecodeWritebackBundle)
+  val loop_cache_pd_ftqIdx = Wire(new FtqPtr)
+  val should_send_req = Wire(Bool())
   val backendRedirect = Wire(Valid(new Redirect))
   val backendRedirectReg = RegNext(backendRedirect)
 
@@ -719,7 +872,7 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
 
   bpuPtr := bpuPtr + enq_fire
   copied_bpu_ptr.map(_ := bpuPtr + enq_fire)
-  when (io.toIfu.req.fire && allowToIfu) {
+  when ((io.toIfu.req.fire && allowToIfu) || (should_send_req && loop_cache_hit)) {
     ifuPtr_write := ifuPtrPlus1
     ifuPtrPlus1_write := ifuPtrPlus2
     ifuPtrPlus2_write := ifuPtrPlus2 + 1.U
@@ -840,12 +993,13 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
                             RegNext(ftq_pc_mem.io.ifuPtrPlus1_rdata.startAddr))) // ifuPtr+1
   }
 
-  io.toIfu.req.valid := entry_is_to_send && ifuPtr =/= bpuPtr
+  should_send_req := entry_is_to_send && ifuPtr =/= bpuPtr
+  io.toIfu.req.valid := should_send_req && !loop_cache_hit
   io.toIfu.req.bits.nextStartAddr := entry_next_addr
   io.toIfu.req.bits.ftqOffset := entry_ftq_offset
   io.toIfu.req.bits.fromFtqPcBundle(toIfuPcBundle)
 
-  io.toICache.req.valid := entry_is_to_send && ifuPtr =/= bpuPtr
+  io.toICache.req.valid := should_send_req && !loop_cache_hit
   io.toICache.req.bits.readValid.zipWithIndex.map{case(copy, i) => copy := toICacheEntryToSend(i) && copied_ifu_ptr(i) =/= copied_bpu_ptr(i)} 
   io.toICache.req.bits.pcMemRead.zipWithIndex.map{case(copy,i) => copy.fromFtqPcBundle(toICachePcBundle(i))}
   // io.toICache.req.bits.bypassSelect := last_cycle_bpu_in && bpu_in_bypass_ptr === ifuPtr
@@ -884,71 +1038,83 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   // *********************************************************************
   // **************************** wb from ifu ****************************
   // *********************************************************************
-  val pdWb = io.fromIfu.pdWb
-  val pds = pdWb.bits.pd
-  val ifu_wb_valid = pdWb.valid
-  val ifu_wb_idx = pdWb.bits.ftqIdx.value
+  val loop_pd_wrapper = Wire(Valid(new PredecodeWritebackBundle))
+  loop_pd_wrapper.valid := loop_cache_pd_valid
+  loop_pd_wrapper.bits := loop_cache_pd_data
+  val ifupdWb = io.fromIfu.pdWb
+
   // read ports:                                                         commit update
-  val ftq_pd_mem = Module(new SyncDataModuleTemplate(new Ftq_pd_Entry, FtqSize, 1, 1, "FtqPd"))
-  ftq_pd_mem.io.wen(0) := ifu_wb_valid
-  ftq_pd_mem.io.waddr(0) := pdWb.bits.ftqIdx.value
-  ftq_pd_mem.io.wdata(0).fromPdWb(pdWb.bits)
+  val ftq_pd_mem = Module(new SyncDataModuleTemplate(new Ftq_pd_Entry, FtqSize, 2, 2, "FtqPd"))
 
-  val hit_pd_valid = entry_hit_status(ifu_wb_idx) === h_hit && ifu_wb_valid
-  val hit_pd_mispred = hit_pd_valid && pdWb.bits.misOffset.valid
-  val hit_pd_mispred_reg = RegNext(hit_pd_mispred, init=false.B)
-  val pd_reg       = RegEnable(pds,             enable = pdWb.valid)
-  val start_pc_reg = RegEnable(pdWb.bits.pc(0), enable = pdWb.valid)
-  val wb_idx_reg   = RegEnable(ifu_wb_idx,      enable = pdWb.valid)
+  def handle_pdwb(pdWb: Valid[PredecodeWritebackBundle], writeport: Int) = {
+    val pds = pdWb.bits.pd
+    val ifu_wb_valid = pdWb.valid
+    val ifu_wb_idx = pdWb.bits.ftqIdx.value
+    ftq_pd_mem.io.wen(writeport) := ifu_wb_valid
+    ftq_pd_mem.io.waddr(writeport) := pdWb.bits.ftqIdx.value
+    ftq_pd_mem.io.wdata(writeport).fromPdWb(pdWb.bits)
+    val hit_pd_valid = entry_hit_status(ifu_wb_idx) === h_hit && ifu_wb_valid
+    val hit_pd_mispred = hit_pd_valid && pdWb.bits.misOffset.valid
+    val hit_pd_mispred_reg = RegNext(hit_pd_mispred, init=false.B)
+    val pd_reg       = RegEnable(pds,             enable = pdWb.valid)
+    val start_pc_reg = RegEnable(pdWb.bits.pc(0), enable = pdWb.valid)
+    val wb_idx_reg   = RegEnable(ifu_wb_idx,      enable = pdWb.valid)
 
-  when (ifu_wb_valid) {
-    val comm_stq_wen = VecInit(pds.map(_.valid).zip(pdWb.bits.instrRange).map{
-      case (v, inRange) => v && inRange
-    })
-    (commitStateQueue(ifu_wb_idx) zip comm_stq_wen).map{
-      case (qe, v) => when (v) { qe := c_valid }
+    when (ifu_wb_valid) {
+      val comm_stq_wen = VecInit(pds.map(_.valid).zip(pdWb.bits.instrRange).map{
+        case (v, inRange) => v && inRange
+      })
+      (commitStateQueue(ifu_wb_idx) zip comm_stq_wen).map{
+        case (qe, v) => when (v) { qe := c_valid }
+      }
     }
+
+
+    ftb_entry_mem.io.raddr(writeport) := ifu_wb_idx
+    val has_false_hit = WireInit(false.B)
+    when (RegNext(hit_pd_valid)) {
+      // check for false hit
+      val pred_ftb_entry = ftb_entry_mem.io.rdata(writeport)
+      val brSlots = pred_ftb_entry.brSlots
+      val tailSlot = pred_ftb_entry.tailSlot
+      // we check cfis that bpu predicted
+
+      // bpu predicted branches but denied by predecode
+      val br_false_hit =
+        brSlots.map{
+          s => s.valid && !(pd_reg(s.offset).valid && pd_reg(s.offset).isBr)
+        }.reduce(_||_) ||
+          (tailSlot.valid && pred_ftb_entry.tailSlot.sharing &&
+            !(pd_reg(tailSlot.offset).valid && pd_reg(tailSlot.offset).isBr))
+
+      val jmpOffset = tailSlot.offset
+      val jmp_pd = pd_reg(jmpOffset)
+      val jal_false_hit = pred_ftb_entry.jmpValid &&
+        ((pred_ftb_entry.isJal  && !(jmp_pd.valid && jmp_pd.isJal)) ||
+          (pred_ftb_entry.isJalr && !(jmp_pd.valid && jmp_pd.isJalr)) ||
+          (pred_ftb_entry.isCall && !(jmp_pd.valid && jmp_pd.isCall)) ||
+          (pred_ftb_entry.isRet  && !(jmp_pd.valid && jmp_pd.isRet))
+          )
+
+      has_false_hit := br_false_hit || jal_false_hit || hit_pd_mispred_reg
+      XSDebug(has_false_hit, "FTB false hit by br or jal or hit_pd, startAddr: %x\n", pdWb.bits.pc(0))
+
+      // assert(!has_false_hit)
+    }
+
+    when (has_false_hit) {
+      entry_hit_status(wb_idx_reg) := h_false_hit
+    }
+
+    ifu_wb_valid
   }
 
-  when (ifu_wb_valid) {
-    ifuWbPtr_write := ifuWbPtr + 1.U
+  val ifu_wb_valids = Wire(VecInit(handle_pdwb(ifupdWb, 0), handle_pdwb(loop_pd_wrapper, 1)))
+  when (ifu_wb_valids.reduce((a,b) => a | b)) {
+    // Problem: ifuwbptr may be updated by loop too early
+    ifuWbPtr_write := ifuWbPtr + PopCount(ifu_wb_valids)
   }
 
-  ftb_entry_mem.io.raddr.head := ifu_wb_idx
-  val has_false_hit = WireInit(false.B)
-  when (RegNext(hit_pd_valid)) {
-    // check for false hit
-    val pred_ftb_entry = ftb_entry_mem.io.rdata.head
-    val brSlots = pred_ftb_entry.brSlots
-    val tailSlot = pred_ftb_entry.tailSlot
-    // we check cfis that bpu predicted
-
-    // bpu predicted branches but denied by predecode
-    val br_false_hit =
-      brSlots.map{
-        s => s.valid && !(pd_reg(s.offset).valid && pd_reg(s.offset).isBr)
-      }.reduce(_||_) ||
-      (tailSlot.valid && pred_ftb_entry.tailSlot.sharing &&
-        !(pd_reg(tailSlot.offset).valid && pd_reg(tailSlot.offset).isBr))
-
-    val jmpOffset = tailSlot.offset
-    val jmp_pd = pd_reg(jmpOffset)
-    val jal_false_hit = pred_ftb_entry.jmpValid &&
-      ((pred_ftb_entry.isJal  && !(jmp_pd.valid && jmp_pd.isJal)) ||
-       (pred_ftb_entry.isJalr && !(jmp_pd.valid && jmp_pd.isJalr)) ||
-       (pred_ftb_entry.isCall && !(jmp_pd.valid && jmp_pd.isCall)) ||
-       (pred_ftb_entry.isRet  && !(jmp_pd.valid && jmp_pd.isRet))
-      )
-
-    has_false_hit := br_false_hit || jal_false_hit || hit_pd_mispred_reg
-    XSDebug(has_false_hit, "FTB false hit by br or jal or hit_pd, startAddr: %x\n", pdWb.bits.pc(0))
-
-    // assert(!has_false_hit)
-  }
-
-  when (has_false_hit) {
-    entry_hit_status(wb_idx_reg) := h_false_hit
-  }
 
 
   // **********************************************************************
@@ -1072,6 +1238,8 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
 
   val redirectVec = VecInit(backendRedirect, fromIfuRedirect)
 
+  val loopCacheFlush = WireInit(false.B)
+
   // when redirect, we should reset ptrs and status queues
   when(redirectVec.map(r => r.valid).reduce(_||_)){
     val r = PriorityMux(redirectVec.map(r => (r.valid -> r.bits)))
@@ -1084,6 +1252,7 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
     ifuWbPtr_write := next
     ifuPtrPlus1_write := idx + 2.U
     ifuPtrPlus2_write := idx + 3.U
+    loopCacheFlush := true.B
     when (notIfu) {
       commitStateQueue(idx.value).zipWithIndex.foreach({ case (s, i) =>
         when(i.U > offset || i.U === offset && flushItSelf){
@@ -1213,12 +1382,14 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
     valid_loop_pc := prev_commit_target
     valid_loop_cfiIndex := prev_commit_cfi_idx.bits
 
-    io.toIBuffer.pc.valid := true.B
+    io.toIBuffer.pc.valid := valid_loop
     io.toIBuffer.pc.bits := valid_loop_pc
+    // TODO: valid_loop pull down when inject
   }
 
   val loopMainCache = Module(new LoopCacheNonSpecEntry)
   loopMainCache.io.update := io.fromIBuffer.update
+  loopMainCache.io.fence := io.fence
 
   io.toBpu.update := DontCare
   io.toBpu.update.valid := commit_valid && do_commit
@@ -1231,10 +1402,21 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   update.from_stage  := commit_stage
   update.spec_info   := commit_spec_meta
 
-  loopMainCache.io.query.valid := io.toIfu.req.valid
+  loopMainCache.io.query.valid := entry_is_to_send && ifuPtr =/= bpuPtr
   loopMainCache.io.query.bits.pc := io.toIfu.req.bits.startAddr
   loopMainCache.io.query.bits.cfiIndex := Mux(io.toIfu.req.bits.ftqOffset.valid, io.toIfu.req.bits.ftqOffset.bits, 0xfffffff.U)
+  loopMainCache.io.query.bits.ftqPtr := io.toIfu.req.bits.ftqIdx
   loopMainCache.io.out_entry.ready := true.B
+
+  loopMainCache.io.flush := loopCacheFlush
+
+  loop_cache_hit := loopMainCache.io.l0_hit
+
+  io.loopToIBuffer <> loopMainCache.io.out_entry
+
+  loop_cache_pd_valid := loopMainCache.io.pd_valid
+  loop_cache_pd_ftqIdx := loopMainCache.io.pd_data.ftqIdx
+  loop_cache_pd_data := loopMainCache.io.pd_data
   // update.is_loop     := commit_is_loop
 
   when (commit_valid && do_commit) {
