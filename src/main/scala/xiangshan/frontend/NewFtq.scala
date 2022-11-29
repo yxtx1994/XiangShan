@@ -118,7 +118,7 @@ class LoopCacheFenceBundle(implicit p: Parameters) extends XSBundle {
 
 
 class LoopCacheNonSpecIO(implicit p: Parameters) extends XSBundle {
-  val query = Flipped(Valid(new LoopCacheQuery))
+  val query = Flipped(Decoupled(new LoopCacheQuery))
   val l0_hit = Output(Bool())
   val out_entry = Decoupled(new LoopCacheResp)
 
@@ -150,6 +150,7 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule {
   val l0_data = Wire(new LoopCacheSpecEntry)
   val l0_taken_pc = Wire(UInt(VAddrBits.W))
 
+
   l0_pc := DontCare
   l0_data := DontCare
   l0_hit := false.B
@@ -173,7 +174,8 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule {
   val l1_pc_hit = Reg(l0_pc_hit.cloneType)
   val l1_ftqPtr = Reg(new FtqPtr)
   val l1_pd = Reg(new PredecodeWritebackBundle)
-  l0_fire := l0_hit && (!l1_hit || l1_fire)
+  l0_fire := l0_hit && io.query.ready
+  io.query.ready := !l1_hit || l1_fire
 
   when (l0_fire) {
     l1_hit := l0_hit
@@ -182,6 +184,8 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule {
     l1_pc_hit := l0_pc_hit
     l1_ftqPtr := io.query.bits.ftqPtr
     l1_pd := cache_pd
+  } .elsewhen (l1_fire) {
+    l1_hit := false.B
   }
   val l1_pc_hit_pos = OHToUInt(l1_pc_hit)
 
@@ -222,7 +226,8 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule {
   io.pd_valid := RegNext(l2_fire)
   // io.pd_ftqIdx := RegNext(l2_ftqPtr)
   io.pd_data := RegNext(l2_pd)
-  io.pd_data.ftqIdx := l2_ftqPtr
+  io.pd_data.ftqIdx := RegNext(l2_ftqPtr)
+  io.pd_data.instrRange := RegNext(VecInit((l2_pd.instrRange zip l2_valids).map{ case (range, valid) => range && valid}))
 
   /*
    * update
@@ -315,6 +320,8 @@ class LoopIFUArbiterIO(implicit p: Parameters) extends XSBundle {
   val fromLoop = Flipped(Decoupled(new LoopToArbiter))
   val fromIFU = Flipped(Decoupled(new FetchToIBuffer))
   val toIBuffer = Decoupled(new FetchToIBuffer())
+  val flags = Input(Vec(FtqSize, Bool()))
+  val redirect = Flipped(Valid(new FtqPtr))
 }
 
 class LoopIFUArbiter(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelper {
@@ -328,8 +335,10 @@ class LoopIFUArbiter(implicit p: Parameters) extends XSModule with HasCircularQu
   //val ifuEndPlusPtr = WireInit(ifuEndPtr + 1.U)
   //val loopEndPlusPtr = Wire(loopEndPtr + 1.U)
 
-  io.fromLoop.ready := /*arbiterEnable &&*/ io.toIBuffer.ready // && isBefore(ifuEndPtr, currentPtr) /*isBefore(currentPtr, loopEndPlusPtr) && */
-  io.fromIFU.ready := (/*!arbiterEnable &&*/ io.toIBuffer.ready) // || (io.toIBuffer.ready && isBefore(ifuEndPlusPtr, currentPtr))
+  val selLoop = io.flags(currentPtr.value)
+
+  io.fromLoop.ready := /*arbiterEnable &&*/ selLoop && io.toIBuffer.ready // && isBefore(ifuEndPtr, currentPtr) /*isBefore(currentPtr, loopEndPlusPtr) && */
+  io.fromIFU.ready := (/*!arbiterEnable &&*/ !selLoop && io.toIBuffer.ready) // || (io.toIBuffer.ready && isBefore(ifuEndPlusPtr, currentPtr))
 
   //when (/*!arbiterEnable &&*/ io.fromLoop.valid) {
     //arbiterEnable := true.B
@@ -338,17 +347,18 @@ class LoopIFUArbiter(implicit p: Parameters) extends XSModule with HasCircularQu
     //arbiterEnable := false.B
   //}
   when (io.toIBuffer.fire) {
-    currentPtr := io.toIBuffer.bits.ftqPtr
+    currentPtr := currentPtr + 1.U
+  }
+
+  when (io.redirect.valid) {
+    currentPtr := io.redirect.bits
   }
 
   // instruction flow must be consecutive
-  // assert(io.toIBuffer.fire && io.toIBuffer.bits.ftqPtr === currentPtr + 1.U)
+  XSError(io.toIBuffer.fire && io.toIBuffer.bits.ftqPtr =/= currentPtr, "Ftqptr mismatch on arbiter")
 
-  // TODO: select from Ibuffer and IFU
-  val select_loop = /*arbiterEnable &&*/ !io.fromIFU.valid
-
-  io.toIBuffer.bits := Mux(select_loop, io.fromLoop.bits.toFetchToIBuffer(currentPtr + 1.U), io.fromIFU.bits)
-  io.toIBuffer.valid := Mux(select_loop, io.fromLoop.valid, io.fromIFU.valid)
+  io.toIBuffer.bits := Mux(selLoop, io.fromLoop.bits.toFetchToIBuffer(currentPtr), io.fromIFU.bits)
+  io.toIBuffer.valid := Mux(selLoop, io.fromLoop.valid, io.fromIFU.valid)
 }
 
 class Ftq_pd_Entry(implicit p: Parameters) extends XSBundle {
@@ -699,6 +709,8 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
 
     val toIBuffer = new FtqToIBuffer
     val loopToIBuffer = Decoupled(new LoopToArbiter)
+    val loopArbiterRedirect = Valid(new FtqPtr)
+    val loopFlags = Output(Vec(FtqSize, Bool()))
     val fromIBuffer = Flipped(new IBufferToFtq)
 
     val bpuInfo = new Bundle {
@@ -712,6 +724,7 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   io.bpuInfo := DontCare
 
   val loop_cache_hit = Wire(Bool())
+  val loop_cache_ready = Wire(Bool())
   val loop_cache_pd_valid = Wire(Bool())
   val loop_cache_pd_data = Wire(new PredecodeWritebackBundle)
   val loop_cache_pd_ftqIdx = Wire(new FtqPtr)
@@ -812,6 +825,17 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   val mispredict_vec = Reg(Vec(FtqSize, Vec(PredictWidth, Bool())))
   val pred_stage = Reg(Vec(FtqSize, UInt(2.W)))
 
+  val pdWb_flag = RegInit(VecInit(Seq.fill(FtqSize)(0.B)))
+
+  // 1: loop 0: ifu
+  val arbiter_flag = Reg(Vec(FtqSize, Bool()))
+  io.loopFlags := arbiter_flag
+
+  val loopArbiterRedirect = Wire(Valid(new FtqPtr))
+  loopArbiterRedirect.valid := false.B
+  loopArbiterRedirect.bits := DontCare
+  io.loopArbiterRedirect := loopArbiterRedirect
+
   val c_invalid :: c_valid :: c_commited :: Nil = Enum(3)
   val commitStateQueue = RegInit(VecInit(Seq.fill(FtqSize) {
     VecInit(Seq.fill(PredictWidth)(c_invalid))
@@ -911,6 +935,7 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   }
 
   XSError(isBefore(bpuPtr, ifuPtr) && !isFull(bpuPtr, ifuPtr), "\nifuPtr is before bpuPtr!\n")
+  XSError(isBefore(ifuPtr, ifuWbPtr) && !isFull(ifuPtr, ifuWbPtr), "\nifuWbPtr is before ifuPtr!\n")
   
   (0 until copyNum).map{i =>
     XSError(copied_bpu_ptr(i) =/= bpuPtr, "\ncopiedBpuPtr is different from bpuPtr!\n")
@@ -993,7 +1018,13 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
                             RegNext(ftq_pc_mem.io.ifuPtrPlus1_rdata.startAddr))) // ifuPtr+1
   }
 
-  should_send_req := entry_is_to_send && ifuPtr =/= bpuPtr
+  should_send_req := entry_is_to_send && ifuPtr =/= bpuPtr && loop_cache_ready
+
+  when (should_send_req) {
+    arbiter_flag(ifuPtr.value) := loop_cache_hit
+  }
+
+
   io.toIfu.req.valid := should_send_req && !loop_cache_hit
   io.toIfu.req.bits.nextStartAddr := entry_next_addr
   io.toIfu.req.bits.ftqOffset := entry_ftq_offset
@@ -1031,7 +1062,7 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
     io.toIfu.flushFromBpu.shouldFlushByStage2(io.toIfu.req.bits.ftqIdx) ||
     io.toIfu.flushFromBpu.shouldFlushByStage3(io.toIfu.req.bits.ftqIdx)
 
-    when (io.toIfu.req.fire && !ifu_req_should_be_flushed) {
+    when ((io.toIfu.req.fire || (should_send_req && loop_cache_hit)) && !ifu_req_should_be_flushed) {
       entry_fetch_status(ifuPtr.value) := f_sent
     }
 
@@ -1044,7 +1075,7 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   val ifupdWb = io.fromIfu.pdWb
 
   // read ports:                                                         commit update
-  val ftq_pd_mem = Module(new SyncDataModuleTemplate(new Ftq_pd_Entry, FtqSize, 2, 2, "FtqPd"))
+  val ftq_pd_mem = Module(new SyncDataModuleTemplate(new Ftq_pd_Entry, FtqSize, 1, 2, "FtqPd"))
 
   def handle_pdwb(pdWb: Valid[PredecodeWritebackBundle], writeport: Int) = {
     val pds = pdWb.bits.pd
@@ -1067,6 +1098,7 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
       (commitStateQueue(ifu_wb_idx) zip comm_stq_wen).map{
         case (qe, v) => when (v) { qe := c_valid }
       }
+      pdWb_flag(pdWb.bits.ftqIdx.value) := true.B
     }
 
 
@@ -1109,10 +1141,13 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
     ifu_wb_valid
   }
 
-  val ifu_wb_valids = Wire(VecInit(handle_pdwb(ifupdWb, 0), handle_pdwb(loop_pd_wrapper, 1)))
-  when (ifu_wb_valids.reduce((a,b) => a | b)) {
-    // Problem: ifuwbptr may be updated by loop too early
-    ifuWbPtr_write := ifuWbPtr + PopCount(ifu_wb_valids)
+  handle_pdwb(ifupdWb, 0)
+  handle_pdwb(loop_pd_wrapper, 1)
+
+  val pdWb = ifupdWb
+
+  when (pdWb_flag(ifuWbPtr.value) === true.B && !isBefore(ifuPtr, ifuWbPtr + 1.U)) {
+    ifuWbPtr_write := ifuWbPtr + 1.U
   }
 
 
@@ -1260,6 +1295,26 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
         }
       })
     }
+    when (backendRedirect.valid) {
+      loopArbiterRedirect.valid := true.B
+      loopArbiterRedirect.bits := backendRedirect.bits.ftqIdx + 1.U
+    }
+
+
+    val next_less = idx.value < ifuPtr.value
+    when (next_less) {
+      pdWb_flag.zipWithIndex.foreach({ case (f, i) =>
+        when((i.U > idx.value && i.U <= ifuPtr.value)) {
+          f := false.B
+        }
+      })
+    } .otherwise {
+      pdWb_flag.zipWithIndex.foreach({ case (f, i) =>
+        when(i.U <= ifuPtr.value || i.U > idx.value) {
+          f := false.B
+        }
+      })
+    }
   }
 
   // only the valid bit is actually needed
@@ -1328,6 +1383,7 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   when (canCommit) {
     commPtr_write := commPtrPlus1
     commPtrPlus1_write := commPtrPlus1 + 1.U
+    pdWb_flag(commPtr.value) := false.B
   }
   val commit_state = RegNext(commitStateQueue(commPtr.value))
   val can_commit_cfi = WireInit(cfiIndex_vec(commPtr.value))
@@ -1411,6 +1467,7 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   loopMainCache.io.flush := loopCacheFlush
 
   loop_cache_hit := loopMainCache.io.l0_hit
+  loop_cache_ready := loopMainCache.io.query.ready
 
   io.loopToIBuffer <> loopMainCache.io.out_entry
 

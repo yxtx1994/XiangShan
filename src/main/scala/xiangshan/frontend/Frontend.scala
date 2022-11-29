@@ -165,6 +165,8 @@ class FrontendImp (outer: Frontend) extends LazyModuleImp(outer)
   ifu.io.toIbuffer    <> loopArbiter.io.fromIFU
   ftq.io.loopToIBuffer    <> loopArbiter.io.fromLoop
   loopArbiter.io.toIBuffer <> ibuffer.io.in
+  loopArbiter.io.redirect <> ftq.io.loopArbiterRedirect
+  loopArbiter.io.flags <> ftq.io.loopFlags
   ibuffer.io.PdWb <> ifu.io.ftqInter.toFtq.pdWb
 
   ftq.io.fromBackend <> io.backend.toFtq
