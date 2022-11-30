@@ -102,6 +102,7 @@ class LoopCacheSpecInfo(implicit p: Parameters) extends XSBundle {
 
 class LoopCacheQuery(implicit p: Parameters) extends XSBundle {
   val pc = UInt(VAddrBits.W)
+  val cfiValid = Bool()
   val cfiIndex = UInt(log2Ceil(PredictWidth).W)
   val ftqPtr = new FtqPtr
 }
@@ -155,7 +156,7 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule {
   l0_data := DontCare
   l0_hit := false.B
   when (io.query.valid) {
-    when (cache_valid && io.query.bits.pc === cache_pc) {
+    when (cache_valid && io.query.bits.pc === cache_pc && io.query.bits.cfiValid) {
       l0_hit := true.B
       l0_data := cache_data
     }
@@ -1425,7 +1426,7 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   val prev_commit_target = RegInit(0.U.asTypeOf(UInt(VAddrBits.W)))
   val prev_commit_cfi_idx = RegInit(0.U.asTypeOf(Valid(UInt(log2Ceil(PredictWidth).W))))
   val prev_commit_pc = RegInit(0.U.asTypeOf(UInt(VAddrBits.W)))
-  val commit_is_loop = commit_target === prev_commit_target && commit_cfi.bits === prev_commit_cfi_idx.bits && commit_cfi.valid && prev_commit_cfi_idx.valid && commit_pc_bundle.startAddr === prev_commit_pc
+  val commit_is_loop = commit_target === prev_commit_target && commit_cfi.bits === prev_commit_cfi_idx.bits && commit_cfi.valid && prev_commit_cfi_idx.valid && commit_pc_bundle.startAddr === prev_commit_pc && prev_commit_pc === prev_commit_target
 
   val valid_loop = RegInit(0.B)
   val valid_loop_pc = Reg(UInt(VAddrBits.W))
@@ -1461,6 +1462,7 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   loopMainCache.io.query.valid := entry_is_to_send && ifuPtr =/= bpuPtr
   loopMainCache.io.query.bits.pc := io.toIfu.req.bits.startAddr
   loopMainCache.io.query.bits.cfiIndex := Mux(io.toIfu.req.bits.ftqOffset.valid, io.toIfu.req.bits.ftqOffset.bits, 0xfffffff.U)
+  loopMainCache.io.query.bits.cfiValid := io.toIfu.req.bits.ftqOffset.valid
   loopMainCache.io.query.bits.ftqPtr := io.toIfu.req.bits.ftqIdx
   loopMainCache.io.out_entry.ready := true.B
 
