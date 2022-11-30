@@ -91,7 +91,7 @@ class IBufEntry(implicit p: Parameters) extends XSBundle {
 }
 
 class LoopCacheSpecEntry(implicit p: Parameters) extends XSBundle  {
-  val instEntry = Vec(LoopCacheMaxInst, new IBufEntry())
+  val instEntry = Vec(LoopCacheMaxInst * 2, new IBufEntry())
 }
 
 class Ibuffer(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelper with HasPerfEvents {
@@ -154,7 +154,7 @@ class Ibuffer(implicit p: Parameters) extends XSModule with HasCircularQueuePtrH
 
   val enqIsDup = (loopCacheValid zip loopCachePc).map{case (v,p) => v && p === enqData(0).pc}.reduce((a,b) => a|b)
 
-  for (i <- 0 until LoopCacheMaxInst) {
+  for (i <- 0 until LoopCacheMaxInst * 2) {
     loopCacheEnqData.instEntry(i) := enqData(i)
   }
 
@@ -167,7 +167,7 @@ class Ibuffer(implicit p: Parameters) extends XSModule with HasCircularQueuePtrH
 
   loopCachePd.io.w(
     RegNext(io.in.bits.valid.orR && io.in.fire && !io.flush && !enqIsDup),
-    Mux(Pdvalid, PdReg, Mux(io.PdWb.valid, io.PdWb.bits, RegNext(io.PdWb.bits))),
+    Mux(Pdvalid && PdReg.ftqIdx === RegNext(io.in.bits.ftqPtr), PdReg, Mux(io.PdWb.valid && io.PdWb.bits.ftqIdx === RegNext(io.in.bits.ftqPtr), io.PdWb.bits, RegNext(io.PdWb.bits))),
     RegNext(loopCacheSpecReplacer.way),
     1.U
   )
@@ -201,10 +201,12 @@ class Ibuffer(implicit p: Parameters) extends XSModule with HasCircularQueuePtrH
   when (io.loop_peek.pc.valid && !pc_hit) {
     loop_refill_valid := true.B
     loop_refill_pc := io.loop_peek.pc.bits
-  } .elsewhen (io.in.bits.valid.orR && io.in.fire && !io.flush && loop_refill_pc === enqData(0).pc) {
+  } .elsewhen (RegNext(io.in.bits.valid.orR && io.in.fire && !io.flush && loop_refill_pc === enqData(0).pc && loop_refill_valid)) {
     io.loop_out.update.valid := RegNext(true.B)
     io.loop_out.update.bits.hit_data := RegNext(loopCacheEnqData)
     io.loop_out.update.bits.pc := RegNext(loop_refill_pc)
+    io.loop_out.update.bits.pd := Mux(Pdvalid && PdReg.ftqIdx === RegNext(io.in.bits.ftqPtr), PdReg, Mux(io.PdWb.valid && io.PdWb.bits.ftqIdx === RegNext(io.in.bits.ftqPtr), io.PdWb.bits, RegNext(io.PdWb.bits)))
+    loop_refill_valid := false.B
   }
   /*
   io.loop_out.specReq.ready := loopCacheInstBody.io.r.req.ready

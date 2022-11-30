@@ -214,7 +214,7 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule {
 
   val l2_valids = Wire(Vec(LoopCacheSpecSize, Bool()))
   for (i <- 0 until LoopCacheSpecSize) {
-    l2_valids(i) := i.U <= l2_pc_hit_pos
+    l2_valids(i) := i.U <= l2_pc_hit_pos && l2_pd.pd(i).valid
   }
   l2_data.instEntry(l2_pc_hit_pos).pred_taken := true.B
   io.out_entry.valid := l2_hit
@@ -250,35 +250,35 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule {
 class LoopToArbiter(implicit p: Parameters) extends LoopCacheResp {
   def toFetchToIBuffer(ptr: FtqPtr) = {
     val ret = Wire(new FetchToIBuffer)
-    val _instr = Seq.tabulate(LoopCacheMaxInst)(i => entry.instEntry(i).inst)
-    val _instrPad = Seq.tabulate(PredictWidth - LoopCacheMaxInst)(i => 0.U.asTypeOf(UInt(32.W)))
+    val _instr = Seq.tabulate(LoopCacheMaxInst * 2)(i => entry.instEntry(i).inst)
+    val _instrPad = Seq.tabulate(PredictWidth - LoopCacheMaxInst * 2)(i => 0.U.asTypeOf(UInt(32.W)))
 
-    val _valid = Seq.tabulate(LoopCacheMaxInst)(i => true.B)
-    val _validPad = Seq.tabulate(PredictWidth - LoopCacheMaxInst)(i => false.B)
+    val _valid = Seq.tabulate(LoopCacheMaxInst * 2)(i => valids(i))
+    val _validPad = Seq.tabulate(PredictWidth - LoopCacheMaxInst * 2)(i => false.B)
 
-    val _enqEnable = Seq.tabulate(LoopCacheMaxInst)(i => valids(i))
-    val _enqPad = Seq.tabulate(PredictWidth - LoopCacheMaxInst)(i => false.B)
+    val _enqEnable = Seq.tabulate(LoopCacheMaxInst * 2)(i => valids(i))
+    val _enqPad = Seq.tabulate(PredictWidth - LoopCacheMaxInst * 2)(i => false.B)
 
-    val _pd = Seq.tabulate(LoopCacheMaxInst)(i => entry.instEntry(i).pd)
-    val _pdPad = Seq.tabulate(PredictWidth - LoopCacheMaxInst)(i => 0.U.asTypeOf(new PreDecodeInfo))
+    val _pd = Seq.tabulate(LoopCacheMaxInst * 2)(i => entry.instEntry(i).pd)
+    val _pdPad = Seq.tabulate(PredictWidth - LoopCacheMaxInst * 2)(i => 0.U.asTypeOf(new PreDecodeInfo))
 
-    val _pc = Seq.tabulate(LoopCacheMaxInst)(i => entry.instEntry(i).pc)
-    val _pcPad = Seq.tabulate(PredictWidth - LoopCacheMaxInst)(i => 0.U.asTypeOf(UInt(VAddrBits.W)))
+    val _pc = Seq.tabulate(LoopCacheMaxInst * 2)(i => entry.instEntry(i).pc)
+    val _pcPad = Seq.tabulate(PredictWidth - LoopCacheMaxInst * 2)(i => 0.U.asTypeOf(UInt(VAddrBits.W)))
 
-    val _foldpc = Seq.tabulate(LoopCacheMaxInst)(i => entry.instEntry(i).foldpc)
-    val _foldpcPad = Seq.tabulate(PredictWidth - LoopCacheMaxInst)(i => 0.U.asTypeOf(UInt(VAddrBits.W)))
+    val _foldpc = Seq.tabulate(LoopCacheMaxInst * 2)(i => entry.instEntry(i).foldpc)
+    val _foldpcPad = Seq.tabulate(PredictWidth - LoopCacheMaxInst * 2)(i => 0.U.asTypeOf(UInt(VAddrBits.W)))
 
-    val _predTaken = Seq.tabulate(LoopCacheMaxInst)(i => entry.instEntry(i).pred_taken)
-    val _predTakenPad = Seq.tabulate(PredictWidth - LoopCacheMaxInst)(i => false.B)
+    val _predTaken = Seq.tabulate(LoopCacheMaxInst * 2)(i => entry.instEntry(i).pred_taken)
+    val _predTakenPad = Seq.tabulate(PredictWidth - LoopCacheMaxInst * 2)(i => false.B)
 
     //val _ftqPtr = Seq.tabulate(LoopCacheMaxInst)(i => ptr)
     //val _ftqPtrPad = Seq.tabulate(PredictWidth - LoopCacheMaxInst)(i => 0.U.asTypeOf(new FtqPtr))
 
-    val _ftqOffset = Seq.tabulate(LoopCacheMaxInst)(i => entry.instEntry(i).ftqOffset)
-    val _ftqOffsetPad = Seq.tabulate(PredictWidth - LoopCacheMaxInst)(i => 0.U.asTypeOf(UInt(log2Ceil(PredictWidth).W)))
+    val _ftqOffset = Seq.tabulate(LoopCacheMaxInst * 2)(i => entry.instEntry(i).ftqOffset)
+    val _ftqOffsetPad = Seq.tabulate(PredictWidth - LoopCacheMaxInst * 2)(i => 0.U.asTypeOf(UInt(log2Ceil(PredictWidth).W)))
 
-    val _trigger = Seq.tabulate(LoopCacheMaxInst)(i => entry.instEntry(i).triggered)
-    val _triggerPad = Seq.tabulate(PredictWidth - LoopCacheMaxInst)(i => 0.U.asTypeOf(new TriggerCf))
+    val _trigger = Seq.tabulate(LoopCacheMaxInst * 2)(i => entry.instEntry(i).triggered)
+    val _triggerPad = Seq.tabulate(PredictWidth - LoopCacheMaxInst * 2)(i => 0.U.asTypeOf(new TriggerCf))
 
     // should never trigger
     val _ipf = Seq.tabulate(PredictWidth)(i => false.B)
