@@ -1221,7 +1221,7 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   loopArbiterRedirect.bits := DontCare
   io.loopArbiterRedirect := loopArbiterRedirect
 
-  val c_invalid :: c_valid :: c_commited :: Nil = Enum(3)
+  val c_invalid :: c_valid :: c_commited :: c_flushed :: Nil = Enum(4)
   val commitStateQueue = RegInit(VecInit(Seq.fill(FtqSize) {
     VecInit(Seq.fill(PredictWidth)(c_invalid))
   }))
@@ -1385,7 +1385,8 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
 
   XSError(isBefore(bpuPtr, ifuPtr) && !isFull(bpuPtr, ifuPtr), "\nifuPtr is before bpuPtr!\n")
   XSError(isBefore(ifuPtr, ifuWbPtr) && !isFull(ifuPtr, ifuWbPtr), "\nifuWbPtr is before ifuPtr!\n")
-
+  XSError(isBefore(ifuWbPtr, commPtr) && !isFull(ifuWbPtr, commPtr), "\ncommPtr is before ifuWbPtr!\n")
+  
   (0 until copyNum).map{i =>
     XSError(copied_bpu_ptr(i) =/= bpuPtr, "\ncopiedBpuPtr is different from bpuPtr!\n")
   }
@@ -1756,13 +1757,6 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
     ifuPtrPlus1_write := idx + 2.U
     ifuPtrPlus2_write := idx + 3.U
 
-    when (notIfu) {
-      commitStateQueue(idx.value).zipWithIndex.foreach({ case (s, i) =>
-        when(i.U > offset || i.U === offset && flushItSelf){
-          s := c_invalid
-        }
-      })
-    }
     when (backendRedirect.valid) {
       loopArbiterRedirect.valid := true.B
       loopArbiterRedirect.bits := backendRedirect.bits.ftqIdx + 1.U
@@ -1814,6 +1808,20 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
     }
   }
 
+  when(RegNext(redirectVec.map(r => r.valid).reduce(_||_))){
+    val r = PriorityMux(redirectVec.map(r => (r.valid -> r.bits)))
+    val notIfu = redirectVec.dropRight(1).map(r => r.valid).reduce(_||_)
+    val (idx, offset, flushItSelf) = (r.ftqIdx, r.ftqOffset, RedirectLevel.flushItself(r.level))
+    when (RegNext(notIfu)) {
+      commitStateQueue(RegNext(idx.value)).zipWithIndex.foreach({ case (s, i) =>
+        when(i.U > RegNext(offset) || i.U === RegNext(offset) && RegNext(flushItSelf)){
+          s := c_flushed
+        }
+      })
+    }
+  }
+
+
   // only the valid bit is actually needed
   io.toIfu.redirect.bits    := backendRedirect.bits
   io.toIfu.redirect.valid   := stage2Flush
@@ -1849,14 +1857,17 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   val may_have_stall_from_bpu = Wire(Bool())
   val bpu_ftb_update_stall = RegInit(0.U(2.W)) // 2-cycle stall, so we need 3 states
   may_have_stall_from_bpu := bpu_ftb_update_stall =/= 0.U
-  val canCommit = commPtr =/= ifuWbPtr && !may_have_stall_from_bpu &&
+  val canCommit = !may_have_stall_from_bpu &&
     Cat(commitStateQueue(commPtr.value).map(s => {
-      s === c_invalid || s === c_commited
-    })).andR()
+      s === c_invalid || s === c_flushed || s === c_commited
+    })).andR() &&
+    !(Cat(commitStateQueue(commPtr.value).map(s => {
+      s === c_invalid
+    })).andR())
 
   val mmioReadPtr = io.mmioCommitRead.mmioFtqPtr
   val mmioLastCommit = isBefore(commPtr, mmioReadPtr) && (isAfter(ifuPtr,mmioReadPtr)  ||  mmioReadPtr ===   ifuPtr) &&
-                       Cat(commitStateQueue(mmioReadPtr.value).map(s => { s === c_invalid || s === c_commited})).andR()
+                       Cat(commitStateQueue(mmioReadPtr.value).map(s => { s === c_invalid || s === c_flushed || s === c_commited})).andR()
   io.mmioCommitRead.mmioLastCommit := RegNext(mmioLastCommit)
 
   // commit reads
