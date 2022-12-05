@@ -1563,6 +1563,15 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
     io.toPrefetch.req <> DontCare
   }
 
+
+
+  // lp
+  // val xsLP = Module(new LoopPredictor)
+  // val lpMeta = WireDefault(0.U.asTypeOf(new LPmeta))
+
+
+
+
   // ******************************************************************************
   // **************************** commit perf counters ****************************
   // ******************************************************************************
