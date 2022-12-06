@@ -140,10 +140,10 @@ class Ibuffer(implicit p: Parameters) extends XSModule with HasCircularQueuePtrH
   val PdReg = Reg(new PredecodeWritebackBundle)
   val Pdvalid = RegInit(0.B)
 
-  when (RegNext(io.in.valid && !io.in.fire)) {
+  when ((RegNext(io.in.valid && !io.in.fire) || RegNext(io.in.bits.is_loop)) && io.PdWb.valid) {
     Pdvalid := true.B
     PdReg := io.PdWb.bits
-  } .elsewhen (RegNext(io.in.fire)) {
+  } .elsewhen (RegNext(io.in.fire && !io.in.bits.is_loop)) {
     Pdvalid := false.B
   }
 
@@ -159,15 +159,15 @@ class Ibuffer(implicit p: Parameters) extends XSModule with HasCircularQueuePtrH
   }
 
   loopCacheInstBody.io.w(
-    RegNext(io.in.bits.valid.orR && io.in.fire && !io.flush && !enqIsDup),
+    RegNext(io.in.bits.valid.orR && !io.in.bits.is_loop && io.in.fire && !io.flush && !enqIsDup),
     RegNext(loopCacheEnqData),
     RegNext(loopCacheSpecReplacer.way),
     1.U
   )
 
   loopCachePd.io.w(
-    RegNext(io.in.bits.valid.orR && io.in.fire && !io.flush && !enqIsDup),
-    Mux(Pdvalid && PdReg.ftqIdx === RegNext(io.in.bits.ftqPtr), PdReg, Mux(io.PdWb.valid && io.PdWb.bits.ftqIdx === RegNext(io.in.bits.ftqPtr), io.PdWb.bits, RegNext(io.PdWb.bits))),
+    RegNext(io.in.bits.valid.orR && !io.in.bits.is_loop && io.in.fire && !io.flush && !enqIsDup),
+    /*Mux(RegNext(io.in.bits.is_loop), RegNext(io.in.bits.loop_pd),*/ Mux(Pdvalid && PdReg.ftqIdx === RegNext(io.in.bits.ftqPtr), PdReg, Mux(io.PdWb.valid && io.PdWb.bits.ftqIdx === RegNext(io.in.bits.ftqPtr), io.PdWb.bits, RegNext(io.PdWb.bits)))/*)*/,
     RegNext(loopCacheSpecReplacer.way),
     1.U
   )
@@ -201,7 +201,7 @@ class Ibuffer(implicit p: Parameters) extends XSModule with HasCircularQueuePtrH
   when (io.loop_peek.pc.valid && !pc_hit) {
     loop_refill_valid := true.B
     loop_refill_pc := io.loop_peek.pc.bits
-  } .elsewhen (RegNext(io.in.bits.valid.orR && io.in.fire && !io.flush && loop_refill_pc === enqData(0).pc && loop_refill_valid)) {
+  } .elsewhen (RegNext(io.in.bits.valid.orR && !io.in.bits.is_loop && io.in.fire && !io.flush && loop_refill_pc === enqData(0).pc && loop_refill_valid)) {
     io.loop_out.update.valid := RegNext(true.B)
     io.loop_out.update.bits.hit_data := RegNext(loopCacheEnqData)
     io.loop_out.update.bits.pc := RegNext(loop_refill_pc)
@@ -215,7 +215,7 @@ class Ibuffer(implicit p: Parameters) extends XSModule with HasCircularQueuePtrH
    */
 
 
-  when (io.in.bits.valid.orR && io.in.fire && !io.flush && !enqIsDup) {
+  when (io.in.bits.valid.orR && !io.in.bits.is_loop && io.in.fire && !io.flush && !enqIsDup) {
     // fixme: proper conditions here
     loopCachePc(loopCacheSpecReplacer.way) := enqData(0).pc
     loopCacheValid(loopCacheSpecReplacer.way) := true.B

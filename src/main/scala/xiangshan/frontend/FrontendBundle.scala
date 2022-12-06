@@ -112,6 +112,8 @@ class mmioCommitRead(implicit p: Parameters) extends XSBundle {
 }
 
 class FetchToIBuffer(implicit p: Parameters) extends XSBundle {
+  val is_loop   = Bool()
+  val loop_pd   = new PredecodeWritebackBundle
   val instrs    = Vec(PredictWidth, UInt(32.W))
   val valid     = UInt(PredictWidth.W)
   val enqEnable = UInt(PredictWidth.W)

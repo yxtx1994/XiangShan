@@ -110,6 +110,7 @@ class LoopCacheQuery(implicit p: Parameters) extends XSBundle {
 class LoopCacheResp(implicit p: Parameters) extends XSBundle {
   val entry = new LoopCacheSpecEntry
   val valids = Vec(LoopCacheSpecSize, Bool())
+  val pd = Output(new PredecodeWritebackBundle)
 }
 
 class LoopCacheFenceBundle(implicit p: Parameters) extends XSBundle {
@@ -118,7 +119,7 @@ class LoopCacheFenceBundle(implicit p: Parameters) extends XSBundle {
 }
 
 
-class LoopCacheNonSpecIO(implicit p: Parameters) extends XSBundle {
+class LoopCacheNonSpecIO(implicit p: Parameters) extends XSBundle with HasCircularQueuePtrHelper {
   val query = Flipped(Decoupled(new LoopCacheQuery))
   val l0_hit = Output(Bool())
   val out_entry = Decoupled(new LoopCacheResp)
@@ -130,6 +131,18 @@ class LoopCacheNonSpecIO(implicit p: Parameters) extends XSBundle {
   val pd_valid = Output(Bool())
   // val pd_ftqIdx = Output(new FtqPtr)
   val pd_data = Output(new PredecodeWritebackBundle)
+
+  val flushFromBpu = Flipped(new Bundle {
+    // when ifu pipeline is not stalled,
+    // a packet from bpu s3 can reach f1 at most
+    val s2 = Valid(new FtqPtr)
+    val s3 = Valid(new FtqPtr)
+    def shouldFlushBy(src: Valid[FtqPtr], idx_to_flush: FtqPtr) = {
+      src.valid && !isAfter(src.bits, idx_to_flush)
+    }
+    def shouldFlushByStage2(idx: FtqPtr) = shouldFlushBy(s2, idx)
+    def shouldFlushByStage3(idx: FtqPtr) = shouldFlushBy(s3, idx)
+  })
 }
 
 class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule {
@@ -150,7 +163,7 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule {
   val l0_pc = Wire(UInt(VAddrBits.W))
   val l0_data = Wire(new LoopCacheSpecEntry)
   val l0_taken_pc = Wire(UInt(VAddrBits.W))
-
+  val l0_flush_by_bpu = io.flushFromBpu.shouldFlushByStage2(io.query.bits.ftqPtr) || io.flushFromBpu.shouldFlushByStage3(io.query.bits.ftqPtr)
 
   l0_pc := DontCare
   l0_data := DontCare
@@ -175,10 +188,11 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule {
   val l1_pc_hit = Reg(l0_pc_hit.cloneType)
   val l1_ftqPtr = Reg(new FtqPtr)
   val l1_pd = Reg(new PredecodeWritebackBundle)
+  val l1_flush_by_bpu = io.flushFromBpu.shouldFlushByStage3(l1_ftqPtr)
   l0_fire := l0_hit && io.query.ready
   io.query.ready := !l1_hit || l1_fire
 
-  when (l0_fire) {
+  when (l0_fire && !l0_flush_by_bpu) {
     l1_hit := l0_hit
     l1_pc := l0_pc
     l1_data := l0_data
@@ -202,11 +216,15 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule {
   val l2_pd = Reg(new PredecodeWritebackBundle())
   l1_fire := l1_hit && (!l2_hit || l2_fire)
 
-  when (l1_fire) {
+  when (l1_fire && !l1_flush_by_bpu) {
     l2_hit := l1_hit
     l2_pc := l1_pc
     l2_data := l1_data
     l2_pc_hit_pos := l1_pc_hit_pos
+    for (i <- 0 until LoopCacheSpecSize) {
+      l2_data.instEntry(i).pred_taken := false.B
+    }
+    l2_data.instEntry(l1_pc_hit_pos).pred_taken := true.B
     l2_ftqPtr := l1_ftqPtr
     l2_pd := l1_pd
   } .elsewhen (l2_fire) {
@@ -217,10 +235,11 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule {
   for (i <- 0 until LoopCacheSpecSize) {
     l2_valids(i) := i.U <= l2_pc_hit_pos && l2_pd.pd(i).valid
   }
-  l2_data.instEntry(l2_pc_hit_pos).pred_taken := true.B
+  // l2_data.instEntry(l2_pc_hit_pos).pred_taken := true.B
   io.out_entry.valid := l2_hit
   io.out_entry.bits.entry := l2_data
   io.out_entry.bits.valids := l2_valids
+  io.out_entry.bits.pd := l2_pd
   // TODO: adjust ftqptr
   XSPerfAccumulate("loop_cache_spec_fill_hit", l2_hit);
 
@@ -298,6 +317,8 @@ class LoopToArbiter(implicit p: Parameters) extends LoopCacheResp {
     val _predTaken_t = _predTaken ++ _predTakenPad
 
     ret.instrs := VecInit(_instr_t)
+    ret.is_loop := true.B
+    ret.loop_pd := pd
     ret.valid := VecInit(_valid_t).asUInt
     ret.enqEnable := VecInit(_enqEnable_t).asUInt
     ret.pd := VecInit(_pd_t)
@@ -359,6 +380,8 @@ class LoopIFUArbiter(implicit p: Parameters) extends XSModule with HasCircularQu
   XSError(io.toIBuffer.fire && io.toIBuffer.bits.ftqPtr =/= currentPtr, "Ftqptr mismatch on arbiter")
 
   io.toIBuffer.bits := Mux(selLoop, io.fromLoop.bits.toFetchToIBuffer(currentPtr), io.fromIFU.bits)
+  io.toIBuffer.bits.is_loop := selLoop
+  io.toIBuffer.bits.loop_pd := Mux(selLoop, io.fromLoop.bits.pd, DontCare)
   io.toIBuffer.valid := Mux(selLoop, io.fromLoop.valid, io.fromIFU.valid)
 }
 
@@ -1059,9 +1082,12 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   XSPerfAccumulate(f"fall_through_error_to_ifu", toIfuPcBundle.fallThruError && entry_hit_status(ifuPtr.value) === h_hit &&
     io.toIfu.req.fire && !(bpu_s2_redirect && bpu_s2_resp.ftq_idx === ifuPtr) && !(bpu_s3_redirect && bpu_s3_resp.ftq_idx === ifuPtr))
 
+  val loopMainCache = Module(new LoopCacheNonSpecEntry)
   val ifu_req_should_be_flushed =
-    io.toIfu.flushFromBpu.shouldFlushByStage2(io.toIfu.req.bits.ftqIdx) ||
-    io.toIfu.flushFromBpu.shouldFlushByStage3(io.toIfu.req.bits.ftqIdx)
+    ((io.toIfu.flushFromBpu.shouldFlushByStage2(io.toIfu.req.bits.ftqIdx) ||
+    io.toIfu.flushFromBpu.shouldFlushByStage3(io.toIfu.req.bits.ftqIdx)) && io.toIfu.req.fire) ||
+      ((loopMainCache.io.flushFromBpu.shouldFlushByStage2(io.toIfu.req.bits.ftqIdx) ||
+      loopMainCache.io.flushFromBpu.shouldFlushByStage3(io.toIfu.req.bits.ftqIdx)) && should_send_req && loop_cache_hit)
 
     when ((io.toIfu.req.fire || (should_send_req && loop_cache_hit)) && !ifu_req_should_be_flushed) {
       entry_fetch_status(ifuPtr.value) := f_sent
@@ -1444,9 +1470,13 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
     // TODO: valid_loop pull down when inject
   }
 
-  val loopMainCache = Module(new LoopCacheNonSpecEntry)
+
   loopMainCache.io.update := io.fromIBuffer.update
   loopMainCache.io.fence := io.fence
+  loopMainCache.io.flushFromBpu.s2.valid := bpu_s2_redirect
+  loopMainCache.io.flushFromBpu.s2.bits := bpu_s2_resp.ftq_idx
+  loopMainCache.io.flushFromBpu.s3.valid := bpu_s3_redirect
+  loopMainCache.io.flushFromBpu.s3.bits := bpu_s3_resp.ftq_idx
 
   io.toBpu.update := DontCare
   io.toBpu.update.valid := commit_valid && do_commit
