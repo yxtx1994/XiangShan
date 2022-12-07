@@ -199,7 +199,7 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule {
     l1_pc_hit := l0_pc_hit
     l1_ftqPtr := io.query.bits.ftqPtr
     l1_pd := cache_pd
-  } .elsewhen (l1_fire) {
+  } .elsewhen (l1_fire || l1_flush_by_bpu) {
     l1_hit := false.B
   }
   val l1_pc_hit_pos = OHToUInt(l1_pc_hit)
@@ -243,7 +243,7 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule {
   // TODO: adjust ftqptr
   XSPerfAccumulate("loop_cache_spec_fill_hit", l2_hit);
 
-  io.pd_valid := RegNext(l2_fire)
+  io.pd_valid := RegNext(l2_fire && !(io.fence.sfence_valid || io.fence.fencei_valid || io.flush))
   // io.pd_ftqIdx := RegNext(l2_ftqPtr)
   io.pd_data := RegNext(l2_pd)
   io.pd_data.ftqIdx := RegNext(l2_ftqPtr)
@@ -263,6 +263,7 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule {
     l1_hit := false.B
     l2_hit := false.B
     io.out_entry.valid := false.B
+    io.pd_valid := false.B
     // TODO: should cancel resp
   }
 }
@@ -965,6 +966,7 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
     XSError(copied_bpu_ptr(i) =/= bpuPtr, "\ncopiedBpuPtr is different from bpuPtr!\n")
   }
 
+  val loopMainCache = Module(new LoopCacheNonSpecEntry)
   // ****************************************************************
   // **************************** to ifu ****************************
   // ****************************************************************
@@ -1049,7 +1051,7 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   }
 
 
-  io.toIfu.req.valid := should_send_req && !loop_cache_hit
+  io.toIfu.req.valid := should_send_req && !loop_cache_hit && !RegNext(loopMainCache.io.query.valid && loop_cache_hit)
   io.toIfu.req.bits.nextStartAddr := entry_next_addr
   io.toIfu.req.bits.ftqOffset := entry_ftq_offset
   io.toIfu.req.bits.fromFtqPcBundle(toIfuPcBundle)
@@ -1082,7 +1084,7 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   XSPerfAccumulate(f"fall_through_error_to_ifu", toIfuPcBundle.fallThruError && entry_hit_status(ifuPtr.value) === h_hit &&
     io.toIfu.req.fire && !(bpu_s2_redirect && bpu_s2_resp.ftq_idx === ifuPtr) && !(bpu_s3_redirect && bpu_s3_resp.ftq_idx === ifuPtr))
 
-  val loopMainCache = Module(new LoopCacheNonSpecEntry)
+  
   val ifu_req_should_be_flushed =
     ((io.toIfu.flushFromBpu.shouldFlushByStage2(io.toIfu.req.bits.ftqIdx) ||
     io.toIfu.flushFromBpu.shouldFlushByStage3(io.toIfu.req.bits.ftqIdx)) && io.toIfu.req.fire) ||
@@ -1119,6 +1121,7 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
     val wb_idx_reg   = RegEnable(ifu_wb_idx,      enable = pdWb.valid)
 
     when (ifu_wb_valid) {
+      // XSError(!isBefore(pdWb.bits.ftqIdx, ifuPtr), "predecode runahead of ifu")
       val comm_stq_wen = VecInit(pds.map(_.valid).zip(pdWb.bits.instrRange).map{
         case (v, inRange) => v && inRange
       })
