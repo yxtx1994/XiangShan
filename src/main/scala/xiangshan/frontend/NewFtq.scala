@@ -1056,7 +1056,7 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   io.toIfu.req.bits.ftqOffset := entry_ftq_offset
   io.toIfu.req.bits.fromFtqPcBundle(toIfuPcBundle)
 
-  io.toICache.req.valid := should_send_req && !loop_cache_hit
+  io.toICache.req.valid := should_send_req && !loop_cache_hit && !RegNext(loopMainCache.io.query.valid && loop_cache_hit)
   io.toICache.req.bits.readValid.zipWithIndex.map{case(copy, i) => copy := toICacheEntryToSend(i) && copied_ifu_ptr(i) =/= copied_bpu_ptr(i)} 
   io.toICache.req.bits.pcMemRead.zipWithIndex.map{case(copy,i) => copy.fromFtqPcBundle(toICachePcBundle(i))}
   // io.toICache.req.bits.bypassSelect := last_cycle_bpu_in && bpu_in_bypass_ptr === ifuPtr
@@ -1492,7 +1492,7 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   update.from_stage  := commit_stage
   update.spec_info   := commit_spec_meta
 
-  loopMainCache.io.query.valid := entry_is_to_send && ifuPtr =/= bpuPtr
+  loopMainCache.io.query.valid := entry_is_to_send && ifuPtr =/= bpuPtr && !RegNext(loopMainCache.io.query.valid && loop_cache_hit)
   loopMainCache.io.query.bits.pc := io.toIfu.req.bits.startAddr
   loopMainCache.io.query.bits.cfiIndex := Mux(io.toIfu.req.bits.ftqOffset.valid, io.toIfu.req.bits.ftqOffset.bits, 0xfffffff.U)
   loopMainCache.io.query.bits.cfiValid := io.toIfu.req.bits.ftqOffset.valid
