@@ -1586,13 +1586,14 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   lpMetaSram.io.waddr := lpMetaWriteIdx
   lpMetaSram.io.wdata := xsLP.io.pred.meta
 
-  val lpPredInfoSram = Module(new FtqNRSRAM(new xsLPpredInfo, 1))
-  lpPredInfoSram.io.wen   :=  xsLP.io.pred.valid 
-  lpPredInfoSram.io.waddr := lpMetaWriteIdx
-  lpPredInfoSram.io.wdata.isConfExitLoop := xsLP.io.pred.isConfExitLoop
-  lpPredInfoSram.io.wdata.target         := xsLP.io.pred.target
-  lpPredInfoSram.io.wdata.isInterNumGT2  := xsLP.io.isInterNumGT2
-
+  val lpPredInfoArray = RegInit(VecInit(Seq.fill(64)(0.U.asTypeOf(new xsLPpredInfo))))
+  val lpPredInfo = WireDefault(0.U.asTypeOf(new xsLPpredInfo))
+  lpPredInfo.isConfExitLoop :=  xsLP.io.pred.isConfExitLoop
+  lpPredInfo.target         := xsLP.io.pred.target
+  lpPredInfo.isInterNumGT2  := xsLP.io.isInterNumGT2
+  when(xsLP.io.pred.valid) {
+    lpPredInfoArray(lpMetaWriteIdx) := lpPredInfo
+  }
 
 
   val lpMetaReadIdx = getLPmetaIdx(xsLP.io.update.pc)
