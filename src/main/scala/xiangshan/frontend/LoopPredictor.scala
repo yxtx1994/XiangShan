@@ -199,21 +199,7 @@ class LoopPredictor(implicit p: Parameters) extends XSModule with LoopPredictorP
     printf("update---  tag: %x;  crt-spec-cnt: %d;  pred-spec-cnt: %d;  update-spec-cnt: %d;  update-trip-cnt: %d;  update-conf: %d\n", 
             updtTag, updtLTBreadEntry.specCnt, io.update.predSpecCnt, updtLTBwriteEntry.specCnt, updtLTBwriteEntry.tripCnt, updtLTBwriteEntry.conf)
   }
-  // .elsewhen(updtIsUpdateEntry && !io.update.isMispred) {
-  //   updtLTBwriteEntry.conf    := increConf(updtLTBreadEntry.conf)
-  // }
-  // .elsewhen(updtIsUpdateEntry && !io.update.isMispred) {
-  //   when(io.update.isPredTaken) {
-  //     updtLTBwriteEntry.nonSpecCnt := updtLTBreadEntry.nonSpecCnt + 1.U
-  //   }.otherwise {
-  //     updtLTBwriteEntry.conf       := Mux(updtLTBreadEntry.nonSpecCnt === updtLTBreadEntry.specCnt, 1.U, 0.U)
-  //     updtLTBwriteEntry.tripCnt    := updtLTBreadEntry.nonSpecCnt + 1.U
-  //     updtLTBwriteEntry.specCnt    := updtLTBreadEntry.specCnt - (updtLTBreadEntry.nonSpecCnt + 1.U)
-  //     updtLTBwriteEntry.nonSpecCnt := 0.U
-  //   }
-  // }
-
-  // val updtIsAllocEntry = (io.update.valid && io.update.isLoopBranch && !updtTagMatch && updtLTBreadEntry.isNotConf)
+  
   val updtIsAllocEntry = (io.update.valid && io.update.isLoopBranch && !updtTagMatch && updtLTBreadEntry.isNotConf && io.update.isUpdateTaken)
   val updtAllocEntry = initLTBentry(updtTag, io.update.target)
   val updtLTBwena = (updtIsAllocEntry || updtIsUpdateEntry)
