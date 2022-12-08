@@ -1568,6 +1568,12 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   // lp
   def getLPmetaIdx(pc: UInt) = pc(instOffsetBits+6-1, instOffsetBits)
 
+  class xsLPpredInfo(implicit p: Parameters) extends XSBundle {
+    val isConfExitLoop = Output(Bool())
+    val target         = Output(UInt(VAddrBits.W))
+    val isInterNumGT2  = Output(Bool())
+  }
+
   val xsLP = Module(new XSLoopPredictor)
   xsLP.io.lpEna := true.B
   
@@ -1579,6 +1585,15 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   lpMetaSram.io.wen   := commit_ftb_entry.valid
   lpMetaSram.io.waddr := lpMetaWriteIdx
   lpMetaSram.io.wdata := xsLP.io.pred.meta
+
+  val lpIterNumSram = Module(new FtqNRSRAM(new xsLPpredInfo, 1))
+  lpIterNumSram.io.wen   :=  xsLP.io.pred.valid 
+  lpIterNumSram.io.waddr := lpMetaWriteIdx
+  lpIterNumSram.io.wdata.isConfExitLoop :=  xsLP.io.pred.isConfExitLoop
+  lpIterNumSram.io.wdata.target         := xsLP.io.pred.target
+  lpIterNumSram.io.wdata.isInterNumGT2  := xsLP.io.isInterNumGT2
+
+
 
   val lpMetaReadIdx = getLPmetaIdx(xsLP.io.update.pc)
   lpMetaSram.io.ren(0)   := canCommit
@@ -1592,13 +1607,8 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   xsLP.io.update.isLoopBranch := commit_is_loop
   xsLP.io.update.target       := commit_target
 
-  val lpIterNumSram = Module(new FtqNRSRAM(Bool(), 1))
-  lpIterNumSram.io.wen   := xsLP.io.update.valid 
-  lpIterNumSram.io.waddr := lpMetaReadIdx
-  lpIterNumSram.io.wdata := xsLP.io.isInterNumGT2
-
-
-
+  
+  
   // ******************************************************************************
   // **************************** commit perf counters ****************************
   // ******************************************************************************
