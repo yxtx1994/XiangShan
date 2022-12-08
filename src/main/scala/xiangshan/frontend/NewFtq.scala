@@ -1592,6 +1592,11 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   xsLP.io.update.isLoopBranch := commit_is_loop
   xsLP.io.update.target       := commit_target
 
+  val lpIterNumSram = Module(new FtqNRSRAM(Bool(), 1))
+  lpIterNumSram.io.wen   := xsLP.io.update.valid 
+  lpIterNumSram.io.waddr := lpMetaReadIdx
+  lpIterNumSram.io.wdata := xsLP.io.isInterNumGT2
+
 
 
   // ******************************************************************************
