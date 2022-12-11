@@ -1598,6 +1598,53 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
     io.toPrefetch.req <> DontCare
   }
 
+
+
+  // lp
+  def getLPmetaIdx(pc: UInt) = pc(instOffsetBits+6-1, instOffsetBits)
+
+  class xsLPpredInfo(implicit p: Parameters) extends XSBundle {
+    val isConfExitLoop = Output(Bool())
+    val target         = Output(UInt(VAddrBits.W))
+    val isInterNumGT2  = Output(Bool())
+  }
+
+  val xsLP = Module(new XSLoopPredictor)
+  xsLP.io.lpEna := true.B
+  
+  xsLP.io.pred.valid := io.fromBpu.resp.valid
+  xsLP.io.pred.pc    := io.fromBpu.resp.bits.lastStage.full_pred(0).offsets(0) * 2.U 
+
+  val lpMetaSram = Module(new FtqNRSRAM(new LPmeta, 1))
+  val lpMetaWriteIdx = getLPmetaIdx(xsLP.io.pred.pc)
+  lpMetaSram.io.wen   := commit_ftb_entry.valid
+  lpMetaSram.io.waddr := lpMetaWriteIdx
+  lpMetaSram.io.wdata := xsLP.io.pred.meta
+
+  val lpPredInfoArray = RegInit(VecInit(Seq.fill(64)(0.U.asTypeOf(new xsLPpredInfo))))
+  val lpPredInfo = WireDefault(0.U.asTypeOf(new xsLPpredInfo))
+  lpPredInfo.isConfExitLoop :=  xsLP.io.pred.isConfExitLoop
+  lpPredInfo.target         := xsLP.io.pred.target
+  lpPredInfo.isInterNumGT2  := xsLP.io.isInterNumGT2
+  when(xsLP.io.pred.valid) {
+    lpPredInfoArray(lpMetaWriteIdx) := lpPredInfo
+  }
+
+
+  val lpMetaReadIdx = getLPmetaIdx(xsLP.io.update.pc)
+  lpMetaSram.io.ren(0)   := canCommit
+  lpMetaSram.io.raddr(0) := lpMetaReadIdx
+  val lpUpdateMeta        = lpMetaSram.io.rdata(0)
+
+  xsLP.io.update.valid        := commit_valid && do_commit
+  xsLP.io.update.pc           := commit_ftb_entry.brSlots(0).offset * 2.U
+  xsLP.io.update.meta         := lpUpdateMeta
+  xsLP.io.update.taken        := ftbEntryGen.taken_mask(0)
+  xsLP.io.update.isLoopBranch := commit_is_loop
+  xsLP.io.update.target       := commit_target
+
+  
+  
   // ******************************************************************************
   // **************************** commit perf counters ****************************
   // ******************************************************************************
