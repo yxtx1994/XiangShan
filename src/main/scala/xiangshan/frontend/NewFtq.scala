@@ -1871,7 +1871,9 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   xsLP.io.lpEna := true.B
   
   xsLP.io.pred.valid := last_cycle_bpu_in
-  xsLP.io.pred.pc    := Cat(RegNext(bpu_in_resp.full_pred(0).offsets(0)), 0.U.asTypeOf(UInt(1.W)))
+  xsLP.io.pred.pc    := io.fromBpu.resp.bits.lastStage.pc + 
+                        (io.fromBpu.resp.bits.lastStage.full_pred(dupForFtq).offsets(0) << 1)
+  // xsLP.io.pred.pc    := Cat(RegNext(bpu_in_resp.full_pred(0).offsets(0)), 0.U.asTypeOf(UInt(1.W)))
 
   val lpMetaSram = Module(new FtqNRSRAM(new LPmeta, 1))
   val lpMetaWriteIdx = getLPmetaIdx(xsLP.io.pred.pc)
@@ -1895,7 +1897,8 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   val lpUpdateMeta        = lpMetaSram.io.rdata(0)
 
   xsLP.io.update.valid        := commit_valid && do_commit
-  xsLP.io.update.pc           := commit_ftb_entry.brSlots(0).offset * 2.U
+  xsLP.io.update.pc           := commit_pc_bundle.startAddr + 
+                                 (commit_ftb_entry.brSlots(0).offset << 1)
   xsLP.io.update.meta         := lpUpdateMeta
   xsLP.io.update.taken        := ftbEntryGen.taken_mask(0)
   xsLP.io.update.isLoopBranch := commit_is_loop
