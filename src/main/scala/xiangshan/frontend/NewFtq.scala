@@ -105,6 +105,9 @@ class LoopCacheQuery(implicit p: Parameters) extends XSBundle {
   val cfiValid = Bool()
   val cfiIndex = UInt(log2Ceil(PredictWidth).W)
   val ftqPtr = new FtqPtr
+
+  //val isLoopExit = Bool()
+  //val isInterNumGT2 = Bool()
 }
 
 class LoopCacheResp(implicit p: Parameters) extends XSBundle {
@@ -163,6 +166,8 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule {
   val l0_pc = Wire(UInt(VAddrBits.W))
   val l0_data = Wire(new LoopCacheSpecEntry)
   val l0_taken_pc = Wire(UInt(VAddrBits.W))
+  //val l0_is_exit = Wire(Bool())
+  //val l0_isInterNumGT2 = Wire(Bool())
   val l0_flush_by_bpu = io.flushFromBpu.shouldFlushByStage2(io.query.bits.ftqPtr) || io.flushFromBpu.shouldFlushByStage3(io.query.bits.ftqPtr)
 
   l0_pc := DontCare
@@ -188,6 +193,7 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule {
   val l1_pc_hit = Reg(l0_pc_hit.cloneType)
   val l1_ftqPtr = Reg(new FtqPtr)
   val l1_pd = Reg(new PredecodeWritebackBundle)
+  // val l1_is_exit = Reg()
   val l1_flush_by_bpu = io.flushFromBpu.shouldFlushByStage3(l1_ftqPtr)
   l0_fire := l0_hit && io.query.ready
   io.query.ready := !l1_hit || l1_fire
@@ -851,6 +857,7 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   val pred_stage = Reg(Vec(FtqSize, UInt(2.W)))
 
   val pdWb_flag = RegInit(VecInit(Seq.fill(FtqSize)(0.B)))
+  val lpPredInfoArray = RegInit(VecInit(Seq.fill(64)(0.U.asTypeOf(new xsLPpredInfo))))
 
   // 1: loop 0: ifu
   val arbiter_flag = Reg(Vec(FtqSize, Bool()))
@@ -1612,8 +1619,8 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   val xsLP = Module(new XSLoopPredictor)
   xsLP.io.lpEna := true.B
   
-  xsLP.io.pred.valid := io.fromBpu.resp.valid
-  xsLP.io.pred.pc    := io.fromBpu.resp.bits.lastStage.full_pred(0).offsets(0) * 2.U 
+  xsLP.io.pred.valid := last_cycle_bpu_in
+  xsLP.io.pred.pc    := Cat(RegNext(bpu_in_resp.full_pred(0).offsets(0)), 0.U.asTypeOf(UInt(1.W)))
 
   val lpMetaSram = Module(new FtqNRSRAM(new LPmeta, 1))
   val lpMetaWriteIdx = getLPmetaIdx(xsLP.io.pred.pc)
@@ -1621,7 +1628,7 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   lpMetaSram.io.waddr := lpMetaWriteIdx
   lpMetaSram.io.wdata := xsLP.io.pred.meta
 
-  val lpPredInfoArray = RegInit(VecInit(Seq.fill(64)(0.U.asTypeOf(new xsLPpredInfo))))
+  
   val lpPredInfo = WireDefault(0.U.asTypeOf(new xsLPpredInfo))
   lpPredInfo.isConfExitLoop :=  xsLP.io.pred.isConfExitLoop
   lpPredInfo.target         := xsLP.io.pred.target
