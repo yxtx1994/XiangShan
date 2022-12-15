@@ -227,7 +227,7 @@ class LoopPredictor(implicit p: Parameters) extends XSModule with LoopPredictorP
 class xsLPpredIO(implicit p: Parameters) extends XSBundle with LoopPredictorParams {
   val valid          = Input(Bool())
   val pc             = Input(UInt(VAddrBits.W))
-//   val isConf     = Output(Bool())
+  val isConf     = Output(Bool())
 //   val isExitLoop = Output(Bool())
   val isConfExitLoop = Output(Bool())
   val target         = Output(UInt(VAddrBits.W))
@@ -249,6 +249,7 @@ class XSLoopPredictor(implicit p: Parameters) extends XSModule with LoopPredicto
     val pred          = new xsLPpredIO
     val update        = new xsLPupdateIO
     val isInterNumGT2 = Output(Bool())
+    val remainIterNum = Output(UInt(cntBits.W))
   })
 
   val lp = Module(new LoopPredictor)
@@ -267,11 +268,13 @@ class XSLoopPredictor(implicit p: Parameters) extends XSModule with LoopPredicto
   lpMeta.specCnt           := lp.io.pred.specCnt
   lpMeta.tripCnt           := lp.io.pred.tripCnt
 
+  io.pred.isConf         := lp.io.pred.isConfExitLoop || lp.io.pred.isConfNotExitLoop
   io.pred.isConfExitLoop := lp.io.pred.isConfExitLoop
   io.pred.target         := lp.io.pred.target
   io.pred.meta           := lpMeta
   io.isInterNumGT2 := (lp.io.pred.tripCnt > lp.io.pred.specCnt && 
                        lp.io.pred.tripCnt - lp.io.pred.specCnt > 2.U)
+  io.remainIterNum := lp.io.pred.tripCnt - lp.io.pred.specCnt
 
   
   // update
