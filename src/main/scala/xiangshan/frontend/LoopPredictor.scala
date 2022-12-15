@@ -304,7 +304,7 @@ class XSLoopPredictor(implicit p: Parameters) extends XSModule with LoopPredicto
   XSPerfAccumulate("lp_conf_pred_hit",   lpConfPredHit)
   XSPerfAccumulate("lp_conf_pred_miss",  lpConfPredMiss)
 
-  generatePerfEvent()
+  // generatePerfEvent()
 
 }
 

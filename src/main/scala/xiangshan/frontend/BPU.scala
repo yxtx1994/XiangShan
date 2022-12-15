@@ -195,6 +195,11 @@ abstract class BasePredictor(implicit p: Parameters) extends XSModule
   io.out.s2.pc := s2_pc_dup
   io.out.s3.pc := s3_pc_dup
 
+  // BPU never generates double loop entry
+  io.out.s1.isDouble := false.B
+  io.out.s2.isDouble := false.B
+  io.out.s3.isDouble := false.B
+
   val perfEvents: Seq[(String, UInt)] = Seq()
 
 

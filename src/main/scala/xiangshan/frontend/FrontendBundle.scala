@@ -554,6 +554,9 @@ class BranchPredictionBundle(implicit p: Parameters) extends XSBundle
   val pc    = Vec(numDup, UInt(VAddrBits.W))
   val valid = Vec(numDup, Bool())
 
+  // does branch prediction bundle refers to double loop
+  val isDouble = Bool()
+
   val full_pred    = Vec(numDup, new FullBranchPrediction)
   val hasRedirect  = Vec(numDup, Bool())
   

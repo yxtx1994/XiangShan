@@ -70,13 +70,17 @@ class Ftq_RF_Components(implicit p: Parameters) extends XSBundle with BPUUtils w
   val nextLineAddr = UInt(VAddrBits.W)
   val isNextMask = Vec(PredictWidth, Bool())
   val fallThruError = Bool()
+  val isDouble = Bool()
   // val is_loop = Bool()
   // val carry = Bool()
-  def getPc(offset: UInt) = {
+  def getPc(offset: UInt): UInt = {
     def getHigher(pc: UInt) = pc(VAddrBits-1, log2Ceil(PredictWidth)+instOffsetBits+1)
     def getOffset(pc: UInt) = pc(log2Ceil(PredictWidth)+instOffsetBits, instOffsetBits)
-    Cat(getHigher(Mux(isNextMask(offset) && startAddr(log2Ceil(PredictWidth)+instOffsetBits), nextLineAddr, startAddr)),
-        getOffset(startAddr)+offset, 0.U(instOffsetBits.W))
+
+    val real_off = Mux(isDouble, Cat(0.U.asTypeOf(UInt(1.W)), offset(log2Ceil(PredictWidth) - 2)), offset)
+
+    Cat(getHigher(Mux(isNextMask(real_off) && startAddr(log2Ceil(PredictWidth)+instOffsetBits), nextLineAddr, startAddr)),
+        getOffset(startAddr)+real_off, 0.U(instOffsetBits.W))
   }
   def fromBranchPrediction(resp: BranchPredictionBundle) = {
     def carryPos(addr: UInt) = addr(instOffsetBits+log2Ceil(PredictWidth)+1)
@@ -86,12 +90,31 @@ class Ftq_RF_Components(implicit p: Parameters) extends XSBundle with BPUUtils w
       (resp.pc(dupForFtq)(log2Ceil(PredictWidth), 1) +& i.U)(log2Ceil(PredictWidth)).asBool()
     ))
     this.fallThruError := resp.fallThruError(dupForFtq)
+    this.isDouble := resp.isDouble
     // this.is_loop := resp.full_pred(dupForFtq).is_loop
     this
   }
   override def toPrintable: Printable = {
     p"startAddr:${Hexadecimal(startAddr)}"
   }
+}
+
+class BpuBypassUpdate(implicit p: Parameters) extends XSBundle with LoopPredictorParams {
+  val expected_loop_cnt = UInt(cntBits.W)
+  val single_entry = new BranchPredictionBundle
+  val last_stage_meta = UInt(MaxMetaLength.W)
+  val last_stage_spec_info = new SpeculativeInfo
+  val last_stage_ftb_entry = new FTBEntry
+}
+
+class BpuBypassIO(implicit p: Parameters) extends XSBundle {
+  val BpuIn = Flipped(new BpuToFtqIO)
+  val BpuOut = new BpuToFtqIO
+
+  val update = Flipped(Valid(new BpuBypassUpdate))
+
+  // redirect from ftq
+  val redirect = Flipped(Valid(new FtqPtr))
 }
 
 class LoopCacheSpecInfo(implicit p: Parameters) extends XSBundle {
@@ -106,8 +129,12 @@ class LoopCacheQuery(implicit p: Parameters) extends XSBundle {
   val cfiIndex = UInt(log2Ceil(PredictWidth).W)
   val ftqPtr = new FtqPtr
 
-  //val isLoopExit = Bool()
-  //val isInterNumGT2 = Bool()
+  val isLoopExit = Bool()
+  val isInterNumGT2 = Bool()
+
+  val isDouble = Bool()
+
+  val bpu_in = new BranchPredictionBundle
 }
 
 class LoopCacheResp(implicit p: Parameters) extends XSBundle {
@@ -121,10 +148,17 @@ class LoopCacheFenceBundle(implicit p: Parameters) extends XSBundle {
   val fencei_valid = Bool()
 }
 
+class LastStageInfo(implicit p: Parameters) extends XSBundle with HasBPUConst {
+  val last_stage_meta = UInt(MaxMetaLength.W)
+  val last_stage_spec_info = new SpeculativeInfo
+  val last_stage_ftb_entry = new FTBEntry
+  val ftqIdx = new FtqPtr
+}
 
 class LoopCacheNonSpecIO(implicit p: Parameters) extends XSBundle with HasCircularQueuePtrHelper {
   val query = Flipped(Decoupled(new LoopCacheQuery))
   val l0_hit = Output(Bool())
+  val l0_redirect_scheduled = Output(Bool())
   val out_entry = Decoupled(new LoopCacheResp)
 
   val update = Flipped(Valid(new LoopCacheSpecInfo))
@@ -134,6 +168,11 @@ class LoopCacheNonSpecIO(implicit p: Parameters) extends XSBundle with HasCircul
   val pd_valid = Output(Bool())
   // val pd_ftqIdx = Output(new FtqPtr)
   val pd_data = Output(new PredecodeWritebackBundle)
+
+  val toFtqRedirect = Valid(new Redirect)
+  val toBypass = Valid(new BpuBypassUpdate)
+
+  val last_stage_info = Flipped(Valid(new LastStageInfo))
 
   val flushFromBpu = Flipped(new Bundle {
     // when ifu pipeline is not stalled,
@@ -148,7 +187,7 @@ class LoopCacheNonSpecIO(implicit p: Parameters) extends XSBundle with HasCircul
   })
 }
 
-class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule {
+class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule with HasBPUConst {
   val io = IO(new LoopCacheNonSpecIO)
 
   val cache_valid = RegInit(0.B)
@@ -166,9 +205,31 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule {
   val l0_pc = Wire(UInt(VAddrBits.W))
   val l0_data = Wire(new LoopCacheSpecEntry)
   val l0_taken_pc = Wire(UInt(VAddrBits.W))
-  //val l0_is_exit = Wire(Bool())
-  //val l0_isInterNumGT2 = Wire(Bool())
+  val l0_is_exit = io.query.bits.isLoopExit
+  val l0_isInterNumGT2 = io.query.bits.isInterNumGT2
   val l0_flush_by_bpu = io.flushFromBpu.shouldFlushByStage2(io.query.bits.ftqPtr) || io.flushFromBpu.shouldFlushByStage3(io.query.bits.ftqPtr)
+  val prev_hit = RegInit(0.B)
+  val l0_pc_hit = VecInit(cache_data.instEntry.map(_.pc === l0_taken_pc))
+  val l0_pc_hit_pos = OHToUInt(l0_pc_hit)
+  val l0_bpu_resp = io.query.bits.bpu_in
+  val l0_redirect_scheduled = Wire(Bool())
+  val l0_isDouble = io.query.bits.isDouble
+
+  val l0_redirect = WireInit(0.U.asTypeOf(new Redirect()))
+
+  l0_redirect.ftqIdx := io.query.bits.ftqPtr + 1.U
+  // should flush all
+  l0_redirect.ftqOffset := 0.U
+  l0_redirect.level := RedirectLevel.flush
+
+  val l0_redirect_cfiUpdate = l0_redirect.cfiUpdate
+  l0_redirect_cfiUpdate.pc := l0_taken_pc
+  l0_redirect_cfiUpdate.pd := cache_pd.pd(l0_pc_hit_pos)
+  l0_redirect_cfiUpdate.predTaken := true.B
+  l0_redirect_cfiUpdate.target := l0_taken_pc + Mux(cache_pd.pd(l0_pc_hit_pos).isRVC, 2.U, 4.U)
+  l0_redirect_cfiUpdate.taken := false.B
+  l0_redirect_cfiUpdate.isMisPred := true.B
+
 
   l0_pc := DontCare
   l0_data := DontCare
@@ -177,12 +238,63 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule {
     when (cache_valid && io.query.bits.pc === cache_pc && io.query.bits.cfiValid) {
       l0_hit := true.B
       l0_data := cache_data
+      prev_hit := true.B
+    } .otherwise {
+      prev_hit := false.B
     }
+    
   }
   io.l0_hit := l0_hit
   l0_taken_pc := io.query.bits.pc + Cat(io.query.bits.cfiIndex, 0.U.asTypeOf(UInt(1.W)))
-  val l0_pc_hit = VecInit(cache_data.instEntry.map(_.pc === l0_taken_pc))
+  
+  when (io.query.valid && l0_hit && !prev_hit) {
+    // we are at the start of a new loop
+    io.l0_redirect_scheduled := true.B
+    l0_redirect_scheduled := true.B
+    //io.toFtqRedirect.valid := true.B
+    //io.toFtqRedirect.bits := l0_redirect
+  } .otherwise {
+    io.l0_redirect_scheduled := false.B
+    l0_redirect_scheduled := false.B
+    //io.toFtqRedirect.valid := false.B
+    //io.toFtqRedirect.bits := DontCare
+  }
 
+  val scheduled_redirect_valid = RegInit(0.B)
+  val scheduled_redirect = Reg(new Redirect)
+  val scheduled_bpu_resp = Reg(new BranchPredictionBundle)
+  val last_stage_data_arrive = Wire(Bool())
+
+  last_stage_data_arrive := io.last_stage_info.valid && io.last_stage_info.bits.ftqIdx === scheduled_redirect.ftqIdx
+
+  val last_stage_info_reg = Reg(new LastStageInfo)
+  when (last_stage_data_arrive) {
+    last_stage_info_reg := io.last_stage_info.bits
+  }
+
+  io.toFtqRedirect.valid := false.B
+  io.toFtqRedirect.bits := DontCare
+
+  when (l0_redirect_scheduled) {
+    scheduled_redirect_valid := true.B
+    scheduled_redirect := l0_redirect
+    scheduled_bpu_resp := l0_bpu_resp
+  } .elsewhen (RegNext(last_stage_data_arrive)) {
+    scheduled_redirect_valid := false.B
+
+    // launch redirect
+    io.toFtqRedirect.valid := true.B
+    io.toFtqRedirect.bits := scheduled_redirect
+
+    // launch update
+    io.toBypass.valid := true.B
+    io.toBypass.bits.expected_loop_cnt := 100.U// fixme with actual count
+    io.toBypass.bits.single_entry := scheduled_bpu_resp
+    io.toBypass.bits.single_entry.isDouble := scheduled_bpu_resp.full_pred(dupForFtq).cfiIndex.bits < (PredictWidth / 2).U
+    io.toBypass.bits.last_stage_meta := last_stage_info_reg.last_stage_meta
+    io.toBypass.bits.last_stage_ftb_entry := last_stage_info_reg.last_stage_ftb_entry
+    io.toBypass.bits.last_stage_spec_info := last_stage_info_reg.last_stage_spec_info
+  }
   /*
   * l1: identify taken instruction position
   * */
@@ -193,8 +305,12 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule {
   val l1_pc_hit = Reg(l0_pc_hit.cloneType)
   val l1_ftqPtr = Reg(new FtqPtr)
   val l1_pd = Reg(new PredecodeWritebackBundle)
-  // val l1_is_exit = Reg()
+  val l1_is_exit = Reg(Bool())
+  val l1_isInterNumGT2 = Reg(Bool())
+  val l1_isDouble = Reg(Bool())
+
   val l1_flush_by_bpu = io.flushFromBpu.shouldFlushByStage3(l1_ftqPtr)
+  val l1_prev_hit = Reg(Bool())
   l0_fire := l0_hit && io.query.ready
   io.query.ready := !l1_hit || l1_fire
 
@@ -205,6 +321,10 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule {
     l1_pc_hit := l0_pc_hit
     l1_ftqPtr := io.query.bits.ftqPtr
     l1_pd := cache_pd
+    l1_is_exit := l0_is_exit
+    l1_isInterNumGT2 := l0_isInterNumGT2
+    l1_prev_hit := prev_hit
+    l1_isDouble := l0_isDouble
   } .elsewhen (l1_fire || l1_flush_by_bpu) {
     l1_hit := false.B
   }
@@ -220,22 +340,56 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule {
   val l2_pc_hit_pos = Reg(l1_pc_hit_pos.cloneType)
   val l2_ftqPtr = Reg(new FtqPtr)
   val l2_pd = Reg(new PredecodeWritebackBundle())
+  val l2_is_exit = Reg(Bool())
+  val l2_isInterNumGT2 = Reg(Bool())
+  val l2_isDouble = Reg(Bool())
+
   l1_fire := l1_hit && (!l2_hit || l2_fire)
+
+  io.toBypass.valid := false.B
+  io.toBypass.bits := DontCare
+
+  def double_pd(orig: PredecodeWritebackBundle, isDouble: Bool): PredecodeWritebackBundle = {
+    val doubled = orig
+    for (i <- PredictWidth / 2 until PredictWidth) {
+      val offset = i - PredictWidth / 2
+      doubled.pc(i) := doubled.pc(offset)
+      doubled.pd(i) := doubled.pd(offset)
+      doubled.instrRange(i) := doubled.instrRange(offset)
+      // double only occurs at loop cache, ftqOffset, misOffset and cfiOffset should not work
+      // target and jal target must be the same for two iterations
+    }
+    Mux(isDouble, doubled, orig)
+  }
+  def double_data(orig: LoopCacheSpecEntry, isDouble: Bool): LoopCacheSpecEntry = {
+    val doubled = orig
+    for (i <- PredictWidth / 2 until PredictWidth) {
+      val offset = i - PredictWidth / 2
+      doubled.instEntry(i) := doubled.instEntry(offset)
+      // ftqOffset retained
+      doubled.instEntry(i).ftqOffset := i.U
+    }
+    doubled
+  }
 
   when (l1_fire && !l1_flush_by_bpu) {
     l2_hit := l1_hit
     l2_pc := l1_pc
-    l2_data := l1_data
+    l2_data := double_data(l1_data, l1_isDouble)
     l2_pc_hit_pos := l1_pc_hit_pos
     for (i <- 0 until LoopCacheSpecSize) {
       l2_data.instEntry(i).pred_taken := false.B
     }
     l2_data.instEntry(l1_pc_hit_pos).pred_taken := true.B
     l2_ftqPtr := l1_ftqPtr
-    l2_pd := l1_pd
+    l2_pd := double_pd(l1_pd, l1_isDouble)
+    l2_is_exit := l1_is_exit
+    l2_isInterNumGT2 := l1_isInterNumGT2
+    l2_isDouble := l1_isDouble
   } .elsewhen (l2_fire) {
     l2_hit := false.B
   }
+
 
   val l2_valids = Wire(Vec(LoopCacheSpecSize, Bool()))
   for (i <- 0 until LoopCacheSpecSize) {
@@ -390,6 +544,61 @@ class LoopIFUArbiter(implicit p: Parameters) extends XSModule with HasCircularQu
   io.toIBuffer.bits.is_loop := selLoop
   io.toIBuffer.bits.loop_pd := Mux(selLoop, io.fromLoop.bits.pd, DontCare)
   io.toIBuffer.valid := Mux(selLoop, io.fromLoop.valid, io.fromIFU.valid)
+}
+
+
+
+class BpuBypass(implicit p: Parameters) extends XSModule with LoopPredictorParams {
+  val io = IO(new BpuBypassIO)
+
+  val BypassSel = RegInit(0.B)
+  val BypassCnt = Reg(UInt(cntBits.W))
+  val BypassTemplate = Reg(new BranchPredictionBundle)
+  val BypassLastStageInfo = Reg(new LastStageInfo)
+  val BypassPtr = Reg(new FtqPtr)
+
+  when (io.update.valid) {
+    BypassSel := true.B
+    BypassCnt := io.update.bits.expected_loop_cnt
+    BypassTemplate := io.update.bits.single_entry
+    // should start at next entry
+    BypassPtr := io.update.bits.single_entry.ftq_idx + 1.U
+    BypassLastStageInfo.ftqIdx := io.update.bits.single_entry.ftq_idx + 1.U
+    BypassLastStageInfo.last_stage_spec_info := io.update.bits.last_stage_spec_info
+    BypassLastStageInfo.last_stage_meta := io.update.bits.last_stage_meta
+    BypassLastStageInfo.last_stage_ftb_entry := io.update.bits.last_stage_ftb_entry
+  }
+
+  when (BypassSel && io.BpuOut.resp.fire) {
+    BypassCnt := BypassCnt - Mux(BypassTemplate.isDouble && BypassCnt > 1.U, 2.U, 1.U)
+    BypassPtr := BypassPtr + 1.U
+  }
+
+  when (io.redirect.valid || (BypassSel === true.B && BypassCnt === 0.U)) {
+    BypassSel := false.B
+  }
+
+  val BypassOut = Wire(new BpuToFtqIO)
+
+  BypassOut.resp.valid := BypassSel
+  /* always provide s3 only data */
+  BypassOut.resp.bits.s1 := DontCare
+  BypassOut.resp.bits.s2 := DontCare
+  BypassOut.resp.bits.s1.valid := VecInit(Seq.fill(numDup)(false.B))
+  BypassOut.resp.bits.s2.valid := VecInit(Seq.fill(numDup)(false.B))
+  BypassOut.resp.bits.s3 := BypassTemplate
+  BypassOut.resp.bits.s3.hasRedirect := VecInit(Seq.fill(numDup)(true.B))
+  BypassOut.resp.bits.s3.isDouble := BypassCnt > 1.U
+  BypassOut.resp.bits.s3.ftq_idx := BypassPtr
+  BypassOut.resp.bits.last_stage_meta := BypassLastStageInfo.last_stage_meta
+  BypassOut.resp.bits.last_stage_ftb_entry := BypassLastStageInfo.last_stage_ftb_entry
+  BypassOut.resp.bits.last_stage_spec_info := BypassLastStageInfo.last_stage_spec_info
+
+  BypassOut.resp.ready := Mux(BypassSel, io.BpuOut.resp.ready, false.B)
+
+  io.BpuOut.resp.valid := Mux(BypassSel, BypassOut.resp.valid, io.BpuIn.resp.valid)
+  io.BpuOut.resp.bits := Mux(BypassSel, BypassOut.resp.bits, io.BpuIn.resp.bits)
+  io.BpuIn.resp.ready := Mux(BypassSel, false.B, io.BpuOut.resp.ready)
 }
 
 class Ftq_pd_Entry(implicit p: Parameters) extends XSBundle {
@@ -741,6 +950,7 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
     val toIBuffer = new FtqToIBuffer
     val loopToIBuffer = Decoupled(new LoopToArbiter)
     val loopArbiterRedirect = Valid(new FtqPtr)
+    val toBypass = Valid(new BpuBypassUpdate)
     val loopFlags = Output(Vec(FtqSize, Bool()))
     val fromIBuffer = Flipped(new IBufferToFtq)
 
@@ -755,6 +965,7 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   io.bpuInfo := DontCare
 
   val loop_cache_hit = Wire(Bool())
+  val loop_cache_redirect_scheduled = RegInit(0.B)
   val loop_cache_ready = Wire(Bool())
   val loop_cache_pd_valid = Wire(Bool())
   val loop_cache_pd_data = Wire(new PredecodeWritebackBundle)
@@ -766,13 +977,14 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   val stage2Flush = backendRedirect.valid
   val backendFlush = stage2Flush || RegNext(stage2Flush)
   val ifuFlush = Wire(Bool())
+  val loopFlush = Wire(Bool())
 
   val flush = stage2Flush || RegNext(stage2Flush)
 
   val allowBpuIn, allowToIfu = WireInit(false.B)
   val flushToIfu = !allowToIfu
-  allowBpuIn := !ifuFlush && !backendRedirect.valid && !backendRedirectReg.valid
-  allowToIfu := !ifuFlush && !backendRedirect.valid && !backendRedirectReg.valid
+  allowBpuIn := !ifuFlush && !loopFlush && !backendRedirect.valid && !backendRedirectReg.valid
+  allowToIfu := !ifuFlush && !loopFlush && !backendRedirect.valid && !backendRedirectReg.valid
 
   def copyNum = 5
   val bpuPtr, ifuPtr, ifuWbPtr, commPtr = RegInit(FtqPtr(false.B, 0.U))
@@ -827,6 +1039,13 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   ftq_pc_mem.io.waddr := bpu_in_resp_idx
   ftq_pc_mem.io.wdata.fromBranchPrediction(bpu_in_resp)
 
+  // record resp for loop inqueue
+  val bpu_resp_mem = Reg(Vec(FtqSize, new BranchPredictionBundle))
+
+  when (bpu_in_fire) {
+    bpu_resp_mem(bpu_in_resp_idx) := bpu_in_resp
+  }
+
   //                                                            ifuRedirect + backendRedirect + commit
   val ftq_redirect_sram = Module(new FtqNRSRAM(new Ftq_Redirect_SRAMEntry, 1+1+1))
   // these info is intended to enq at the last stage of bpu
@@ -846,6 +1065,7 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   ftb_entry_mem.io.wen(0) := io.fromBpu.resp.bits.lastStage.valid(dupForFtq)
   ftb_entry_mem.io.waddr(0) := io.fromBpu.resp.bits.lastStage.ftq_idx.value
   ftb_entry_mem.io.wdata(0) := io.fromBpu.resp.bits.last_stage_ftb_entry
+  val lpPredInfo = WireDefault(0.U.asTypeOf(new xsLPpredInfo))
 
 
   // multi-write
@@ -858,6 +1078,12 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
 
   val pdWb_flag = RegInit(VecInit(Seq.fill(FtqSize)(0.B)))
   val lpPredInfoArray = RegInit(VecInit(Seq.fill(64)(0.U.asTypeOf(new xsLPpredInfo))))
+  val isDouble = RegInit(VecInit(Seq.fill(FtqSize)(0.B)))
+
+  // isDouble can only be set to true when Bypass provide prediction result at s3
+  when (bpu_in_fire) {
+    isDouble(bpu_in_resp_idx) := bpu_in_resp.isDouble
+  }
 
   // 1: loop 0: ifu
   val arbiter_flag = Reg(Vec(FtqSize, Bool()))
@@ -1051,7 +1277,7 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
                             RegNext(ftq_pc_mem.io.ifuPtrPlus1_rdata.startAddr))) // ifuPtr+1
   }
 
-  should_send_req := entry_is_to_send && ifuPtr =/= bpuPtr && loop_cache_ready
+  should_send_req := entry_is_to_send && ifuPtr =/= bpuPtr && loop_cache_ready && !loop_cache_redirect_scheduled
 
   when (should_send_req) {
     arbiter_flag(ifuPtr.value) := loop_cache_hit
@@ -1260,6 +1486,12 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
     toBpuCfi.target := toBpuCfi.rasEntry.retAddr
   }
 
+  val fromLoopRedirect = Wire(Valid(new Redirect))
+  val fromLoopRedirectReg = RegNext(fromLoopRedirect, init=0.U.asTypeOf(Valid(new Redirect)))
+  loopFlush := fromLoopRedirect.valid || fromLoopRedirectReg.valid
+
+  val loopRedirectToBpu = WireInit(fromLoopRedirectReg)
+
   // *********************************************************************
   // **************************** wb from exu ****************************
   // *********************************************************************
@@ -1302,20 +1534,22 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
     updateCfiInfo(backendRedirectReg)
   }.elsewhen (ifuRedirectToBpu.valid) {
     updateCfiInfo(ifuRedirectToBpu, isBackend=false)
+  } .elsewhen (loopRedirectToBpu.valid) {
+    updateCfiInfo(loopRedirectToBpu, isBackend = false)
   }
 
   // ***********************************************************************************
   // **************************** flush ptr and state queue ****************************
   // ***********************************************************************************
 
-  val redirectVec = VecInit(backendRedirect, fromIfuRedirect)
+  val redirectVec = VecInit(backendRedirect, fromIfuRedirect, fromLoopRedirect)
 
   val loopCacheFlush = WireInit(false.B)
 
   // when redirect, we should reset ptrs and status queues
   when(redirectVec.map(r => r.valid).reduce(_||_)){
     val r = PriorityMux(redirectVec.map(r => (r.valid -> r.bits)))
-    val notIfu = redirectVec.dropRight(1).map(r => r.valid).reduce(_||_)
+    val notIfu = redirectVec.dropRight(2).map(r => r.valid).reduce(_||_)
     val (idx, offset, flushItSelf) = (r.ftqIdx, r.ftqOffset, RedirectLevel.flushItself(r.level))
     val next = idx + 1.U
     bpuPtr := next
@@ -1504,11 +1738,28 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   loopMainCache.io.query.bits.cfiIndex := Mux(io.toIfu.req.bits.ftqOffset.valid, io.toIfu.req.bits.ftqOffset.bits, 0xfffffff.U)
   loopMainCache.io.query.bits.cfiValid := io.toIfu.req.bits.ftqOffset.valid
   loopMainCache.io.query.bits.ftqPtr := io.toIfu.req.bits.ftqIdx
+  loopMainCache.io.query.bits.isInterNumGT2 := lpPredInfoArray(ifuPtr.value).isInterNumGT2
+  loopMainCache.io.query.bits.isLoopExit := lpPredInfoArray(ifuPtr.value).isConfExitLoop
+  loopMainCache.io.query.bits.isDouble := isDouble(ifuPtr.value)
+  loopMainCache.io.query.bits.bpu_in := bpu_resp_mem(ifuPtr.value)
   loopMainCache.io.out_entry.ready := true.B
+  io.toBypass := loopMainCache.io.toBypass
+  fromLoopRedirect := loopMainCache.io.toFtqRedirect
+
+  loopMainCache.io.last_stage_info.valid := io.fromBpu.resp.bits.lastStage.valid(dupForFtq)
+  loopMainCache.io.last_stage_info.bits.ftqIdx := io.fromBpu.resp.bits.lastStage.ftq_idx
+  loopMainCache.io.last_stage_info.bits.last_stage_meta := io.fromBpu.resp.bits.last_stage_meta
+  loopMainCache.io.last_stage_info.bits.last_stage_spec_info := io.fromBpu.resp.bits.last_stage_spec_info
+  loopMainCache.io.last_stage_info.bits.last_stage_ftb_entry := io.fromBpu.resp.bits.last_stage_ftb_entry
 
   loopMainCache.io.flush := loopCacheFlush
 
   loop_cache_hit := loopMainCache.io.l0_hit
+  when (loopMainCache.io.toFtqRedirect.valid) {
+    loop_cache_redirect_scheduled := false.B
+  }.elsewhen (loopMainCache.io.query.valid && loopMainCache.io.l0_redirect_scheduled) {
+    loop_cache_redirect_scheduled := true.B
+  }
   loop_cache_ready := loopMainCache.io.query.ready
 
   io.loopToIBuffer <> loopMainCache.io.out_entry
@@ -1629,7 +1880,7 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   lpMetaSram.io.wdata := xsLP.io.pred.meta
 
   
-  val lpPredInfo = WireDefault(0.U.asTypeOf(new xsLPpredInfo))
+  
   lpPredInfo.isConfExitLoop :=  xsLP.io.pred.isConfExitLoop
   lpPredInfo.target         := xsLP.io.pred.target
   lpPredInfo.isInterNumGT2  := xsLP.io.isInterNumGT2
