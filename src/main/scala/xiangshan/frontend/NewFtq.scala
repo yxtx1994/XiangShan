@@ -123,7 +123,7 @@ class LoopCacheSpecInfo(implicit p: Parameters) extends XSBundle {
   val pd = new PredecodeWritebackBundle
 }
 
-class LoopCacheQuery(implicit p: Parameters) extends XSBundle {
+class LoopCacheQuery(implicit p: Parameters) extends XSBundle with LoopPredictorParams {
   val pc = UInt(VAddrBits.W)
   val cfiValid = Bool()
   val cfiIndex = UInt(log2Ceil(PredictWidth).W)
@@ -131,6 +131,8 @@ class LoopCacheQuery(implicit p: Parameters) extends XSBundle {
 
   val isLoopExit = Bool()
   val isInterNumGT2 = Bool()
+  val remainIterNum = UInt(cntBits.W)
+  val isConf = Bool()
 
   val isDouble = Bool()
 
@@ -187,7 +189,7 @@ class LoopCacheNonSpecIO(implicit p: Parameters) extends XSBundle with HasCircul
   })
 }
 
-class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule with HasBPUConst {
+class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule with HasBPUConst with LoopPredictorParams {
   val io = IO(new LoopCacheNonSpecIO)
 
   val cache_valid = RegInit(0.B)
@@ -207,6 +209,7 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule with HasBPU
   val l0_taken_pc = Wire(UInt(VAddrBits.W))
   val l0_is_exit = io.query.bits.isLoopExit
   val l0_isInterNumGT2 = io.query.bits.isInterNumGT2
+  val l0_remainIterNum = io.query.bits.remainIterNum
   val l0_flush_by_bpu = io.flushFromBpu.shouldFlushByStage2(io.query.bits.ftqPtr) || io.flushFromBpu.shouldFlushByStage3(io.query.bits.ftqPtr)
   val prev_hit = RegInit(0.B)
   val l0_pc_hit = VecInit(cache_data.instEntry.map(_.pc === l0_taken_pc))
@@ -235,7 +238,7 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule with HasBPU
   l0_data := DontCare
   l0_hit := false.B
   when (io.query.valid) {
-    when (cache_valid && io.query.bits.pc === cache_pc && io.query.bits.cfiValid) {
+    when (cache_valid && io.query.bits.pc === cache_pc && io.query.bits.cfiValid && io.query.bits.isConf) {
       l0_hit := true.B
       l0_data := cache_data
       prev_hit := true.B
@@ -263,9 +266,10 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule with HasBPU
   val scheduled_redirect_valid = RegInit(0.B)
   val scheduled_redirect = Reg(new Redirect)
   val scheduled_bpu_resp = Reg(new BranchPredictionBundle)
+  val scheduled_counter = Reg(UInt(cntBits.W))
   val last_stage_data_arrive = Wire(Bool())
 
-  last_stage_data_arrive := io.last_stage_info.valid && io.last_stage_info.bits.ftqIdx === scheduled_redirect.ftqIdx
+  last_stage_data_arrive := io.last_stage_info.valid && io.last_stage_info.bits.ftqIdx === (scheduled_redirect.ftqIdx - 1.U)
 
   val last_stage_info_reg = Reg(new LastStageInfo)
   when (last_stage_data_arrive) {
@@ -282,6 +286,7 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule with HasBPU
     scheduled_redirect_valid := true.B
     scheduled_redirect := l0_redirect
     scheduled_bpu_resp := l0_bpu_resp
+    scheduled_counter := l0_remainIterNum
   } .elsewhen (RegNext(last_stage_data_arrive) && scheduled_redirect_valid) {
     scheduled_redirect_valid := false.B
 
@@ -291,7 +296,7 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule with HasBPU
 
     // launch update
     io.toBypass.valid := true.B
-    io.toBypass.bits.expected_loop_cnt := 100.U// fixme with actual count
+    io.toBypass.bits.expected_loop_cnt := scheduled_counter// fixme with actual count
     io.toBypass.bits.single_entry := scheduled_bpu_resp
     io.toBypass.bits.single_entry.ftq_idx := scheduled_redirect.ftqIdx
     io.toBypass.bits.single_entry.isDouble := scheduled_bpu_resp.full_pred(dupForFtq).cfiIndex.bits < (PredictWidth / 2).U
@@ -1712,6 +1717,7 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
     commPtr_write := commPtrPlus1
     commPtrPlus1_write := commPtrPlus1 + 1.U
     pdWb_flag(commPtr.value) := false.B
+    bpu_last_stage_writeback(commPtr.value) := false.B
   }
   val commit_state = RegNext(commitStateQueue(commPtr.value))
   val can_commit_cfi = WireInit(cfiIndex_vec(commPtr.value))
@@ -1797,6 +1803,8 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   loopMainCache.io.query.bits.ftqPtr := io.toIfu.req.bits.ftqIdx
   loopMainCache.io.query.bits.isInterNumGT2 := lpPredInfoArray(ifuPtr.value).isInterNumGT2
   loopMainCache.io.query.bits.isLoopExit := lpPredInfoArray(ifuPtr.value).isConfExitLoop
+  loopMainCache.io.query.bits.remainIterNum := lpPredInfoArray(ifuPtr.value).remainIterNum
+  loopMainCache.io.query.bits.isConf := lpPredInfoArray(ifuPtr.value).isConf
   loopMainCache.io.query.bits.isDouble := isDouble(ifuPtr.value)
   loopMainCache.io.query.bits.bpu_in := bpu_resp_mem(ifuPtr.value)
   loopMainCache.io.out_entry.ready := true.B
@@ -1929,10 +1937,12 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   // lp
   def getLPmetaIdx(pc: UInt) = pc(instOffsetBits+6-1, instOffsetBits)
 
-  class xsLPpredInfo(implicit p: Parameters) extends XSBundle {
+  class xsLPpredInfo(implicit p: Parameters) extends XSBundle with LoopPredictorParams {
     val isConfExitLoop = Output(Bool())
     val target         = Output(UInt(VAddrBits.W))
     val isInterNumGT2  = Output(Bool())
+    val remainIterNum  = Output(UInt(cntBits.W))
+    val isConf         = Output(Bool())
   }
 
   val xsLP = Module(new XSLoopPredictor)
@@ -1953,6 +1963,8 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   lpPredInfo.isConfExitLoop :=  xsLP.io.pred.isConfExitLoop
   lpPredInfo.target         := xsLP.io.pred.target
   lpPredInfo.isInterNumGT2  := xsLP.io.isInterNumGT2
+  lpPredInfo.remainIterNum  := xsLP.io.pred.remainIterNum
+  lpPredInfo.isConf         := xsLP.io.pred.isConf
   when(xsLP.io.pred.valid) {
     lpPredInfoArray(lpMetaWriteIdx) := lpPredInfo
   }
