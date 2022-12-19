@@ -57,9 +57,9 @@ class MinimalConfig(n: Int = 1) extends Config(
       _.copy(
         DecodeWidth = 2,
         RenameWidth = 2,
-        FetchWidth = 4,
-        LoopCacheSpecSize = 8,
-        LoopCacheMaxInst = 4,
+        FetchWidth = 8,
+        LoopCacheSpecSize = 16,
+        LoopCacheMaxInst = 8,
         IssQueSize = 8,
         NRPhyRegs = 64,
         LoadQueueSize = 16,
