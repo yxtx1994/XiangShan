@@ -77,7 +77,7 @@ class Ftq_RF_Components(implicit p: Parameters) extends XSBundle with BPUUtils w
     def getHigher(pc: UInt) = pc(VAddrBits-1, log2Ceil(PredictWidth)+instOffsetBits+1)
     def getOffset(pc: UInt) = pc(log2Ceil(PredictWidth)+instOffsetBits, instOffsetBits)
 
-    val real_off = Mux(isDouble, Cat(0.U.asTypeOf(UInt(1.W)), offset(log2Ceil(PredictWidth) - 2)), offset)
+    val real_off = Mux(isDouble, Cat(0.U.asTypeOf(UInt(1.W)), offset(log2Ceil(PredictWidth) - 2, 0)), offset)
 
     Cat(getHigher(Mux(isNextMask(real_off) && startAddr(log2Ceil(PredictWidth)+instOffsetBits), nextLineAddr, startAddr)),
         getOffset(startAddr)+real_off, 0.U(instOffsetBits.W))
@@ -234,11 +234,12 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule with HasBPU
   l0_redirect_cfiUpdate.isMisPred := true.B
 
 
+
   l0_pc := DontCare
   l0_data := DontCare
   l0_hit := false.B
   when (io.query.valid) {
-    when (cache_valid && io.query.bits.pc === cache_pc && io.query.bits.cfiValid && io.query.bits.isConf) {
+    when (cache_valid && io.query.bits.pc === cache_pc && io.query.bits.cfiValid /*&& io.query.bits.isConf*/) {
       l0_hit := true.B
       l0_data := cache_data
       prev_hit := true.B
@@ -269,7 +270,7 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule with HasBPU
   val scheduled_counter = Reg(UInt(cntBits.W))
   val last_stage_data_arrive = Wire(Bool())
 
-  last_stage_data_arrive := io.last_stage_info.valid && io.last_stage_info.bits.ftqIdx === (scheduled_redirect.ftqIdx - 1.U)
+  last_stage_data_arrive := io.last_stage_info.valid && io.last_stage_info.bits.ftqIdx === (scheduled_redirect.ftqIdx)
 
   val last_stage_info_reg = Reg(new LastStageInfo)
   when (last_stage_data_arrive) {
@@ -293,6 +294,12 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule with HasBPU
     // launch redirect
     io.toFtqRedirect.valid := true.B
     io.toFtqRedirect.bits := scheduled_redirect
+    io.toFtqRedirect.bits.cfiUpdate.folded_hist := last_stage_info_reg.last_stage_spec_info.folded_hist
+    io.toFtqRedirect.bits.cfiUpdate.lastBrNumOH := last_stage_info_reg.last_stage_spec_info.lastBrNumOH
+    io.toFtqRedirect.bits.cfiUpdate.afhob := last_stage_info_reg.last_stage_spec_info.afhob
+    io.toFtqRedirect.bits.cfiUpdate.histPtr := last_stage_info_reg.last_stage_spec_info.histPtr
+    io.toFtqRedirect.bits.cfiUpdate.rasSp := last_stage_info_reg.last_stage_spec_info.rasSp
+    io.toFtqRedirect.bits.cfiUpdate.rasEntry := last_stage_info_reg.last_stage_spec_info.rasTop
 
     // launch update
     io.toBypass.valid := true.B
@@ -358,7 +365,7 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule with HasBPU
 
 
   def double_pd(orig: PredecodeWritebackBundle, isDouble: Bool): PredecodeWritebackBundle = {
-    val doubled = orig
+    val doubled = WireInit(orig)
     for (i <- PredictWidth / 2 until PredictWidth) {
       val offset = i - PredictWidth / 2
       doubled.pc(i) := doubled.pc(offset)
@@ -370,14 +377,16 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule with HasBPU
     Mux(isDouble, doubled, orig)
   }
   def double_data(orig: LoopCacheSpecEntry, isDouble: Bool): LoopCacheSpecEntry = {
-    val doubled = orig
+    val doubled = WireInit(orig)
+
     for (i <- PredictWidth / 2 until PredictWidth) {
       val offset = i - PredictWidth / 2
       doubled.instEntry(i) := doubled.instEntry(offset)
       // ftqOffset retained
       doubled.instEntry(i).ftqOffset := i.U
     }
-    doubled
+
+    Mux(isDouble, doubled, orig)
   }
 
   when (l1_fire && !l1_flush_by_bpu) {
@@ -389,6 +398,7 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule with HasBPU
       l2_data.instEntry(i).pred_taken := false.B
     }
     l2_data.instEntry(l1_pc_hit_pos).pred_taken := true.B
+    l2_data.instEntry(l1_pc_hit_pos + (PredictWidth / 2).U).pred_taken := l1_isDouble
     l2_ftqPtr := l1_ftqPtr
     l2_pd := double_pd(l1_pd, l1_isDouble)
     l2_is_exit := l1_is_exit
@@ -401,7 +411,7 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule with HasBPU
 
   val l2_valids = Wire(Vec(LoopCacheSpecSize, Bool()))
   for (i <- 0 until LoopCacheSpecSize) {
-    l2_valids(i) := i.U <= l2_pc_hit_pos && l2_pd.pd(i).valid
+    l2_valids(i) := (i.U <= l2_pc_hit_pos || (l2_isDouble && i.U >= (PredictWidth / 2).U && i.U <= l2_pc_hit_pos + (PredictWidth / 2).U)) && l2_pd.pd(i).valid
   }
   // l2_data.instEntry(l2_pc_hit_pos).pred_taken := true.B
   io.out_entry.valid := l2_hit
@@ -1628,7 +1638,8 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   }.elsewhen (ifuRedirectToBpu.valid) {
     updateCfiInfo(ifuRedirectToBpu, isBackend=false)
   } .elsewhen (loopRedirectToBpu.valid) {
-    updateCfiInfo(loopRedirectToBpu, isBackend = false)
+    //updateCfiInfo(loopRedirectToBpu, isBackend = false)
+    // does not update target for bpu-targeted loop redirect
   }
 
   // ***********************************************************************************
