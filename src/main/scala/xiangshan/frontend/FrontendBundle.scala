@@ -419,6 +419,7 @@ class FullBranchPrediction(implicit p: Parameters) extends XSBundle with HasBPUC
   val br_taken_mask = Vec(numBr, Bool())
 
   val slot_valids = Vec(totalSlot, Bool())
+  val isRVC = Vec(totalSlot, Bool())
 
   val targets = Vec(totalSlot, UInt(VAddrBits.W))
   val jalr_target = UInt(VAddrBits.W) // special path for indirect predictors
@@ -516,6 +517,7 @@ class FullBranchPrediction(implicit p: Parameters) extends XSBundle with HasBPUC
 
   def fromFtbEntry(entry: FTBEntry, pc: UInt, last_stage: Option[Tuple2[UInt, Bool]] = None) = {
     slot_valids := entry.brSlots.map(_.valid) :+ entry.tailSlot.valid
+    isRVC := entry.brSlots.map(_.isRVC) :+ entry.tailSlot.isRVC
     targets := entry.getTargetVec(pc)
     jalr_target := targets.last
     offsets := entry.getOffsetVec
@@ -556,6 +558,8 @@ class BranchPredictionBundle(implicit p: Parameters) extends XSBundle
 
   // does branch prediction bundle refers to double loop
   val isDouble = Bool()
+  // loop is predicted to be exiting after this loop
+  val isExit = Bool()
 
   val full_pred    = Vec(numDup, new FullBranchPrediction)
   val hasRedirect  = Vec(numDup, Bool())
@@ -567,7 +571,7 @@ class BranchPredictionBundle(implicit p: Parameters) extends XSBundle
       f(fp)(p)
     }
 
-  def target         = VecInit(full_pred.zip(pc).map {case (fp, p) => fp.target(p)})
+  def target         = VecInit(full_pred.zip(pc).map {case (fp, p) => Mux(isExit, Mux(ParallelPriorityMux(fp.real_slot_taken_mask(), fp.isRVC), p + fp.cfiIndex.bits * 2.U + 2.U, p + fp.cfiIndex.bits * 2.U + 4.U), fp.target(p))})
   def cfiIndex       = VecInit(full_pred.map(_.cfiIndex))
   def lastBrPosOH    = VecInit(full_pred.map(_.lastBrPosOH))
   def brTaken        = VecInit(full_pred.map(_.brTaken))

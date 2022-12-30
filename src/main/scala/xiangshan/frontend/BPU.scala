@@ -199,6 +199,10 @@ abstract class BasePredictor(implicit p: Parameters) extends XSModule
   io.out.s1.isDouble := false.B
   io.out.s2.isDouble := false.B
   io.out.s3.isDouble := false.B
+  // BPU never predicts loop exit
+  io.out.s1.isExit := false.B
+  io.out.s2.isExit := false.B
+  io.out.s3.isExit := false.B
 
   val perfEvents: Seq[(String, UInt)] = Seq()
 
