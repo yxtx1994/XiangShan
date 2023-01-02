@@ -210,7 +210,7 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule with HasBPU
   val l0_taken_pc = Wire(UInt(VAddrBits.W))
   val l0_is_exit = io.query.bits.isLoopExit
   val l0_isInterNumGT2 = io.query.bits.isInterNumGT2
-  val l0_remainIterNum = 1000.U// io.query.bits.remainIterNum // FIXME: provide data from loop predictor
+  val l0_remainIterNum = io.query.bits.remainIterNum // FIXME: provide data from loop predictor
   val l0_flush_by_bpu = io.flushFromBpu.shouldFlushByStage2(io.query.bits.ftqPtr) || io.flushFromBpu.shouldFlushByStage3(io.query.bits.ftqPtr)
   val prev_hit = RegInit(0.B)
   val l0_pc_hit = VecInit(cache_data.instEntry.map(_.pc === l0_taken_pc))
@@ -253,7 +253,7 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule with HasBPU
   io.l0_hit := l0_hit
   l0_taken_pc := io.query.bits.pc + Cat(io.query.bits.cfiIndex, 0.U.asTypeOf(UInt(1.W)))
   
-  when (io.query.valid && l0_hit && !prev_hit) {
+  when (io.query.valid && l0_hit && !prev_hit && !l0_flush_by_bpu) {
     // we are at the start of a new loop
     io.l0_redirect_scheduled := true.B
     l0_redirect_scheduled := true.B
@@ -290,6 +290,9 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule with HasBPU
     scheduled_redirect := l0_redirect
     scheduled_bpu_resp := l0_bpu_resp
     scheduled_counter := l0_remainIterNum
+  } .elsewhen (scheduled_redirect_valid && (io.flushFromBpu.shouldFlushByStage2(scheduled_redirect.ftqIdx) || io.flushFromBpu.shouldFlushByStage3(scheduled_redirect.ftqIdx))) {
+    // if any bpu redirect, flush scheduled redirect
+    scheduled_redirect_valid := false.B
   } .elsewhen (RegNext(last_stage_data_arrive) && scheduled_redirect_valid) {
     scheduled_redirect_valid := false.B
 
@@ -591,16 +594,16 @@ class BpuBypass(implicit p: Parameters) extends XSModule with LoopPredictorParam
   val BypassLastStageInfo = Reg(new LastStageInfo)
   val BypassPtr = Reg(new FtqPtr)
 
-  when (io.update.valid) {
-    BypassSel := true.B
-    BypassCnt := io.update.bits.expected_loop_cnt
-    BypassTemplate := io.update.bits.single_entry
+  when (RegNext(io.update.valid)) {
+    BypassSel := RegNext(true.B)
+    BypassCnt := RegNext(io.update.bits.expected_loop_cnt)
+    BypassTemplate := RegNext(io.update.bits.single_entry)
     // should start at next entry
-    BypassPtr := io.update.bits.single_entry.ftq_idx + 1.U
-    BypassLastStageInfo.ftqIdx := io.update.bits.single_entry.ftq_idx + 1.U
-    BypassLastStageInfo.last_stage_spec_info := io.update.bits.last_stage_spec_info
-    BypassLastStageInfo.last_stage_meta := io.update.bits.last_stage_meta
-    BypassLastStageInfo.last_stage_ftb_entry := io.update.bits.last_stage_ftb_entry
+    BypassPtr := RegNext(io.update.bits.single_entry.ftq_idx + 1.U)
+    BypassLastStageInfo.ftqIdx := RegNext(io.update.bits.single_entry.ftq_idx + 1.U)
+    BypassLastStageInfo.last_stage_spec_info := RegNext(io.update.bits.last_stage_spec_info)
+    BypassLastStageInfo.last_stage_meta := RegNext(io.update.bits.last_stage_meta)
+    BypassLastStageInfo.last_stage_ftb_entry := RegNext(io.update.bits.last_stage_ftb_entry)
   }
 
   val BypassOut = Wire(new BpuToFtqIO)
@@ -650,8 +653,17 @@ class BpuBypass(implicit p: Parameters) extends XSModule with LoopPredictorParam
 
   BypassOut.resp.ready := Mux(BypassSel, io.BpuOut.resp.ready, false.B)
 
-  io.BpuOut.resp.valid := Mux(BypassSel, BypassOut.resp.valid, io.BpuIn.resp.valid)
-  io.BpuOut.resp.bits := Mux(BypassSel, BypassOut.resp.bits, io.BpuIn.resp.bits)
+  io.BpuOut.resp.valid  := Mux(BypassSel, BypassOut.resp.valid, io.BpuIn.resp.valid) // Mux(BypassSel, BypassOut.resp.bits.s1.valid(0), io.BpuIn.resp.bits.s1.valid(0)) ||
+    //Mux(RegNext(BypassSel, init = false.B), BypassOut.resp.bits.s2.valid(0), io.BpuIn.resp.bits.s2.valid(0)) ||
+    //Mux(RegNext(RegNext(BypassSel, init = false.B), init = false.B), BypassOut.resp.bits.s3.valid(0), io.BpuIn.resp.bits.s3.valid(0))
+  //Mux(BypassSel, BypassOut.resp.valid, io.BpuIn.resp.valid)
+  io.BpuOut.resp.bits.s1 := Mux(BypassSel, BypassOut.resp.bits.s1, io.BpuIn.resp.bits.s1)
+  io.BpuOut.resp.bits.s2 := Mux(RegNext(BypassSel, init = false.B), BypassOut.resp.bits.s2, io.BpuIn.resp.bits.s2)
+  io.BpuOut.resp.bits.s3 := Mux(RegNext(RegNext(BypassSel, init = false.B), init = false.B), BypassOut.resp.bits.s3, io.BpuIn.resp.bits.s3)
+  io.BpuOut.resp.bits.last_stage_ftb_entry := Mux(RegNext(RegNext(BypassSel, init = false.B), init = false.B), BypassOut.resp.bits.last_stage_ftb_entry, io.BpuIn.resp.bits.last_stage_ftb_entry)
+  io.BpuOut.resp.bits.last_stage_meta := Mux(RegNext(RegNext(BypassSel, init = false.B), init = false.B), BypassOut.resp.bits.last_stage_meta, io.BpuIn.resp.bits.last_stage_meta)
+  io.BpuOut.resp.bits.last_stage_spec_info := Mux(RegNext(RegNext(BypassSel, init = false.B), init = false.B), BypassOut.resp.bits.last_stage_spec_info, io.BpuIn.resp.bits.last_stage_spec_info)
+  // io.BpuOut.resp.bits := Mux(BypassSel, BypassOut.resp.bits, io.BpuIn.resp.bits)
   io.BpuIn.resp.ready := Mux(BypassSel, false.B, io.BpuOut.resp.ready)
 }
 
@@ -1261,31 +1273,31 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
     }
 
     val idx = bpu_s2_resp.ftq_idx + 1.U
-    val next_less = idx.value < bpuPtr.value
+    val next_less = idx.value <= bpuPtr.value
     when (next_less) {
       bpu_last_stage_writeback.zipWithIndex.foreach({ case (f,i) =>
-        when (i.U >= idx.value && i.U <= bpuPtr.value) {
+        when (i.U >= idx.value && i.U < bpuPtr.value) {
           // s2 redirect must clear from and include new ptr
           f := false.B
         }
       })
 
       lpPred_flag.zipWithIndex.foreach({ case (f,i) =>
-        when (i.U >= idx.value && i.U <= bpuPtr.value) {
+        when (i.U >= idx.value && i.U < bpuPtr.value) {
           // s2 redirect must clear from and include new ptr
           f := false.B
         }
       })
     } .otherwise {
       bpu_last_stage_writeback.zipWithIndex.foreach({ case (f,i) =>
-        when (i.U <= bpuPtr.value || i.U >= idx.value) {
+        when (i.U < bpuPtr.value || i.U >= idx.value) {
           // s2 redirect must clear from and include new ptr
           f := false.B
         }
       })
 
       lpPred_flag.zipWithIndex.foreach({ case (f,i) =>
-        when (i.U <= bpuPtr.value || i.U >= idx.value) {
+        when (i.U < bpuPtr.value || i.U >= idx.value) {
           // s2 redirect must clear from and include new ptr
           f := false.B
         }
@@ -1306,17 +1318,29 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
     }
 
     val idx = bpu_s3_resp.ftq_idx + 1.U
-    val next_less = idx.value < bpuPtr.value
+    val next_less = idx.value <= bpuPtr.value
     when (next_less) {
       bpu_last_stage_writeback.zipWithIndex.foreach({ case (f,i) =>
-        when (i.U > idx.value && i.U <= bpuPtr.value) {
+        when (i.U >= idx.value && i.U < bpuPtr.value) {
           // s3 redirect must clear from new ptr but the new ptr itself should be determined by s3 result
+          f := false.B
+        }
+      })
+
+      lpPred_flag.zipWithIndex.foreach({ case (f,i) =>
+        when (i.U >= idx.value && i.U < bpuPtr.value) {
           f := false.B
         }
       })
     } .otherwise {
       bpu_last_stage_writeback.zipWithIndex.foreach({ case (f,i) =>
-        when (i.U <= bpuPtr.value || i.U > idx.value) {
+        when (i.U < bpuPtr.value || i.U >= idx.value) {
+          f := false.B
+        }
+      })
+
+      lpPred_flag.zipWithIndex.foreach({ case (f,i) =>
+        when (i.U < bpuPtr.value || i.U >= idx.value) {
           f := false.B
         }
       })
@@ -1707,13 +1731,25 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
     val next_less_bpu = idx.value < bpuPtr.value
     when (next_less_bpu) {
       bpu_last_stage_writeback.zipWithIndex.foreach({ case (f,i) =>
-        when (i.U > idx.value && i.U <= bpuPtr.value) {
+        when (i.U > idx.value && i.U < bpuPtr.value) {
+          f := false.B
+        }
+      })
+
+      lpPred_flag.zipWithIndex.foreach({ case (f,i) =>
+        when(i.U > idx.value && i.U < bpuPtr.value) {
           f := false.B
         }
       })
     } .otherwise {
       bpu_last_stage_writeback.zipWithIndex.foreach({ case (f,i) =>
-        when (i.U <= bpuPtr.value || i.U > idx.value) {
+        when (i.U < bpuPtr.value || i.U > idx.value) {
+          f := false.B
+        }
+      })
+
+      lpPred_flag.zipWithIndex.foreach({ case (f,i) =>
+        when (i.U < bpuPtr.value || i.U > idx.value) {
           f := false.B
         }
       })
@@ -1908,14 +1944,19 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   loopMainCache.io.flush := loopCacheFlush
 
   loop_cache_hit := loopMainCache.io.l0_hit
-  when (loop_cache_redirect_scheduled && bpu_last_stage_writeback(loop_cache_redirect_scheduled_ptr.value)) {
+
+  when (loop_cache_redirect_scheduled && (loopMainCache.io.flushFromBpu.shouldFlushByStage2(loop_cache_redirect_scheduled_ptr) || loopMainCache.io.flushFromBpu.shouldFlushByStage3(loop_cache_redirect_scheduled_ptr))) {
+    loop_cache_redirect_scheduled := false.B
+  }.elsewhen (loop_cache_redirect_scheduled && bpu_last_stage_writeback(loop_cache_redirect_scheduled_ptr.value)) {
     loop_cache_redirect_scheduled := false.B
   }.elsewhen (loopMainCache.io.query.valid && loopMainCache.io.l0_redirect_scheduled) {
     loop_cache_redirect_scheduled := true.B
     loop_cache_redirect_scheduled_ptr := loopMainCache.io.query.bits.ftqPtr
   }
 
-  when (loopMainCache.io.toFtqRedirect.valid && loop_cache_redirect_wait_sent) {
+  when (loop_cache_redirect_wait_sent && (loopMainCache.io.flushFromBpu.shouldFlushByStage2(loop_cache_redirect_scheduled_ptr) || loopMainCache.io.flushFromBpu.shouldFlushByStage3(loop_cache_redirect_scheduled_ptr))) {
+    loop_cache_redirect_wait_sent := false.B
+  } .elsewhen (loopMainCache.io.toFtqRedirect.valid && loop_cache_redirect_wait_sent) {
     loop_cache_redirect_wait_sent := false.B
   } .elsewhen (loopMainCache.io.query.valid && loopMainCache.io.l0_redirect_scheduled) {
     loop_cache_redirect_wait_sent := true.B
