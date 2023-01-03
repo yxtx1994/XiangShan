@@ -461,6 +461,8 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule with HasBPU
     l2_hit := false.B
     io.out_entry.valid := false.B
     io.pd_valid := false.B
+    scheduled_redirect_valid := false.B
+    io.toFtqRedirect.valid := false.B
     // TODO: should cancel resp
   }
 }
@@ -594,7 +596,7 @@ class BpuBypass(implicit p: Parameters) extends XSModule with LoopPredictorParam
   val BypassLastStageInfo = Reg(new LastStageInfo)
   val BypassPtr = Reg(new FtqPtr)
 
-  when (RegNext(io.update.valid)) {
+  when (RegNext(io.update.valid && !io.redirect.valid) && !io.redirect.valid) {
     BypassSel := RegNext(true.B)
     BypassCnt := RegNext(io.update.bits.expected_loop_cnt)
     BypassTemplate := RegNext(io.update.bits.single_entry)
@@ -1702,10 +1704,11 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
 
   val loopCacheFlush = WireInit(false.B)
 
+  loopCacheFlush := backendRedirect.valid // ifu flush should not flush loop cache as well
   // when redirect, we should reset ptrs and status queues
   when(redirectVec.map(r => r.valid).reduce(_||_)){
     val r = PriorityMux(redirectVec.map(r => (r.valid -> r.bits)))
-    val notIfu = redirectVec.dropRight(2).map(r => r.valid).reduce(_||_)
+    val notIfu = redirectVec.dropRight(2).map(r => r.valid).reduce(_||_) // not portable but breaks comb loop
     val notLoop = redirectVec.dropRight(1).map(r => r.valid).reduce(_||_)
     val (idx, offset, flushItSelf) = (r.ftqIdx, r.ftqOffset, RedirectLevel.flushItself(r.level))
     val next = idx + 1.U
@@ -1715,7 +1718,7 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
     ifuWbPtr_write := next
     ifuPtrPlus1_write := idx + 2.U
     ifuPtrPlus2_write := idx + 3.U
-    loopCacheFlush := notIfu // ifu flush should not flush loop cache as well
+
     when (notIfu) {
       commitStateQueue(idx.value).zipWithIndex.foreach({ case (s, i) =>
         when(i.U > offset || i.U === offset && flushItSelf){
@@ -1945,7 +1948,9 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
 
   loop_cache_hit := loopMainCache.io.l0_hit
 
-  when (loop_cache_redirect_scheduled && (loopMainCache.io.flushFromBpu.shouldFlushByStage2(loop_cache_redirect_scheduled_ptr) || loopMainCache.io.flushFromBpu.shouldFlushByStage3(loop_cache_redirect_scheduled_ptr))) {
+  when (loopCacheFlush && loop_cache_redirect_scheduled) {
+    loop_cache_redirect_scheduled := false.B
+  } .elsewhen (loop_cache_redirect_scheduled && (loopMainCache.io.flushFromBpu.shouldFlushByStage2(loop_cache_redirect_scheduled_ptr) || loopMainCache.io.flushFromBpu.shouldFlushByStage3(loop_cache_redirect_scheduled_ptr))) {
     loop_cache_redirect_scheduled := false.B
   }.elsewhen (loop_cache_redirect_scheduled && bpu_last_stage_writeback(loop_cache_redirect_scheduled_ptr.value)) {
     loop_cache_redirect_scheduled := false.B
@@ -1954,7 +1959,9 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
     loop_cache_redirect_scheduled_ptr := loopMainCache.io.query.bits.ftqPtr
   }
 
-  when (loop_cache_redirect_wait_sent && (loopMainCache.io.flushFromBpu.shouldFlushByStage2(loop_cache_redirect_scheduled_ptr) || loopMainCache.io.flushFromBpu.shouldFlushByStage3(loop_cache_redirect_scheduled_ptr))) {
+  when (loop_cache_redirect_wait_sent && loopCacheFlush) {
+    loop_cache_redirect_wait_sent := false.B
+  } .elsewhen (loop_cache_redirect_wait_sent && (loopMainCache.io.flushFromBpu.shouldFlushByStage2(loop_cache_redirect_scheduled_ptr) || loopMainCache.io.flushFromBpu.shouldFlushByStage3(loop_cache_redirect_scheduled_ptr))) {
     loop_cache_redirect_wait_sent := false.B
   } .elsewhen (loopMainCache.io.toFtqRedirect.valid && loop_cache_redirect_wait_sent) {
     loop_cache_redirect_wait_sent := false.B
