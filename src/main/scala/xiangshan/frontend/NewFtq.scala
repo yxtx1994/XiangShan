@@ -126,6 +126,7 @@ class LoopCacheSpecInfo(implicit p: Parameters) extends XSBundle {
 class LoopCacheQuery(implicit p: Parameters) extends XSBundle with LoopPredictorParams {
   val pc = UInt(VAddrBits.W)
   val cfiValid = Bool()
+  val target = UInt(VAddrBits.W)
   val cfiIndex = UInt(log2Ceil(PredictWidth).W)
   val ftqPtr = new FtqPtr
 
@@ -244,7 +245,7 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule with HasBPU
   l0_data := DontCare
   l0_hit := false.B
   when (io.query.valid) {
-    when (cache_valid && io.query.bits.pc === cache_pc && io.query.bits.cfiValid /*&& io.query.bits.isConf*/) {
+    when (cache_valid && io.query.bits.pc === cache_pc && io.query.bits.cfiValid && io.query.bits.target === cache_pc /*&& io.query.bits.isConf*/) {
       l0_hit := true.B
       l0_data := cache_data
       prev_hit := true.B
@@ -1938,6 +1939,7 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   loopMainCache.io.query.bits.pc := io.toIfu.req.bits.startAddr
   loopMainCache.io.query.bits.cfiIndex := Mux(io.toIfu.req.bits.ftqOffset.valid, io.toIfu.req.bits.ftqOffset.bits, 0xfffffff.U)
   loopMainCache.io.query.bits.cfiValid := io.toIfu.req.bits.ftqOffset.valid
+  loopMainCache.io.query.bits.target := io.toIfu.req.bits.nextStartAddr
   loopMainCache.io.query.bits.ftqPtr := io.toIfu.req.bits.ftqIdx
   loopMainCache.io.query.bits.isInterNumGT2 := lpPredInfoArray(ifuPtr.value).isInterNumGT2
   loopMainCache.io.query.bits.isLoopExit := lpPredInfoArray(ifuPtr.value).isConfExitLoop

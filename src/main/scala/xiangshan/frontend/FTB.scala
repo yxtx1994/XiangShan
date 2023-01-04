@@ -123,6 +123,7 @@ class FtbSlot(val offsetLen: Int, val subOffsetLen: Option[Int] = None)(implicit
     this.sharing := (this.offsetLen > that.offsetLen && that.offsetLen == this.subOffsetLen.get).B
     this.valid := that.valid
     this.lower := ZeroExt(that.lower, this.offsetLen)
+    this.isRVC := that.isRVC
   }
   
 }
