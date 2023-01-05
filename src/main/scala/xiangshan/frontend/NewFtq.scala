@@ -245,7 +245,7 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule with HasBPU
   l0_data := DontCare
   l0_hit := false.B
   when (io.query.valid) {
-    when (cache_valid && io.query.bits.pc === cache_pc && io.query.bits.cfiValid && io.query.bits.target === cache_pc /*&& io.query.bits.isConf*/) {
+    when (cache_valid && io.query.bits.pc === cache_pc && io.query.bits.cfiValid && (io.query.bits.target === cache_pc || io.query.bits.isExit) /*&& io.query.bits.isConf*/) {
       l0_hit := true.B
       l0_data := cache_data
       prev_hit := true.B
@@ -257,7 +257,7 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule with HasBPU
   io.l0_hit := l0_hit
   l0_taken_pc := io.query.bits.pc + Cat(io.query.bits.cfiIndex, 0.U.asTypeOf(UInt(1.W)))
   
-  when (io.query.valid && l0_hit && !prev_hit && !l0_flush_by_bpu && !l0_flush_by_ifu) {
+  when (io.query.valid && l0_hit && !prev_hit && !l0_flush_by_bpu && !l0_flush_by_ifu && !io.flush && !io.fence.sfence_valid && !io.fence.fencei_valid) {
     // we are at the start of a new loop
     io.l0_redirect_scheduled := true.B
     l0_redirect_scheduled := true.B
@@ -450,7 +450,7 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule with HasBPU
   // io.pd_ftqIdx := RegNext(l2_ftqPtr)
   io.pd_data := RegNext(l2_pd)
   io.pd_data.ftqIdx := RegNext(l2_ftqPtr)
-  io.pd_data.instrRange := RegNext(VecInit((l2_pd.instrRange zip l2_valids).map{ case (range, valid) => range && valid}))
+  io.pd_data.instrRange := RegNext(l2_valids)// RegNext(VecInit((l2_pd.instrRange zip l2_valids).map{ case (range, valid) => range && valid}))
 
   /*
    * update
