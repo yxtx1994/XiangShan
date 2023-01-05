@@ -643,7 +643,7 @@ class BpuBypass(implicit p: Parameters) extends XSModule with LoopPredictorParam
 
 
 
-  BypassOut.resp.valid := BypassSel
+  BypassOut.resp.valid := BypassSel && !RegNext(io.update.valid)
   /* always provide s1 and s3 only data */
   BypassOut.resp.bits.s2 := DontCare
   BypassOut.resp.bits.s2.valid := VecInit(Seq.fill(numDup)(false.B))
@@ -651,6 +651,7 @@ class BpuBypass(implicit p: Parameters) extends XSModule with LoopPredictorParam
 
 
   BypassOut.resp.bits.s1 := BypassTemplate
+  BypassOut.resp.bits.s1.valid := BypassTemplate.valid.map(v => v && !RegNext(io.update.valid))
   BypassOut.resp.bits.s1.hasRedirect := VecInit(Seq.fill(numDup)(false.B))
   BypassOut.resp.bits.s1.isDouble := BypassCnt > 1.U && BypassTemplate.isDouble
 
