@@ -115,6 +115,9 @@ class BpuBypassIO(implicit p: Parameters) extends XSBundle {
 
   // redirect from ftq
   val redirect = Flipped(Valid(new FtqPtr))
+
+  // debug purpose only
+  val BpuPtr = Input(new FtqPtr)
 }
 
 class LoopCacheSpecInfo(implicit p: Parameters) extends XSBundle {
@@ -616,6 +619,7 @@ class BpuBypass(implicit p: Parameters) extends XSModule with LoopPredictorParam
   when (BypassSel && io.BpuOut.resp.fire) {
     BypassCnt := BypassCnt - Mux(BypassTemplate.isDouble && BypassCnt > 1.U, 2.U, 1.U)
     BypassPtr := BypassPtr + 1.U
+    XSError(io.BpuPtr =/= BypassPtr, "Bypass and Bpu ptr mismatch on handshake, could be error")
   }
 
   when (RegNext(RegNext(BypassSel && io.BpuOut.resp.fire))) {
@@ -1041,6 +1045,9 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
 
     val mmioCommitRead = Flipped(new mmioCommitRead)
     val fence = Input(new LoopCacheFenceBundle)
+
+    // debug purpose only
+    val BpuPtr = Output(new FtqPtr)
   })
   io.bpuInfo := DontCare
 
@@ -1095,6 +1102,8 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
     dontTouch(ptr)
   }
   val validEntries = distanceBetween(bpuPtr, commPtr)
+
+  io.BpuPtr := bpuPtr
 
   // **********************************************************************
   // **************************** enq from bpu ****************************
@@ -1818,6 +1827,8 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   // ****************************************************************
 
   io.toBpu.redirect <> Mux(fromBackendRedirect.valid, fromBackendRedirect, Mux(ifuRedirectToBpu.valid, ifuRedirectToBpu, fromLoopRedirectReg))
+
+  XSError(backendRedirect.valid && isBefore(backendRedirect.bits.ftqIdx, commPtr), "Backend redirect should not come from committed slot")
 
   val may_have_stall_from_bpu = Wire(Bool())
   val bpu_ftb_update_stall = RegInit(0.U(2.W)) // 2-cycle stall, so we need 3 states
