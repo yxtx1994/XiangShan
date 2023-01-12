@@ -244,7 +244,7 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule with HasBPU
   l0_pc := DontCare
   l0_data := DontCare
   l0_hit := false.B
-  when (io.query.valid) {
+  when (io.query.valid && io.query.ready) {
     when (cache_valid && io.query.bits.pc === cache_pc && io.query.bits.cfiValid && (io.query.bits.target === cache_pc || io.query.bits.isExit) /*&& io.query.bits.isConf*/) {
       l0_hit := true.B
       l0_data := cache_data
@@ -257,7 +257,7 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule with HasBPU
   io.l0_hit := l0_hit
   l0_taken_pc := io.query.bits.pc + Cat(io.query.bits.cfiIndex, 0.U.asTypeOf(UInt(1.W)))
   
-  when (io.query.valid && l0_hit && !prev_hit && !l0_flush_by_bpu && !l0_flush_by_ifu && !io.flush && !io.fence.sfence_valid && !io.fence.fencei_valid) {
+  when (io.query.valid && io.query.ready && l0_hit && !prev_hit && !l0_flush_by_bpu && !l0_flush_by_ifu && !io.flush && !io.fence.sfence_valid && !io.fence.fencei_valid) {
     // we are at the start of a new loop
     io.l0_redirect_scheduled := true.B
     l0_redirect_scheduled := true.B
@@ -1163,7 +1163,7 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   ftb_entry_mem.io.wdata(0) := io.fromBpu.resp.bits.last_stage_ftb_entry
   val lpPredInfo = WireDefault(0.U.asTypeOf(new xsLPpredInfo))
 
-  when (io.fromBpu.resp.bits.lastStage.valid(dupForFtq)) {
+  when (io.fromBpu.resp.bits.lastStage.valid(dupForFtq) && !io.toBpu.redirect.valid) {
     bpu_last_stage_writeback(io.fromBpu.resp.bits.lastStage.ftq_idx.value) := true.B
   }
 
@@ -1721,10 +1721,13 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
     val notLoop = redirectVec.dropRight(1).map(r => r.valid).reduce(_||_)
     val (idx, offset, flushItSelf) = (r.ftqIdx, r.ftqOffset, RedirectLevel.flushItself(r.level))
     val next = idx + 1.U
+    val isLoopRedirect = !redirectVec(0).valid && !redirectVec(1).valid
     bpuPtr := next
     copied_bpu_ptr.map(_ := next)
     ifuPtr_write := next
-    ifuWbPtr_write := next
+    when (!isLoopRedirect || isBefore(next, ifuWbPtr)) {
+      ifuWbPtr_write := next
+    }
     ifuPtrPlus1_write := idx + 2.U
     ifuPtrPlus2_write := idx + 3.U
 
