@@ -247,7 +247,11 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule with HasBPU
   l0_pc := DontCare
   l0_data := DontCare
   l0_hit := false.B
-  when (io.query.valid && io.query.ready) {
+
+  XSPerfAccumulate(f"loop_cache_query", io.query.fire)
+  XSPerfAccumulate(f"loop_cache_query_hit", io.query.fire && l0_hit)
+
+  when (io.query.fire) {
     when (cache_valid && io.query.bits.pc === cache_pc && io.query.bits.cfiValid && (io.query.bits.target === cache_pc || io.query.bits.isExit) /*&& io.query.bits.isConf*/) {
       l0_hit := true.B
       l0_data := cache_data
@@ -323,6 +327,7 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule with HasBPU
     io.toBypass.bits.last_stage_ftb_entry := last_stage_info_reg.last_stage_ftb_entry
     io.toBypass.bits.last_stage_spec_info := last_stage_info_reg.last_stage_spec_info
   }
+  XSPerfAccumulate(f"loop_cache_redirect_frontend", io.toFtqRedirect.valid)
   /*
   * l1: identify taken instruction position
   * */
@@ -359,6 +364,7 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule with HasBPU
   } .elsewhen (l1_fire || l1_flush_by_bpu || l1_flush_by_ifu) {
     l1_hit := false.B
   }
+
   val l1_pc_hit_pos = OHToUInt(l1_pc_hit)
 
   /*
@@ -447,7 +453,14 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule with HasBPU
   io.out_entry.bits.valids := l2_valids
   io.out_entry.bits.pd := l2_pd
   // TODO: adjust ftqptr
-  XSPerfAccumulate("loop_cache_spec_fill_hit", l2_hit);
+  XSPerfAccumulate(f"loop_cache_spec_fill_hit", io.out_entry.fire);
+  XSPerfAccumulate(f"loop_cache_provide_double", io.out_entry.fire && l2_isDouble)
+
+  XSPerfAccumulate(f"loop_cache_l0_flush_by_bpu", l0_fire && l0_flush_by_bpu)
+  XSPerfAccumulate(f"loop_cache_l0_flush_by_ifu", l0_fire && l0_flush_by_ifu)
+  XSPerfAccumulate(f"loop_cache_l1_flush_by_bpu", l1_hit && l1_flush_by_bpu)
+  XSPerfAccumulate(f"loop_cache_l1_flush_by_ifu", l1_hit && l1_flush_by_ifu)
+  XSPerfAccumulate(f"loop_cache_l2_flush_by_ifu", l2_hit && l2_flush_by_ifu)
 
   io.pd_valid := RegNext(l2_fire && !(io.fence.sfence_valid || io.fence.fencei_valid || io.flush || l2_flush_by_ifu))
   // io.pd_ftqIdx := RegNext(l2_ftqPtr)
@@ -464,6 +477,9 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule with HasBPU
     cache_data := io.update.bits.hit_data
     cache_pd := io.update.bits.pd
   }
+
+  XSPerfAccumulate(f"loop_cache_update", io.update.valid)
+
   when (io.fence.sfence_valid || io.fence.fencei_valid || io.flush) {
     cache_valid := false.B
     l1_hit := false.B
