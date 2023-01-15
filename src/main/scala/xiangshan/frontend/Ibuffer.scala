@@ -130,6 +130,12 @@ class Ibuffer(implicit p: Parameters) extends XSModule with HasCircularQueuePtrH
     ibuf.io.wen(i)   := io.in.bits.enqEnable(i) && io.in.fire && !io.flush
   }
 
+  /*
+  * Loop Cache Speculative fill
+  * Loop Cache records recent Ibuffer inbounds, despite its valid instruction range
+  * A valid ifu fetch data pack contains instruction data and predecode info not only in the valid fetch range
+  * Loop Cache makes use of this feature to avoid update data for packets with same start address
+  * */
   // val loopCacheInstSize = Vec(LoopCacheSpecSize, Reg(UInt(log2Ceil(LoopCacheMaxInst).W)))
   val loopCachePc = Reg(Vec(LoopCacheSpecSize, UInt(VAddrBits.W)))
   val loopCacheValid = RegInit(VecInit(Seq.fill(LoopCacheSpecSize)(0.B)))
@@ -208,12 +214,6 @@ class Ibuffer(implicit p: Parameters) extends XSModule with HasCircularQueuePtrH
     io.loop_out.update.bits.pd := Mux(Pdvalid && PdReg.ftqIdx === RegNext(io.in.bits.ftqPtr), PdReg, Mux(io.PdWb.valid && io.PdWb.bits.ftqIdx === RegNext(io.in.bits.ftqPtr), io.PdWb.bits, RegNext(io.PdWb.bits)))
     loop_refill_valid := false.B
   }
-  /*
-  io.loop_out.specReq.ready := loopCacheInstBody.io.r.req.ready
-  loopCacheInstBody.io.r.req.valid := io.loop_out.specReq.valid
-  loopCacheInstBody.io.r.req.bits.setIdx := io.loop_out.specReq.bits
-   */
-
 
   when (io.in.bits.valid.orR && !io.in.bits.is_loop && io.in.fire && !io.flush && !enqIsDup) {
     // fixme: proper conditions here

@@ -145,6 +145,7 @@ class FrontendImp (outer: Frontend) extends LazyModuleImp(outer)
   bpuBypass.io.BpuOut     <> ftq.io.fromBpu
   bpuBypass.io.redirect   := ftq.io.loopArbiterRedirect
   bpuBypass.io.update     := ftq.io.toBypass
+  bpuBypass.io.BpuPtr     <> ftq.io.BpuPtr
 
   ftq.io.mmioCommitRead   <> ifu.io.mmioCommitRead
   //IFU-ICache
