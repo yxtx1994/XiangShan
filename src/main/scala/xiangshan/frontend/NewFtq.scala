@@ -633,7 +633,7 @@ class BpuBypass(implicit p: Parameters) extends XSModule with LoopPredictorParam
     BypassOut.resp.bits.last_stage_spec_info := RegNext(RegNext(BypassLastStageInfo.last_stage_spec_info))
   }
 
-  when ((BypassSel && io.redirect.valid && isBefore(io.redirect.bits, BypassPtr)) || (BypassSel && io.BpuOut.resp.fire && (BypassCnt === 1.U || (BypassCnt === 2.U && BypassTemplate.isDouble)))) {
+  when ((BypassSel && io.redirect.valid && !isAfter(io.redirect.bits, BypassPtr)) || (BypassSel && io.BpuOut.resp.fire && (BypassCnt === 1.U || (BypassCnt === 2.U && BypassTemplate.isDouble)))) {
     BypassSel := false.B
   }
 
@@ -1385,9 +1385,11 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   val bpu_in_bypass_buf_for_ifu = bpu_in_bypass_buf
   val bpu_in_bypass_ptr = RegNext(bpu_in_resp_ptr)
   val last_cycle_to_ifu_fire = RegNext(io.toIfu.req.fire)
+  val last_cycle_to_loop_fire = RegNext(loopMainCache.io.req.fire && loopMainCache.io.l0_hit)
 
   val copied_bpu_in_bypass_ptr = VecInit(Seq.fill(copyNum)(RegNext(bpu_in_resp_ptr)))
   val copied_last_cycle_to_ifu_fire = VecInit(Seq.fill(copyNum)(RegNext(io.toIfu.req.fire)))
+  val copied_last_cycle_to_loop_fire = VecInit(Seq.fill(copyNum)(RegNext(loopMainCache.io.req.fire && loopMainCache.io.l0_hit)))
 
   // read pc and target
   ftq_pc_mem.io.ifuPtr_w       := ifuPtr_write
@@ -1417,7 +1419,7 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
     when(copied_last_cycle_bpu_in(i) && copied_bpu_in_bypass_ptr(i) === copied_ifu_ptr(i)){
       toICachePcBundle(i) := copied_bpu_in_bypass_buf(i)
       toICacheEntryToSend(i)   := true.B
-    }.elsewhen(copied_last_cycle_to_ifu_fire(i)){
+    }.elsewhen(copied_last_cycle_to_ifu_fire(i) || copied_last_cycle_to_loop_fire(i)){
       toICachePcBundle(i) := pc_mem_ifu_plus1_rdata(i)
       toICacheEntryToSend(i)   := copied_ifu_plus1_to_send(i)
     }.otherwise{
@@ -1433,7 +1435,7 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
     entry_next_addr := last_cycle_bpu_target
     entry_ftq_offset := last_cycle_cfiIndex
     diff_entry_next_addr := last_cycle_bpu_target // TODO: remove this
-  }.elsewhen (last_cycle_to_ifu_fire) {
+  }.elsewhen (last_cycle_to_ifu_fire || last_cycle_to_loop_fire) {
     toIfuPcBundle := RegNext(ftq_pc_mem.io.ifuPtrPlus1_rdata)
     entry_is_to_send := RegNext(entry_fetch_status(ifuPtrPlus1.value) === f_to_send) ||
                         RegNext(last_cycle_bpu_in && bpu_in_bypass_ptr === (ifuPtrPlus1)) // reduce potential bubbles
@@ -1460,12 +1462,12 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   }
 
 
-  io.toIfu.req.valid := should_send_req && !loop_cache_hit && !RegNext(loopMainCache.io.req.valid && loop_cache_hit)
+  io.toIfu.req.valid := should_send_req && !loop_cache_hit //&& !RegNext(loopMainCache.io.req.valid && loop_cache_hit)
   io.toIfu.req.bits.nextStartAddr := entry_next_addr
   io.toIfu.req.bits.ftqOffset := entry_ftq_offset
   io.toIfu.req.bits.fromFtqPcBundle(toIfuPcBundle)
 
-  io.toICache.req.valid := should_send_req && !loop_cache_hit && !RegNext(loopMainCache.io.req.valid && loop_cache_hit)
+  io.toICache.req.valid := should_send_req && !loop_cache_hit //&& !RegNext(loopMainCache.io.req.valid && loop_cache_hit)
   io.toICache.req.bits.readValid.zipWithIndex.map{case(copy, i) => copy := toICacheEntryToSend(i) && copied_ifu_ptr(i) =/= copied_bpu_ptr(i)}
   io.toICache.req.bits.pcMemRead.zipWithIndex.map{case(copy,i) => copy.fromFtqPcBundle(toICachePcBundle(i))}
   // io.toICache.req.bits.bypassSelect := last_cycle_bpu_in && bpu_in_bypass_ptr === ifuPtr
@@ -1961,7 +1963,7 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   update.from_stage  := commit_stage
   update.spec_info   := commit_spec_meta
 
-  loopMainCache.io.req.valid := entry_is_to_send && ifuPtr =/= bpuPtr && !RegNext(loopMainCache.io.req.valid && loop_cache_hit) && !loop_cache_redirect_wait_sent && lpPred_flag(ifuPtr.value)
+  loopMainCache.io.req.valid := entry_is_to_send && ifuPtr =/= bpuPtr /*&& !RegNext(loopMainCache.io.req.valid && loop_cache_hit)*/ && !loop_cache_redirect_wait_sent && lpPred_flag(ifuPtr.value)
   loopMainCache.io.req.bits.pc := io.toIfu.req.bits.startAddr
   loopMainCache.io.req.bits.cfiIndex := Mux(io.toIfu.req.bits.ftqOffset.valid, io.toIfu.req.bits.ftqOffset.bits, 0xfffffff.U)
   loopMainCache.io.req.bits.cfiValid := io.toIfu.req.bits.ftqOffset.valid
