@@ -221,7 +221,7 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule with HasBPU
   val l0_taken_pc = Wire(UInt(VAddrBits.W))
   val l0_is_exit = io.req.bits.lpInfo.isConfExitLoop
   val l0_isInterNumGT2 = io.req.bits.lpInfo.isInterNumGT2
-  val l0_remainIterNum = io.req.bits.lpInfo.remainIterNum // FIXME: provide data from loop predictor
+  val l0_remainIterNum = 1000.U // io.req.bits.lpInfo.remainIterNum // FIXME: provide data from loop predictor
   val l0_flush_by_bpu = io.flushFromBpuIfu.shouldFlushByStage2(io.req.bits.ftqPtr) || io.flushFromBpuIfu.shouldFlushByStage3(io.req.bits.ftqPtr)
   val l0_flush_by_ifu = io.flushFromBpuIfu.shouldFlushByIfu(io.req.bits.ftqPtr)
   val prev_hit = RegInit(0.B)
@@ -633,7 +633,7 @@ class BpuBypass(implicit p: Parameters) extends XSModule with LoopPredictorParam
     BypassOut.resp.bits.last_stage_spec_info := RegNext(RegNext(BypassLastStageInfo.last_stage_spec_info))
   }
 
-  when ((BypassSel && io.redirect.valid && !isAfter(io.redirect.bits, BypassPtr)) || (BypassSel && io.BpuOut.resp.fire && (BypassCnt === 1.U || (BypassCnt === 2.U && BypassTemplate.isDouble)))) {
+  when ((BypassSel && io.redirect.valid && !isAfter(io.redirect.bits, BypassPtr)) || (BypassSel && BypassCnt === 0.U/*(BypassCnt === 1.U || (BypassCnt === 2.U && BypassTemplate.isDouble))*/)) {
     BypassSel := false.B
   }
 
@@ -651,7 +651,7 @@ class BpuBypass(implicit p: Parameters) extends XSModule with LoopPredictorParam
 
 
 
-  BypassOut.resp.valid := BypassSel && !RegNext(io.update.valid)
+  BypassOut.resp.valid := BypassSel && !RegNext(io.update.valid) && !(BypassCnt === 0.U)
   /* always provide s1 and s3 only data */
   BypassOut.resp.bits.s2 := DontCare
   BypassOut.resp.bits.s2.valid := VecInit(Seq.fill(numDup)(false.B))
@@ -659,7 +659,7 @@ class BpuBypass(implicit p: Parameters) extends XSModule with LoopPredictorParam
 
 
   BypassOut.resp.bits.s1 := BypassTemplate
-  BypassOut.resp.bits.s1.valid := BypassTemplate.valid.map(v => v && !RegNext(io.update.valid))
+  BypassOut.resp.bits.s1.valid := BypassTemplate.valid.map(v => v && !RegNext(io.update.valid) && !(BypassCnt === 0.U))
   BypassOut.resp.bits.s1.hasRedirect := VecInit(Seq.fill(numDup)(false.B))
   BypassOut.resp.bits.s1.isDouble := BypassCnt > 1.U && BypassTemplate.isDouble
 
@@ -677,11 +677,11 @@ class BpuBypass(implicit p: Parameters) extends XSModule with LoopPredictorParam
   * */
   io.BpuOut.resp.valid  := Mux(BypassSel, BypassOut.resp.valid, io.BpuIn.resp.valid)
   io.BpuOut.resp.bits.s1 := Mux(BypassSel, BypassOut.resp.bits.s1, io.BpuIn.resp.bits.s1)
-  io.BpuOut.resp.bits.s2 := Mux(RegNext(BypassSel, init = false.B), BypassOut.resp.bits.s2, io.BpuIn.resp.bits.s2)
-  io.BpuOut.resp.bits.s3 := Mux(RegNext(RegNext(BypassSel, init = false.B), init = false.B), BypassOut.resp.bits.s3, io.BpuIn.resp.bits.s3)
-  io.BpuOut.resp.bits.last_stage_ftb_entry := Mux(RegNext(RegNext(BypassSel, init = false.B), init = false.B), BypassOut.resp.bits.last_stage_ftb_entry, io.BpuIn.resp.bits.last_stage_ftb_entry)
-  io.BpuOut.resp.bits.last_stage_meta := Mux(RegNext(RegNext(BypassSel, init = false.B), init = false.B), BypassOut.resp.bits.last_stage_meta, io.BpuIn.resp.bits.last_stage_meta)
-  io.BpuOut.resp.bits.last_stage_spec_info := Mux(RegNext(RegNext(BypassSel, init = false.B), init = false.B), BypassOut.resp.bits.last_stage_spec_info, io.BpuIn.resp.bits.last_stage_spec_info)
+  io.BpuOut.resp.bits.s2 := Mux(BypassSel, BypassOut.resp.bits.s2, io.BpuIn.resp.bits.s2)
+  io.BpuOut.resp.bits.s3 := Mux(RegNext(BypassSel, init = false.B), BypassOut.resp.bits.s3, io.BpuIn.resp.bits.s3)
+  io.BpuOut.resp.bits.last_stage_ftb_entry := Mux(RegNext(BypassSel, init = false.B), BypassOut.resp.bits.last_stage_ftb_entry, io.BpuIn.resp.bits.last_stage_ftb_entry)
+  io.BpuOut.resp.bits.last_stage_meta := Mux(RegNext(BypassSel, init = false.B), BypassOut.resp.bits.last_stage_meta, io.BpuIn.resp.bits.last_stage_meta)
+  io.BpuOut.resp.bits.last_stage_spec_info := Mux(RegNext(BypassSel, init = false.B), BypassOut.resp.bits.last_stage_spec_info, io.BpuIn.resp.bits.last_stage_spec_info)
   io.BpuIn.resp.ready := Mux(BypassSel, false.B, io.BpuOut.resp.ready)
 }
 
