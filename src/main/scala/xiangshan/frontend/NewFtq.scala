@@ -324,7 +324,7 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule with HasBPU
     io.toBypass.bits.expected_loop_cnt := scheduled_counter// fixme with actual count
     io.toBypass.bits.single_entry := scheduled_bpu_resp
     io.toBypass.bits.single_entry.ftq_idx := scheduled_redirect.ftqIdx
-    io.toBypass.bits.single_entry.isDouble := scheduled_bpu_resp.full_pred(dupForFtq).cfiIndex.bits < (PredictWidth / 2).U
+    io.toBypass.bits.single_entry.isDouble := false.B // scheduled_bpu_resp.full_pred(dupForFtq).cfiIndex.bits < (PredictWidth / 2).U
     io.toBypass.bits.last_stage_meta := last_stage_info_reg.last_stage_meta
     io.toBypass.bits.last_stage_ftb_entry := last_stage_info_reg.last_stage_ftb_entry
     io.toBypass.bits.last_stage_spec_info := last_stage_info_reg.last_stage_spec_info
@@ -639,7 +639,7 @@ class BpuBypass(implicit p: Parameters) extends XSModule with LoopPredictorParam
   }
 
   when (RegNext(io.update.valid && !io.redirect.valid) && !io.redirect.valid) {
-    BypassSel := RegNext(true.B)
+    BypassSel := true.B
     BypassCnt := RegNext(io.update.bits.expected_loop_cnt)
     BypassTemplate := RegNext(io.update.bits.single_entry)
     // should start at next entry
