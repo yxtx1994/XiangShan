@@ -258,7 +258,7 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule with HasBPU
 
   val loop_lowerbound = WireInit(20.U)
   when (io.req.fire) {
-    when (cache_valid && io.req.bits.pc === cache_pc && io.req.bits.cfiValid && (io.req.bits.target === cache_pc || io.req.bits.isExit) && l0_remainIterNum > loop_lowerbound /*&& io.query.bits.isConf*/) {
+    when (cache_valid && io.req.bits.pc === cache_pc && io.req.bits.cfiValid && (io.req.bits.target === cache_pc || io.req.bits.isExit) && io.req.bits.lpInfo.isConf && l0_remainIterNum > 0.U /*&& io.query.bits.isConf*/) {
       l0_hit := true.B
       l0_data := cache_data
       prev_hit := true.B
@@ -668,6 +668,8 @@ class BpuBypass(implicit p: Parameters) extends XSModule with LoopPredictorParam
 
   when (BypassCnt === 1.U || (BypassCnt === 2.U && BypassTemplate.isDouble)) {
     BypassOut.resp.bits.s1.isExit := true.B
+  } .otherwise {
+    BypassOut.resp.bits.s1.isExit := false.B
   }
 
 
