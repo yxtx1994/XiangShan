@@ -221,7 +221,7 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule with HasBPU
   val l0_taken_pc = Wire(UInt(VAddrBits.W))
   val l0_is_exit = io.req.bits.lpInfo.isConfExitLoop
   val l0_isInterNumGT2 = io.req.bits.lpInfo.isInterNumGT2
-  val l0_remainIterNum = io.req.bits.lpInfo.remainIterNum // FIXME: provide data from loop predictor
+  val l0_remainIterNum = io.req.bits.lpInfo.remainIterNum + 1.U // FIXME: provide data from loop predictor
   val l0_flush_by_bpu = io.flushFromBpuIfu.shouldFlushByStage2(io.req.bits.ftqPtr) || io.flushFromBpuIfu.shouldFlushByStage3(io.req.bits.ftqPtr)
   val l0_flush_by_ifu = io.flushFromBpuIfu.shouldFlushByIfu(io.req.bits.ftqPtr)
   val prev_hit = RegInit(0.B)
@@ -258,7 +258,7 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule with HasBPU
 
   val loop_lowerbound = WireInit(20.U)
   when (io.req.fire) {
-    when (cache_valid && io.req.bits.pc === cache_pc && io.req.bits.cfiValid && (io.req.bits.target === cache_pc || io.req.bits.isExit) && io.req.bits.lpInfo.isConf && l0_remainIterNum > 0.U /*&& io.query.bits.isConf*/) {
+    when (cache_valid && io.req.bits.pc === cache_pc && io.req.bits.cfiValid && (io.req.bits.target === cache_pc || io.req.bits.isExit) && io.req.bits.lpInfo.isConf /*&& io.query.bits.isConf*/) {
       l0_hit := true.B
       l0_data := cache_data
       prev_hit := true.B
