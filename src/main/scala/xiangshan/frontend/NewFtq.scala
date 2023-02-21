@@ -2134,46 +2134,120 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
 
 
   // lp
-  def getLPmetaIdx(pc: UInt) = pc(instOffsetBits+6-1, instOffsetBits)
+  // def getLPmetaIdx(pc: UInt) = pc(instOffsetBits+6-1, instOffsetBits)
+  class xsLPpredInfo(implicit p: Parameters) extends XSBundle with LoopPredictorParams {
+    val isConfExitLoop = Output(Bool())
+    val target         = Output(UInt(VAddrBits.W))
+    val isInterNumGT2  = Output(Bool())
+    val remainIterNum  = Output(UInt(cntBits.W))
+    val isConf         = Output(Bool())
+  }
 
   val xsLP = Module(new XSLoopPredictor)
   xsLP.io.lpEna := true.B
   
-  xsLP.io.pred.valid := last_cycle_bpu_in
-  xsLP.io.pred.pc    := RegNext(io.fromBpu.resp.bits.lastStage.pc(dupForFtq) + Cat(io.fromBpu.resp.bits.lastStage.full_pred(dupForFtq).offsets(0), 0.U.asTypeOf(UInt(1.W))))
-  //xsLP.io.pred.pc    := Cat(RegNext(bpu_in_resp.full_pred(0).offsets(0)), 0.U.asTypeOf(UInt(1.W)))
-
+  val lpStage = io.fromBpu.resp.bits.lastStage
+  val lpWriteSramEna = last_cycle_bpu_in //  lpStage.valid(dupForFtq) // 
+  val lpWriteSramIdx = last_cycle_bpu_in_ptr.value // lpStage.ftq_idx.value // 
+  
+  xsLP.io.pred.valid := lpWriteSramEna 
+  xsLP.io.pred.pc    := RegNext(bpu_in_resp.pc(dupForFtq)) // lpStage.pc(dupForFtq) // 
+    /*RegNext(bpu_in_resp.pc(dupForFtq) + 
+                        ((bpu_in_resp.full_pred(dupForFtq).offsets(0)) << 1))*/
+  
   val lpMetaSram = Module(new FtqNRSRAM(new LPmeta, 1))
-  val lpMetaWriteIdx = getLPmetaIdx(xsLP.io.pred.pc)
-  lpMetaSram.io.wen   := commit_ftb_entry.valid
-  lpMetaSram.io.waddr := lpMetaWriteIdx
+  lpMetaSram.io.wen   := lpWriteSramEna
+  lpMetaSram.io.waddr := lpWriteSramIdx
   lpMetaSram.io.wdata := xsLP.io.pred.meta
 
-  
-  
-  lpPredInfo.isConfExitLoop :=  xsLP.io.pred.isConfExitLoop
+  lpPredInfo.isConfExitLoop := xsLP.io.pred.isConfExitLoop
   lpPredInfo.target         := xsLP.io.pred.target
   lpPredInfo.isInterNumGT2  := xsLP.io.isInterNumGT2
   lpPredInfo.remainIterNum  := xsLP.io.pred.remainIterNum
   lpPredInfo.isConf         := xsLP.io.pred.isConf
+
   when(xsLP.io.pred.valid) {
-    lpPredInfoArray(last_cycle_bpu_in_ptr.value) := lpPredInfo
-    lpPred_flag(last_cycle_bpu_in_ptr.value) := true.B
+    lpPredInfoArray(lpWriteSramIdx) := lpPredInfo
+    lpPred_flag(lpWriteSramIdx)     := true.B
   }
 
 
-  val lpMetaReadIdx = getLPmetaIdx(xsLP.io.update.pc)
-  lpMetaSram.io.ren(0)   := canCommit
-  lpMetaSram.io.raddr(0) := lpMetaReadIdx
+  val lpRdrctSram = Module(new FtqNRSRAM(new lpRedirectInfo, 1))
+  lpRdrctSram.io.wen   := lpWriteSramEna
+  lpRdrctSram.io.waddr := lpWriteSramIdx
+  lpRdrctSram.io.wdata := xsLP.io.pred.lpInfo
+
+  lpRdrctSram.io.ren(0)   := backendRedirect.valid
+  lpRdrctSram.io.raddr(0) := backendRedirect.bits.ftqIdx.value
+  val lpInfo = lpRdrctSram.io.rdata(0)
+
+  xsLP.io.redirect.valid := 
+    (lpInfo.isLPpred && backendRedirectReg.bits.cfiUpdate.taken  && lpInfo.isPredNotTaken && 
+     ((backendRedirectReg.bits.cfiUpdate.pc - lpInfo.startPC) < 16.U) && backendRedirectReg.valid) ||
+    (lpInfo.isLPpred && !backendRedirectReg.bits.cfiUpdate.taken && lpInfo.isPredTaken && 
+     ((backendRedirectReg.bits.cfiUpdate.pc - lpInfo.startPC) < 16.U) && backendRedirectReg.valid)
+  xsLP.io.redirect.lpInfo := lpInfo
+
+  when(backendRedirectReg.valid) {
+    printf("xs-redirect pc: %x; startPC: %x; taken: %d; lp-taken: %d; " +
+      "lp-pred: %d; lp-notTaken: %d; specCnt: %d; lp-rdrct-valid: %d; " +
+      "pred-debugCnt: %d;\n",
+    backendRedirectReg.bits.cfiUpdate.pc, lpInfo.startPC, 
+    backendRedirectReg.bits.cfiUpdate.taken, lpInfo.isPredTaken, 
+    lpInfo.isLPpred, lpInfo.isPredNotTaken,
+    lpInfo.predSpecCnt, xsLP.io.redirect.valid, 
+    lpInfo.debugCnt)
+  }
+
+
+  lpMetaSram.io.ren(0)   := true.B //canCommit // 
+  lpMetaSram.io.raddr(0) := commPtr.value 
   val lpUpdateMeta        = lpMetaSram.io.rdata(0)
 
-  xsLP.io.update.valid        := commit_valid && do_commit
-  xsLP.io.update.pc           := commit_pc_bundle.startAddr + 
-                                 (commit_ftb_entry.brSlots(0).offset << 1)
+  xsLP.io.update.valid        := commit_valid && do_commit // do_commit // 
+  xsLP.io.update.pc           := commit_pc_bundle.startAddr //+ 
+                                //  (commit_ftb_entry.brSlots(0).offset << 1)
   xsLP.io.update.meta         := lpUpdateMeta
   xsLP.io.update.taken        := ftbEntryGen.taken_mask(0)
   xsLP.io.update.isLoopBranch := commit_is_loop
   xsLP.io.update.target       := commit_target
+
+  when(xsLP.io.pred.valid) {
+    printf("xs-pred  meta waddr: %d; pc: %x; startPC: %x; offset: %x; " +
+      "isLPpred: %d; isNotExitLoop: %d; " +
+      "isExitLoop: %d; isConfNotExitLoop: %d; " +
+      "isConfExitLoop: %d; specCnt: %d; tripCnt: %d; " +
+      "debugCnt: %d\n",
+    lpMetaSram.io.waddr, xsLP.io.pred.pc, 
+    RegNext(bpu_in_resp.pc(dupForFtq)), 
+    RegNext(bpu_in_resp.full_pred(dupForFtq).offsets(0)),
+    xsLP.io.pred.meta.isLPpred,       xsLP.io.pred.meta.isNotExitLoop,
+    xsLP.io.pred.meta.isExitLoop,     xsLP.io.pred.meta.isConfNotExitLoop,
+    xsLP.io.pred.meta.isConfExitLoop, xsLP.io.pred.meta.specCnt,    
+    xsLP.io.pred.meta.tripCnt, xsLP.io.pred.meta.debugCnt)
+  }
+  
+  val updateMispred = (lpUpdateMeta.isLPpred && 
+                       lpUpdateMeta.isExitLoop && ftbEntryGen.taken_mask(0)) || 
+                      (lpUpdateMeta.isLPpred && 
+                       lpUpdateMeta.isNotExitLoop && !ftbEntryGen.taken_mask(0))
+  when(xsLP.io.update.valid) {
+    printf("xs-update pc: %x; meta raddr: %d; " +
+      "startPC: %x; offset: %d; " +
+      "is-loop: %d; isLPpred: %d; isNotExitLoop: %d; " +
+      "isExitLoop: %d; isConfNotExitLoop: %d; " +
+      "isConfExitLoop: %d; specCnt: %d; tripCnt: %d; " +
+      "taken: %d; target: %x; mispred: %d; debugCnt: %d\n",
+    xsLP.io.update.pc, RegNext(commPtr.value),
+    commit_pc_bundle.startAddr, 
+    commit_ftb_entry.brSlots(0).offset, commit_is_loop,
+    lpUpdateMeta.isLPpred,       lpUpdateMeta.isNotExitLoop,
+    lpUpdateMeta.isExitLoop,     lpUpdateMeta.isConfNotExitLoop,
+    lpUpdateMeta.isConfExitLoop, lpUpdateMeta.specCnt,
+    lpUpdateMeta.tripCnt, xsLP.io.update.taken,
+    xsLP.io.update.target, updateMispred, lpUpdateMeta.debugCnt)
+  }
+  
 
   
   
