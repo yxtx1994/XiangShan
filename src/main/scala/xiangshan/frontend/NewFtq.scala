@@ -2228,6 +2228,11 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
     p"brInEntry(${inFtbEntry}) brIdx(${brIdx}) target(${Hexadecimal(target)})\n")
   }
 
+  
+  val arbiter_post = Wire(Vec(FtqSize, Bool()))
+  arbiter_post.zipWithIndex.map{ case (a, i) => a := (if (i == FtqSize - 1) {arbiter_flag(0.U)} else {arbiter_flag((i + 1).U)})}
+  
+
   val enq = io.fromBpu.resp
   val perf_redirect = backendRedirect
 
@@ -2242,6 +2247,10 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   XSPerfAccumulate("to_ifu_stall", io.toIfu.req.valid && !io.toIfu.req.ready)
   XSPerfAccumulate("from_bpu_real_bubble", !enq.valid && enq.ready && allowBpuIn)
   XSPerfAccumulate("bpu_to_ifu_bubble", bpuPtr === ifuPtr)
+  val lc_exit_early = WireInit(perf_redirect.valid && arbiter_flag(perf_redirect.bits.ftqIdx.value) && !arbiter_post(perf_redirect.bits.ftqIdx.value))
+  val lc_exit_late = WireInit(perf_redirect.valid && arbiter_flag(perf_redirect.bits.ftqIdx.value) && arbiter_post(perf_redirect.bits.ftqIdx.value))
+  XSPerfAccumulate("lc_block_redirect", lc_exit_late)
+  XSPerfAccumulate("lc_exit_early_redirect", lc_exit_early)
 
   val from_bpu = io.fromBpu.resp.bits
   def in_entry_len_map_gen(resp: BpuToFtqBundle)(stage: String) = {
