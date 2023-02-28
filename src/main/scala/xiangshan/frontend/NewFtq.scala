@@ -2249,8 +2249,9 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   XSPerfAccumulate("bpu_to_ifu_bubble", bpuPtr === ifuPtr)
   val lc_exit_early = WireInit(perf_redirect.valid && arbiter_flag(perf_redirect.bits.ftqIdx.value) && !arbiter_post(perf_redirect.bits.ftqIdx.value))
   val lc_exit_late = WireInit(perf_redirect.valid && arbiter_flag(perf_redirect.bits.ftqIdx.value) && arbiter_post(perf_redirect.bits.ftqIdx.value))
-  XSPerfAccumulate("lc_block_redirect", lc_exit_late)
+  XSPerfAccumulate("lc_exit_late_redirect", lc_exit_late)
   XSPerfAccumulate("lc_exit_early_redirect", lc_exit_early)
+  XSPerfAccumulate("lc_all_takeover", loopMainCache.io.toFtqRedirect.valid)
 
   val from_bpu = io.fromBpu.resp.bits
   def in_entry_len_map_gen(resp: BpuToFtqBundle)(stage: String) = {
