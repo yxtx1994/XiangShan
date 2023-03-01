@@ -11,7 +11,7 @@ trait LoopPredictorParams extends HasXSParameter with HasBPUParameter {
   val nRows = 32
   val idxLen = log2Up(nRows)
   val tagLen = VAddrBits - (idxLen + instOffsetBits)
-  val cntBits = 10
+  val cntBits = 32
   val confBits = 1
 
   def maxConf = 1.U
@@ -298,13 +298,11 @@ class LoopPredictor(implicit p: Parameters) extends XSModule with LoopPredictorP
   when(setTripCnt) {
     updtLTBwriteEntry.tripCnt := io.update.predSpecCnt - updtCSCAreadEntry.spcCnt
     updtLTBwriteEntry.conf    := 1.U 
-
   }
 
   ltb.io.update.writeEna := updtLTBwena
   ltb.io.update.writeIdx := updtLTBidx
   ltb.io.update.writeEntry := Mux(updtIsAllocEntry, updtAllocEntry, updtLTBwriteEntry)
-
 }
 
 
