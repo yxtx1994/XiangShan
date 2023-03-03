@@ -686,6 +686,7 @@ class BpuBypass(implicit p: Parameters) extends XSModule with LoopPredictorParam
   io.BpuOut.resp.bits.last_stage_meta := Mux(RegNext(BypassSel, init = false.B), BypassOut.resp.bits.last_stage_meta, io.BpuIn.resp.bits.last_stage_meta)
   io.BpuOut.resp.bits.last_stage_spec_info := Mux(RegNext(BypassSel, init = false.B), BypassOut.resp.bits.last_stage_spec_info, io.BpuIn.resp.bits.last_stage_spec_info)
   io.BpuIn.resp.ready := Mux(BypassSel, false.B, io.BpuOut.resp.ready)
+  XSPerfAccumulate("lc_bypass_pred", io.BpuOut.resp.fire() && BypassSel)
 }
 
 class Ftq_pd_Entry(implicit p: Parameters) extends XSBundle {
