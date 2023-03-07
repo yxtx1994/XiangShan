@@ -396,6 +396,12 @@ class Predictor(implicit p: Parameters) extends XSModule with HasBPUConst with H
   io.bpu_to_ftq.resp.bits.last_stage_spec_info.histPtr     := s3_ghist_ptr_dup(2)
   io.bpu_to_ftq.resp.bits.last_stage_spec_info.lastBrNumOH := s3_last_br_num_oh_dup(2)
   io.bpu_to_ftq.resp.bits.last_stage_spec_info.afhob       := s3_ahead_fh_oldest_bits_dup(2)
+  io.bpu_to_ftq.resp.bits.s1.fromBypass                    := false.B
+  io.bpu_to_ftq.resp.bits.s2.fromBypass                    := false.B
+  io.bpu_to_ftq.resp.bits.s3.fromBypass                    := false.B
+  io.bpu_to_ftq.resp.bits.s1.remainCnt                     := 0.U
+  io.bpu_to_ftq.resp.bits.s2.remainCnt                     := 0.U
+  io.bpu_to_ftq.resp.bits.s3.remainCnt                     := 0.U
 
   npcGen_dup.zip(s0_pc_reg_dup).map{ case (gen, reg) =>
     gen.register(true.B, reg, Some("stallPC"), 0)}

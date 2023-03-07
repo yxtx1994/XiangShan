@@ -663,6 +663,8 @@ class BpuBypass(implicit p: Parameters) extends XSModule with LoopPredictorParam
   BypassOut.resp.bits.s1.valid := BypassTemplate.valid.map(v => v && !RegNext(io.update.valid) && !(BypassCnt === 0.U))
   BypassOut.resp.bits.s1.hasRedirect := VecInit(Seq.fill(numDup)(false.B))
   BypassOut.resp.bits.s1.isDouble := BypassCnt > 1.U && BypassTemplate.isDouble
+  BypassOut.resp.bits.s1.fromBypass := true.B
+  BypassOut.resp.bits.s1.remainCnt := BypassCnt
 
   BypassOut.resp.bits.s1.ftq_idx := BypassPtr
 
@@ -687,6 +689,11 @@ class BpuBypass(implicit p: Parameters) extends XSModule with LoopPredictorParam
   io.BpuOut.resp.bits.last_stage_spec_info := Mux(RegNext(BypassSel, init = false.B), BypassOut.resp.bits.last_stage_spec_info, io.BpuIn.resp.bits.last_stage_spec_info)
   io.BpuIn.resp.ready := Mux(BypassSel, false.B, io.BpuOut.resp.ready)
   XSPerfAccumulate("lc_bypass_pred", io.BpuOut.resp.fire() && BypassSel)
+  XSPerfAccumulate("lc_bypass_pred_double", io.BpuOut.resp.fire() && BypassSel && io.BpuOut.resp.bits.s1.isDouble)
+  XSPerfAccumulate("lc_bypass_pred_single", io.BpuOut.resp.fire() && BypassSel && !io.BpuOut.resp.bits.s1.isDouble)
+
+  XSDebug(io.BpuOut.resp.fire() && BypassSel, p"BypassPred: PC: ${Hexadecimal(io.BpuOut.resp.bits.s1.pc(0))} remainCnt: ${BypassCnt} isDouble: ${io.BpuOut.resp.bits.s1.isDouble} is Exit: ${io.BpuOut.resp.bits.s1.isExit} Pred: ${io.BpuOut.resp.bits.s1.full_pred}\n")
+
 }
 
 class Ftq_pd_Entry(implicit p: Parameters) extends XSBundle {
@@ -1023,7 +1030,7 @@ class FtqPcMemWrapper(numOtherReads: Int)(implicit p: Parameters) extends XSModu
 
 class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelper
   with HasBackendRedirectInfo with BPUUtils with HasBPUConst with HasPerfEvents
-  with HasICacheParameters{
+  with HasICacheParameters with LoopPredictorParams {
   val io = IO(new Bundle {
     val fromBpu = Flipped(new BpuToFtqIO)
     val fromIfu = Flipped(new IfuToFtqIO)
@@ -1193,11 +1200,15 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   val lpPred_flag = RegInit(VecInit(Seq.fill(FtqSize)(0.B)))
   val isDouble = RegInit(VecInit(Seq.fill(FtqSize)(0.B)))
   val isExit = RegInit(VecInit(Seq.fill(FtqSize)(0.B)))
+  val isBypass = RegInit(VecInit(Seq.fill(FtqSize)(0.B)))
+  val bypassCnt = Reg(Vec(FtqSize, UInt(cntBits.W)))
 
   // isDouble can only be set to true when Bypass provide prediction result at s3
   when (bpu_in_fire) {
     isDouble(bpu_in_resp_idx) := bpu_in_resp.isDouble
     isExit(bpu_in_resp_idx) := bpu_in_resp.isExit
+    isBypass(bpu_in_resp_idx) := bpu_in_resp.fromBypass
+    bypassCnt(bpu_in_resp_idx) := bpu_in_resp.remainCnt
   }
 
   // 1: loop 0: ifu
@@ -2253,6 +2264,14 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   XSPerfAccumulate("lc_exit_late_redirect", lc_exit_late)
   XSPerfAccumulate("lc_exit_early_redirect", lc_exit_early)
   XSPerfAccumulate("lc_all_takeover", loopMainCache.io.toFtqRedirect.valid)
+  XSPerfAccumulate("lc_bypass_commit", do_commit && isBypass(do_commit_ptr.value))
+  XSPerfAccumulate("lc_bypass_commit_double", do_commit && isBypass(do_commit_ptr.value) && isDouble(do_commit_ptr.value))
+  XSPerfAccumulate("lc_bypass_commit_single", do_commit && isBypass(do_commit_ptr.value) && !isDouble(do_commit_ptr.value))
+  XSPerfAccumulate("lc_bypass_redirect", fromBackendRedirect.valid && isBypass(fromBackendRedirect.bits.ftqIdx.value))
+  XSPerfAccumulate("lc_bypass_redirect_double", fromBackendRedirect.valid && isBypass(fromBackendRedirect.bits.ftqIdx.value) && isDouble(fromBackendRedirect.bits.ftqIdx.value))
+  XSPerfAccumulate("lc_bypass_redirect_single", fromBackendRedirect.valid && isBypass(fromBackendRedirect.bits.ftqIdx.value) && !isDouble(fromBackendRedirect.bits.ftqIdx.value))
+
+  XSDebug(fromBackendRedirect.valid && isBypass(fromBackendRedirect.bits.ftqIdx.value) , p"BypassMispred: PC: ${Hexadecimal(fromBackendRedirect.bits.cfiUpdate.pc)} Right: ${fromBackendRedirect.bits.cfiUpdate} pred remainCnt: ${bypassCnt(fromBackendRedirect.bits.ftqIdx.value)} pred double: ${isDouble(fromBackendRedirect.bits.ftqIdx.value)}\n")
 
   val from_bpu = io.fromBpu.resp.bits
   def in_entry_len_map_gen(resp: BpuToFtqBundle)(stage: String) = {

@@ -551,7 +551,7 @@ class SpeculativeInfo(implicit p: Parameters) extends XSBundle
 
 @chiselName
 class BranchPredictionBundle(implicit p: Parameters) extends XSBundle
-  with HasBPUConst with BPUUtils {
+  with HasBPUConst with BPUUtils with LoopPredictorParams {
 
   val pc    = Vec(numDup, UInt(VAddrBits.W))
   val valid = Vec(numDup, Bool())
@@ -565,6 +565,9 @@ class BranchPredictionBundle(implicit p: Parameters) extends XSBundle
   val hasRedirect  = Vec(numDup, Bool())
   
   val ftq_idx = new FtqPtr
+
+  val fromBypass = Bool() // perf only
+  val remainCnt = UInt(cntBits.W) // perf only
 
   def getPredDupWithPC[T <: Data](f: BasicPrediction =>(UInt => T)) = 
     for (fp & p <- full_pred zip pc) yield {
