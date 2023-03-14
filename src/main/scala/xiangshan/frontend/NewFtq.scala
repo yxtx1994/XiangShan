@@ -204,6 +204,9 @@ class LoopCacheNonSpecIO(implicit p: Parameters) extends XSBundle with HasCircul
 class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule with HasBPUConst with LoopPredictorParams {
   val io = IO(new LoopCacheNonSpecIO)
 
+  val LcHitThreshold: Int = 10
+  val LcHandoverThreshold: Int = 10
+
   val cache_valid = RegInit(0.B)
   val cache_pc = Reg(UInt(VAddrBits.W))
   val cache_data = Reg(new LoopCacheSpecEntry)
@@ -258,7 +261,7 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule with HasBPU
 
   val loop_lowerbound = WireInit(20.U)
   when (io.req.fire) {
-    when (cache_valid && io.req.bits.pc === cache_pc && io.req.bits.cfiValid && (io.req.bits.target === cache_pc || io.req.bits.isExit) && io.req.bits.lpInfo.isConf /*&& io.query.bits.isConf*/) {
+    when (cache_valid && io.req.bits.pc === cache_pc && io.req.bits.cfiValid && (io.req.bits.target === cache_pc || io.req.bits.isExit) && io.req.bits.lpInfo.isConf && l0_remainIterNum > LcHitThreshold.U) {
       l0_hit := true.B
       l0_data := cache_data
       prev_hit := true.B
@@ -302,7 +305,7 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule with HasBPU
     scheduled_redirect_valid := true.B
     scheduled_redirect := l0_redirect
     scheduled_bpu_resp := l0_bpu_resp
-    scheduled_counter := l0_remainIterNum
+    scheduled_counter := l0_remainIterNum - LcHandoverThreshold.U
   } .elsewhen (scheduled_redirect_valid && (io.flushFromBpuIfu.shouldFlushByIfu(scheduled_redirect.ftqIdx) || io.flushFromBpuIfu.shouldFlushByStage2(scheduled_redirect.ftqIdx) || io.flushFromBpuIfu.shouldFlushByStage3(scheduled_redirect.ftqIdx))) {
     // if any bpu redirect, flush scheduled redirect
     scheduled_redirect_valid := false.B
@@ -324,7 +327,7 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule with HasBPU
     io.toBypass.bits.expected_loop_cnt := scheduled_counter// fixme with actual count
     io.toBypass.bits.single_entry := scheduled_bpu_resp
     io.toBypass.bits.single_entry.ftq_idx := scheduled_redirect.ftqIdx
-    io.toBypass.bits.single_entry.isDouble := false.B // scheduled_bpu_resp.full_pred(dupForFtq).cfiIndex.bits < (PredictWidth / 2).U
+    io.toBypass.bits.single_entry.isDouble := scheduled_bpu_resp.full_pred(dupForFtq).cfiIndex.bits < (PredictWidth / 2).U
     io.toBypass.bits.last_stage_meta := last_stage_info_reg.last_stage_meta
     io.toBypass.bits.last_stage_ftb_entry := last_stage_info_reg.last_stage_ftb_entry
     io.toBypass.bits.last_stage_spec_info := last_stage_info_reg.last_stage_spec_info
