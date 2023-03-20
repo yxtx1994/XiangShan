@@ -1688,6 +1688,8 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   XSPerfAccumulate("lc_bypass_commit", do_commit && isBypass(do_commit_ptr.value))
   XSPerfAccumulate("lc_bypass_commit_double", do_commit && isBypass(do_commit_ptr.value) && isDouble(do_commit_ptr.value))
   XSPerfAccumulate("lc_bypass_commit_single", do_commit && isBypass(do_commit_ptr.value) && !isDouble(do_commit_ptr.value))
+  XSPerfAccumulate("lc_bypass_commit_single_redirected", do_commit && isBypass(do_commit_ptr.value) && !isDouble(do_commit_ptr.value) && commit_mispredict.asUInt.orR())
+  XSPerfAccumulate("lc_bypass_commit_double_redirected", do_commit && isBypass(do_commit_ptr.value) && isDouble(do_commit_ptr.value) && commit_mispredict.asUInt.orR())
   XSPerfAccumulate("lc_bypass_redirect", fromBackendRedirect.valid && isBypass(fromBackendRedirect.bits.ftqIdx.value))
   XSPerfAccumulate("lc_bypass_redirect_double", fromBackendRedirect.valid && isBypass(fromBackendRedirect.bits.ftqIdx.value) && isDouble(fromBackendRedirect.bits.ftqIdx.value))
   XSPerfAccumulate("lc_bypass_redirect_single", fromBackendRedirect.valid && isBypass(fromBackendRedirect.bits.ftqIdx.value) && !isDouble(fromBackendRedirect.bits.ftqIdx.value))
