@@ -1574,48 +1574,53 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   xsLP.io.pred.valid := lpWriteSramEna 
   xsLP.io.pred.pc    := RegNext(bpu_in_resp.pc(dupForFtq)) 
   
-  val lpMetaSram = Module(new FtqNRSRAM(new LPmeta, 1))
+  val lpMetaSram = Module(new FtqNRSRAM(new LPmeta, 1+1))// redirect+update
   lpMetaSram.io.wen   := lpWriteSramEna
   lpMetaSram.io.waddr := lpWriteSramIdx
   lpMetaSram.io.wdata := xsLP.io.pred.meta
 
+  lpPredInfo.isConf         := xsLP.io.pred.isConf
+  lpPredInfo.remainIterNum  := xsLP.io.pred.remainIterNum
   lpPredInfo.isConfExitLoop := xsLP.io.pred.isConfExitLoop
   lpPredInfo.target         := xsLP.io.pred.target
   lpPredInfo.isInterNumGT2  := xsLP.io.pred.isInterNumGT2
-  lpPredInfo.remainIterNum  := xsLP.io.pred.remainIterNum
-  lpPredInfo.isConf         := xsLP.io.pred.isConf
-
+  
   when(xsLP.io.pred.valid) {
     lpPredInfoArray(lpWriteSramIdx) := lpPredInfo
     lpPred_flag(lpWriteSramIdx)     := true.B
   }
 
-  val lpRdrctSram = Module(new FtqNRSRAM(new lpRedirectInfo, 1))
-  lpRdrctSram.io.wen   := lpWriteSramEna
-  lpRdrctSram.io.waddr := lpWriteSramIdx
-  lpRdrctSram.io.wdata := xsLP.io.pred.lpInfo
+  // val lpRdrctSram = Module(new FtqNRSRAM(new lpRedirectInfo, 1))
+  // lpRdrctSram.io.wen   := lpWriteSramEna
+  // lpRdrctSram.io.waddr := lpWriteSramIdx
+  // lpRdrctSram.io.wdata := xsLP.io.pred.lpInfo
 
-  lpRdrctSram.io.ren(0)   := backendRedirect.valid
-  lpRdrctSram.io.raddr(0) := backendRedirect.bits.ftqIdx.value
-  val lpInfo = lpRdrctSram.io.rdata(0)
+  lpMetaSram.io.ren(0)   := backendRedirect.valid
+  lpMetaSram.io.raddr(0) := backendRedirect.bits.ftqIdx.value
+  val lpRedirectMeta = lpMetaSram.io.rdata(0)
 
-  xsLP.io.redirect.valid := 
-    (lpInfo.isLPpred && backendRedirectReg.bits.cfiUpdate.taken && 
-    lpInfo.isPredNotTaken && backendRedirectReg.valid) ||
-    (lpInfo.isLPpred && !backendRedirectReg.bits.cfiUpdate.taken && 
-    lpInfo.isPredTaken && backendRedirectReg.valid)
-  xsLP.io.redirect.lpInfo := lpInfo
+  xsLP.io.redirect.valid := (backendRedirectReg.valid && lpRedirectMeta.lpPredInfo.predExitLoop
+                             && backendRedirectReg.bits.cfiUpdate.taken) ||
+                            (backendRedirectReg.valid && !lpRedirectMeta.lpPredInfo.predExitLoop 
+                              && !backendRedirectReg.bits.cfiUpdate.taken)
+  xsLP.io.redirect.meta := lpRedirectMeta
 
-  lpMetaSram.io.ren(0)   := true.B //canCommit // 
-  lpMetaSram.io.raddr(0) := commPtr.value 
-  val lpUpdateMeta        = lpMetaSram.io.rdata(0)
+    // (lpInfo.isLPpred && backendRedirectReg.bits.cfiUpdate.taken && 
+    // lpInfo.isPredNotTaken && backendRedirectReg.valid) ||
+    // (lpInfo.isLPpred && !backendRedirectReg.bits.cfiUpdate.taken && 
+    // lpInfo.isPredTaken && backendRedirectReg.valid)
+  
+
+  lpMetaSram.io.ren(1)   := true.B //canCommit // 
+  lpMetaSram.io.raddr(1) := commPtr.value 
+  val lpUpdateMeta        = lpMetaSram.io.rdata(1)
 
   xsLP.io.update.valid        := commit_valid && do_commit
   xsLP.io.update.pc           := commit_pc_bundle.startAddr 
-  xsLP.io.update.meta         := lpUpdateMeta
-  xsLP.io.update.taken        := ftbEntryGen.taken_mask(0)
   xsLP.io.update.isLoopBranch := commit_is_loop
-  xsLP.io.update.target       := commit_target
+  xsLP.io.update.updateTaken  := ftbEntryGen.taken_mask(0)
+  xsLP.io.update.meta         := lpUpdateMeta
+  // xsLP.io.update.target       := commit_target
 
   
   // ******************************************************************************
