@@ -1379,7 +1379,7 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   loopMainCache.io.flushFromBpuIfu.ifu.bits := ifuRedirectReg.bits.ftqIdx
 
   io.toBpu.update := DontCare
-  io.toBpu.update.valid := commit_valid && do_commit && !arbiter_flag(do_commit_ptr.value)
+  io.toBpu.update.valid := commit_valid && do_commit && (!arbiter_flag(do_commit_ptr.value) || commit_mispredict.asUInt.orR())
   val update = io.toBpu.update.bits
   update.false_hit   := commit_hit === h_false_hit
   update.pc          := commit_pc_bundle.startAddr
