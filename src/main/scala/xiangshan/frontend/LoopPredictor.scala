@@ -27,7 +27,6 @@ trait LoopPredictorParams extends HasXSParameter with HasBPUParameter {
     newLTBentry.tag        := newLTBtag(tagLen-1, 0)
     newLTBentry.specCnt    := 1.U
     newLTBentry.totalSpecCnt := 1.U
-    // newLTBentry.target     := target
     newLTBentry
   }
   def increConf(conf: UInt) : UInt = {
@@ -38,11 +37,6 @@ trait LoopPredictorParams extends HasXSParameter with HasBPUParameter {
     val newConf = Mux( (conf === minConf), minConf, (conf - 1.U) )
     newConf
   }
-  // def doPred(oldSpecCnt: UInt, tripCnt: UInt, conf: UInt): UInt =  {
-  //   val newSpecCnt = WireDefault(oldSpecCnt)
-  //     newSpecCnt := oldSpecCnt + 1.U
-  //   newSpecCnt
-  // }
   def doPred(oldSpecCnt: UInt, tripCnt: UInt, conf: UInt): UInt = {
     val newSpecCnt = WireDefault(oldSpecCnt)
     when(conf =/= minConf) {
@@ -69,7 +63,6 @@ class LoopEntry(implicit p: Parameters) extends XSBundle with LoopPredictorParam
   val specCnt    = UInt(cntBits.W)
   val tripCnt    = UInt(cntBits.W)
   val conf       = UInt(confBits.W)  
-  // val target     = UInt(VAddrBits.W)
   val totalSpecCnt = UInt(cntBits.W)
 
 
@@ -198,24 +191,7 @@ class LPpredIO(implicit p: Parameters) extends XSBundle with LoopPredictorParams
   val pc         = Input(UInt(VAddrBits.W))
   val lpPredInfo = Output(new LPpredInfo)
   val tripCnt    = Output(UInt(cntBits.W))
-  // val isExitLoop        = Output(Bool())
-  // val isNotExitLoop     = Output(Bool())
-  // val isConfExitLoop    = Output(Bool())
-  // val isConfNotExitLoop = Output(Bool())
-  // // val specCnt           = Output(UInt(cntBits.W))
-  // val tripCnt           = Output(UInt(cntBits.W))
-  // val target            = Output(UInt(VAddrBits.W))
-  // val totalSpecCnt = Output(UInt(confBits.W)) 
 }
-
-// class LPredirectInfo(implicit p: Parameters) extends XSBundle with LoopPredictorParams {
-//   val startPC        = UInt(VAddrBits.W)
-//   val lpPredInfo = new LPpredInfo
-//   // val isLPpred       = Bool()
-//   // val predSpecCnt    = UInt(cntBits.W)
-//   // val isPredTaken    = Bool()
-//   // val isPredNotTaken = Bool()
-// }
 
 class LPredirectIO(implicit p: Parameters) extends XSBundle with LoopPredictorParams {
   val valid  = Input(Bool())  
@@ -229,19 +205,7 @@ class LPupdateIO(implicit p: Parameters) extends XSBundle with LoopPredictorPara
   val isLoopBranch = Input(Bool())
   val updateTaken  = Input(Bool())
   val lpPredInfo   = Input(new LPpredInfo)
-  // val isPredTaken    = Input(Bool())
-  // val isPredNotTaken = Input(Bool())
-  // val isMispred      = Input(Bool())
-  // // val predSpecCnt    = Input(UInt(cntBits.W))
-  // val target         = Input(UInt(VAddrBits.W))
-  // val totalSpecCnt = Input(UInt(confBits.W)) // the totalSpecCnt of pred stage
 }
-
-// class commitSpecCntEntry(implicit p: Parameters) extends XSBundle with LoopPredictorParams {
-//   // val tag      = UInt(tagLen.W)
-//   val spcCnt   = UInt(cntBits.W)
-//   // val notTaken = Bool()
-// }
 
 class LoopPredictor(implicit p: Parameters) extends XSModule with LoopPredictorParams {
   val io = IO(new Bundle{
@@ -283,14 +247,6 @@ class LoopPredictor(implicit p: Parameters) extends XSModule with LoopPredictorP
   io.pred.lpPredInfo.specCnt      := predLTBwriteEntry.specCnt
   io.pred.lpPredInfo.totalSpecCnt := predLTBwriteEntry.totalSpecCnt
   io.pred.tripCnt := predLTBreadEntry.tripCnt
-  // io.pred.isExitLoop        := (io.pred.valid && predTagMatch && predCntEq)
-  // io.pred.isNotExitLoop     := (io.pred.valid && !predTagMatch) || (io.pred.valid && predTagMatch && predCntNeq)
-  // io.pred.isConfExitLoop    := (io.pred.valid && predTagMatch && predCntEq  && predLTBreadEntry.isConf)  
-  // io.pred.isConfNotExitLoop := (io.pred.valid && predTagMatch && predCntNeq && predLTBreadEntry.isConf)  
-  // io.pred.specCnt := predLTBwriteEntry.specCnt
-  // io.pred.tripCnt := predLTBwriteEntry.tripCnt
-  // io.pred.target  := predLTBwriteEntry.target
-
 
   // redirect
   val redirectValid = io.redirect.valid && io.redirect.lpPredInfo.lpPred
@@ -364,53 +320,25 @@ class LoopPredictor(implicit p: Parameters) extends XSModule with LoopPredictorP
   ltb.io.update.writeIdx := updateLTBidx
   ltb.io.update.writeEntry := Mux(updateIsAllocEntry, updateAllocEntry, updateLTBwriteEntry)
 
-  // .elsewhen(resetNotTaken) {
-  //   commitSpecCntArray(updtLTBidx).notTaken := false.B
-  // }
-
-  // update tripCnt and conf
-  // when(setTripCnt) {
-  //   // updtLTBwriteEntry.tripCnt := io.update.predSpecCnt - updtCSCAreadEntry.spcCnt
-  //   // updtLTBwriteEntry.conf    := 1.U 
-  //   newTripCnt := io.update.totalSpecCnt - totalSpecCntArray(updtLTBidx)
-  //   updtLTBwriteEntry.tripCnt := newTripCnt
-  //   // update conf
-  //   when(newTripCnt === updtLTBreadEntry.tripCnt) {
-  //     updtLTBwriteEntry.conf := increConf(updtLTBreadEntry.conf)
-  //   }.otherwise {
-  //     updtLTBwriteEntry.conf := decreConf(updtLTBreadEntry.conf)
-  //   }
-
-  //   when(!io.update.isPredTaken) {
-  //     when(updtLTBreadEntry.tripCnt === 0.U) {
-  //       printf("Error! tripCnt here should not be zero!\n")
-  //     }
-  //     updtLTBwriteEntry.totalSpecCnt := (updtLTBreadEntry.totalSpecCnt % updtLTBreadEntry.tripCnt)
-  //   }
-
-  //   printf("set-tripCnt  pc: %x; new-tripCnt: %d; pred-specCnt: %d; old-specCnt: %d\n", 
-  //   io.update.pc, updtLTBwriteEntry.tripCnt, io.update.predSpecCnt, updtCSCAreadEntry.spcCnt)
-  // }
-
-  // when(io.update.valid) {
-  //   printf("update  pc: %x; taken: %d; pred-spcCnt: %d; predTaken: %d; loopBranch: %d\n", 
-  //   io.update.pc, io.update.isUpdateTaken, io.update.predSpecCnt, 
-  //   io.update.isPredTaken, io.update.isLoopBranch)
-  // }
+  when(io.update.valid && !updateTaken) {
+    printf("xs-updt pc: %x; new-tripCnt: %d; new-conf: %d; old-tripCnt: %d; " +
+           "new-totalSpecCnt: %d; old-totalSpecCnt: %d; " +
+           "lpPred: %d; updateTagMatch: %d\n",
+           io.update.pc, newTripCnt, updateLTBwriteEntry.conf, 
+           updateLTBreadEntry.tripCnt, io.update.lpPredInfo.totalSpecCnt, 
+           totalSpecCntArray(updateLTBidx), 
+           io.update.lpPredInfo.lpPred, updateTagMatch)
+  }
+ 
+  when(updateIsAllocEntry) {
+    printf("allocate pc: %x; idx: %d\n", io.update.pc, updateLTBidx)
+  }
 
 }
 
 class LPmeta(implicit p: Parameters) extends XSBundle with LoopPredictorParams {
   val pc = UInt(VAddrBits.W)
   val lpPredInfo = new LPpredInfo
-  // val isLPpred          = Bool()
-  // val isNotExitLoop     = Bool() 
-  // val isExitLoop        = Bool() 
-  // val isConfNotExitLoop = Bool() 
-  // val isConfExitLoop    = Bool() 
-  // // val specCnt           = UInt(cntBits.W)
-  // val tripCnt           = UInt(cntBits.W)
-  // val totalSpecCnt = UInt(confBits.W)
 }
 
 class XSlpPredIO(implicit p: Parameters) extends XSBundle with LoopPredictorParams {
@@ -424,8 +352,6 @@ class XSlpPredIO(implicit p: Parameters) extends XSBundle with LoopPredictorPara
   val isConfExitLoop = Output(Bool())
   val target         = Output(UInt(VAddrBits.W))
   val isInterNumGT2  = Output(Bool())
-  // val meta           = Output(new LPmeta)
-  // val lpInfo         = Output(new lpRedirectInfo)
 }
 
 class XSlpUpdateIO(implicit p: Parameters) extends XSBundle with LoopPredictorParams {
@@ -434,13 +360,11 @@ class XSlpUpdateIO(implicit p: Parameters) extends XSBundle with LoopPredictorPa
   val isLoopBranch = Input(Bool())
   val updateTaken  = Input(Bool())
   val meta         = Input(new LPmeta)
-  // val target       = Input(UInt(VAddrBits.W))
 }
 
 class XSlpRedirectIO(implicit p: Parameters) extends XSBundle with LoopPredictorParams {
   val valid = Input(Bool())
   val meta  = Input(new LPmeta)
-  // val target       = Input(UInt(VAddrBits.W))
 }
 
 class XSLoopPredictor(implicit p: Parameters) extends XSModule with LoopPredictorParams {
@@ -460,13 +384,6 @@ class XSLoopPredictor(implicit p: Parameters) extends XSModule with LoopPredicto
   val lpMeta = WireDefault(0.U.asTypeOf(new LPmeta))
   lpMeta.pc := io.pred.pc
   lpMeta.lpPredInfo := lp.io.pred.lpPredInfo
-  // lpMeta := lp.io.pred.lpPredInfo
-  // lpMeta.isNotExitLoop     := (lpPredValid && lp.io.pred.isNotExitLoop)
-  // lpMeta.isExitLoop        := (lpPredValid && lp.io.pred.isExitLoop)
-  // lpMeta.isConfNotExitLoop := (lpPredValid && lp.io.pred.isConfNotExitLoop)
-  // lpMeta.isConfExitLoop    := (lpPredValid && lp.io.pred.isConfExitLoop)
-  // lpMeta.totalSpecCnt           := lp.io.pred.totalSpecCnt
-  // lpMeta.tripCnt           := lp.io.pred.tripCnt
 
   val isConf = lp.io.pred.lpPredInfo.predConf
   val theTripCnt = lp.io.pred.tripCnt
@@ -486,32 +403,13 @@ class XSLoopPredictor(implicit p: Parameters) extends XSModule with LoopPredicto
            theSpecCnt, io.pred.meta.lpPredInfo.totalSpecCnt)
   }
 
-  // when(lp.io.pred.valid) {
-  //   printf("cnt  pc: %x; reaminCnt: %d; conf: %d\n", 
-  //   io.pred.pc, io.pred.remainIterNum, io.pred.isConf)
-  // }
-
-  // io.pred.lpInfo.startPC        := io.pred.pc
-  // io.pred.lpInfo.isLPpred       := lpPredValid
-  // io.pred.lpInfo.predSpecCnt    := lp.io.pred.specCnt
-  // io.pred.lpInfo.isPredTaken    := lp.io.pred.isNotExitLoop
-  // io.pred.lpInfo.isPredNotTaken := lp.io.pred.isExitLoop
-
   lp.io.redirect.valid := io.redirect.valid
   lp.io.redirect.pc := io.redirect.meta.pc
   lp.io.redirect.lpPredInfo := io.redirect.meta.lpPredInfo
-
-  // val updateMispred = (io.update.meta.isExitLoop    && io.update.taken) || 
-  //                     (io.update.meta.isNotExitLoop && !io.update.taken)
   
   lp.io.update.valid          := (io.lpEna && io.update.valid)
   lp.io.update.pc             := io.update.pc
   lp.io.update.isLoopBranch   := io.update.isLoopBranch
   lp.io.update.updateTaken  := io.update.updateTaken
   lp.io.update.lpPredInfo := io.update.meta.lpPredInfo
-  // lp.io.update.isPredTaken    := io.update.meta.isNotExitLoop
-  // lp.io.update.isPredNotTaken := io.update.meta.isExitLoop
-  // lp.io.update.isMispred      := updateMispred
-  // lp.io.update.predSpecCnt    := io.update.meta.specCnt
-  // lp.io.update.target         := io.update.target
 }
