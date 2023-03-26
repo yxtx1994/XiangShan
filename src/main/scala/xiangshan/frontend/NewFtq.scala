@@ -1560,9 +1560,17 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   
   val lpWriteSramEna = last_cycle_bpu_in 
   val lpWriteSramIdx = last_cycle_bpu_in_ptr.value
+  val accPC = RegNext( bpu_in_resp.pc(dupForFtq) + 
+              ((bpu_in_resp.full_pred(dupForFtq).offsets(0)) << 1) ) 
   
   xsLP.io.pred.valid := lpWriteSramEna 
-  xsLP.io.pred.pc    := RegNext(bpu_in_resp.pc(dupForFtq)) 
+  xsLP.io.pred.pc    := accPC //RegNext(bpu_in_resp.pc(dupForFtq)) 
+ 
+  
+  when(xsLP.io.pred.valid) {
+    printf("lp-predInput  startPC: %x; accPC: %x; predExitLoop: %d\n", 
+    xsLP.io.pred.pc, accPC, xsLP.io.pred.meta.lpPredInfo.predExitLoop)
+  }
   
   val lpMetaSram = Module(new FtqNRSRAM(new LPmeta, 1+1))// redirect+update
   lpMetaSram.io.wen   := lpWriteSramEna
@@ -1580,10 +1588,6 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
     lpPred_flag(lpWriteSramIdx)     := true.B
   }
 
-  // val lpRdrctSram = Module(new FtqNRSRAM(new lpRedirectInfo, 1))
-  // lpRdrctSram.io.wen   := lpWriteSramEna
-  // lpRdrctSram.io.waddr := lpWriteSramIdx
-  // lpRdrctSram.io.wdata := xsLP.io.pred.lpInfo
 
   lpMetaSram.io.ren(0)   := backendRedirect.valid
   lpMetaSram.io.raddr(0) := backendRedirect.bits.ftqIdx.value
@@ -1595,22 +1599,29 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
                               && !backendRedirectReg.bits.cfiUpdate.taken)
   xsLP.io.redirect.meta := lpRedirectMeta
 
-    // (lpInfo.isLPpred && backendRedirectReg.bits.cfiUpdate.taken && 
-    // lpInfo.isPredNotTaken && backendRedirectReg.valid) ||
-    // (lpInfo.isLPpred && !backendRedirectReg.bits.cfiUpdate.taken && 
-    // lpInfo.isPredTaken && backendRedirectReg.valid)
-  
 
   lpMetaSram.io.ren(1)   := true.B //canCommit // 
   lpMetaSram.io.raddr(1) := commPtr.value 
   val lpUpdateMeta        = lpMetaSram.io.rdata(1)
 
   xsLP.io.update.valid        := commit_valid && do_commit
-  xsLP.io.update.pc           := commit_pc_bundle.startAddr 
+  // commit_pc_bundle.startAddr + (commit_ftb_entry.brSlots(0).offset << 1)
+  xsLP.io.update.pc := commit_pc_bundle.startAddr + ((commit_ftb_entry.brSlots(0).offset) << 1)
+  //commit_pc_bundle.startAddr 
   xsLP.io.update.isLoopBranch := commit_is_loop
   xsLP.io.update.updateTaken  := ftbEntryGen.taken_mask(0)
   xsLP.io.update.meta         := lpUpdateMeta
-  // xsLP.io.update.target       := commit_target
+
+
+  val updatePC0 = commit_pc_bundle.startAddr + ((commit_ftb_entry.brSlots(0).offset) << 1)
+  val updatePC1 = commit_pc_bundle.startAddr + ((commit_ftb_entry.tailSlot.offset) << 1)
+  when(xsLP.io.update.valid) {
+    printf("lp-updareRe  startPC: %x; PC0: %x; PC1: %x; " +
+      "offset0: %d; offset1: %d; taken0: %d; taken1: %d; totalSpecCnt: %d\n", 
+      xsLP.io.update.pc, updatePC0, updatePC1, 
+      commit_ftb_entry.brSlots(0).offset, commit_ftb_entry.tailSlot.offset, 
+      ftbEntryGen.taken_mask(0), ftbEntryGen.taken_mask(1), lpUpdateMeta.lpPredInfo.totalSpecCnt)
+  }
 
   
   // ******************************************************************************

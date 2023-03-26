@@ -64,6 +64,7 @@ class LoopEntry(implicit p: Parameters) extends XSBundle with LoopPredictorParam
   val tripCnt    = UInt(cntBits.W)
   val conf       = UInt(confBits.W)  
   val totalSpecCnt = UInt(cntBits.W)
+  // val debugCnt = UInt(cntBits.W)
 
 
   def isConf    = (conf === maxConf)
@@ -184,6 +185,7 @@ class LPpredInfo (implicit p: Parameters) extends XSBundle with LoopPredictorPar
   val predConf     = Bool()
   val specCnt      = UInt(cntBits.W)
   val totalSpecCnt = UInt(cntBits.W)
+  // val debugCnt = UInt(cntBits.W)
 }
 
 class LPpredIO(implicit p: Parameters) extends XSBundle with LoopPredictorParams {
@@ -226,9 +228,10 @@ class LoopPredictor(implicit p: Parameters) extends XSModule with LoopPredictorP
   val predTagMatch = (predTag === predLTBreadEntry.tag)
   val predLTBwriteEntry = WireDefault(predLTBreadEntry) 
   val predLTBwena = io.pred.valid && predTagMatch
-   when(predLTBwena) {
-    predLTBwriteEntry.specCnt := doPred(predLTBreadEntry.specCnt, predLTBreadEntry.tripCnt, predLTBreadEntry.conf)
+  when(predLTBwena) {
+    predLTBwriteEntry.specCnt := doPred(predLTBreadEntry.totalSpecCnt, predLTBreadEntry.tripCnt, predLTBreadEntry.conf)
     predLTBwriteEntry.totalSpecCnt := predLTBreadEntry.totalSpecCnt + 1.U
+    // predLTBwriteEntry.debugCnt := predLTBreadEntry.debugCnt + 1.U
 
     printf("pred  pc: %x; specCnt: %d; exitLoop: %d; tripCnt: %d; conf: %d; totalSpecCnt: %d\n", 
     io.pred.pc, predLTBwriteEntry.specCnt, io.pred.lpPredInfo.predExitLoop, 
@@ -246,6 +249,7 @@ class LoopPredictor(implicit p: Parameters) extends XSModule with LoopPredictorP
   io.pred.lpPredInfo.predConf     := predLTBreadEntry.isConf
   io.pred.lpPredInfo.specCnt      := predLTBwriteEntry.specCnt
   io.pred.lpPredInfo.totalSpecCnt := predLTBwriteEntry.totalSpecCnt
+  // io.pred.lpPredInfo.
   io.pred.tripCnt := predLTBreadEntry.tripCnt
 
   // redirect
@@ -266,8 +270,11 @@ class LoopPredictor(implicit p: Parameters) extends XSModule with LoopPredictorP
                                                redirectLTBreadEntry.conf)
     redirectLTBwriteEntry.totalSpecCnt := io.redirect.lpPredInfo.totalSpecCnt
 
-    printf("recover-specCnt  pc: %d; new-spcCnt: %d; new-totalSpecCnt: %d\n", 
-    redirectPC, redirectLTBwriteEntry.specCnt, redirectLTBwriteEntry.totalSpecCnt)
+    printf("recover-specCnt  pc: %x; new-spcCnt: %d; new-totalSpecCnt: %d; " +
+      "pred-specCnt: %d; pred-totalSpecCnt: %d; crt-totalSpecCnt: %d\n", 
+    redirectPC, redirectLTBwriteEntry.specCnt, redirectLTBwriteEntry.totalSpecCnt, 
+    io.redirect.lpPredInfo.specCnt, io.redirect.lpPredInfo.totalSpecCnt, 
+    redirectLTBreadEntry.totalSpecCnt)
   }
   ltb.io.recover.writeEna   := redirectIsWriteLTB
   ltb.io.recover.writeIdx   := redirectLTBidx
