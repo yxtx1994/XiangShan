@@ -1565,6 +1565,7 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   
   xsLP.io.pred.valid := lpWriteSramEna 
   xsLP.io.pred.pc    := accPC //RegNext(bpu_in_resp.pc(dupForFtq)) 
+  xsLP.io.pred.isDouble := isDouble(lpWriteSramIdx)
  
   
   when(xsLP.io.pred.valid) {
@@ -1597,6 +1598,8 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
                              && backendRedirectReg.bits.cfiUpdate.taken) ||
                             (backendRedirectReg.valid && !lpRedirectMeta.lpPredInfo.predExitLoop 
                               && !backendRedirectReg.bits.cfiUpdate.taken)
+  xsLP.io.redirect.pc := backendRedirectReg.bits.cfiUpdate.pc
+  xsLP.io.redirect.doublePartIdx := backendRedirectReg.bits.ftqOffset((log2Up(PredictWidth)) - 1)
   xsLP.io.redirect.meta := lpRedirectMeta
 
 
@@ -1609,7 +1612,7 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   xsLP.io.update.pc := commit_pc_bundle.startAddr + ((commit_ftb_entry.brSlots(0).offset) << 1)
   //commit_pc_bundle.startAddr 
   xsLP.io.update.isLoopBranch := commit_is_loop
-  xsLP.io.update.updateTaken  := ftbEntryGen.taken_mask(0)
+  xsLP.io.update.updateTaken  := ftbEntryGen.taken_mask
   xsLP.io.update.meta         := lpUpdateMeta
 
 
@@ -1617,10 +1620,12 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   val updatePC1 = commit_pc_bundle.startAddr + ((commit_ftb_entry.tailSlot.offset) << 1)
   when(xsLP.io.update.valid) {
     printf("lp-updareRe  startPC: %x; PC0: %x; PC1: %x; " +
-      "offset0: %d; offset1: %d; taken0: %d; taken1: %d; totalSpecCnt: %d\n", 
+      "offset0: %d; offset1: %d; taken0: %d; taken1: %d; " +
+      "pred-isDouble: %d; totalSpecCnt: %d\n", 
       xsLP.io.update.pc, updatePC0, updatePC1, 
       commit_ftb_entry.brSlots(0).offset, commit_ftb_entry.tailSlot.offset, 
-      ftbEntryGen.taken_mask(0), ftbEntryGen.taken_mask(1), lpUpdateMeta.lpPredInfo.totalSpecCnt)
+      ftbEntryGen.taken_mask(0), ftbEntryGen.taken_mask(1), 
+      lpUpdateMeta.lpPredInfo.isDouble, lpUpdateMeta.lpPredInfo.totalSpecCnt(1))
   }
 
   
