@@ -362,7 +362,7 @@ class LoopPredictor(implicit p: Parameters) extends XSModule with LoopPredictorP
     updateLTBwriteEntry.tripCnt := newTripCnt
     when(newTripCnt === updateLTBreadEntry.tripCnt) {
       updateLTBwriteEntry.conf := increConf(updateLTBreadEntry.conf)
-    }.otherwise {
+    }.elsewhen(updateLTBreadEntry.conf =/= maxConf) {
       updateLTBwriteEntry.conf := decreConf(updateLTBreadEntry.conf)
     }
 
