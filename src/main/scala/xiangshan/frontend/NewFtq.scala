@@ -617,7 +617,7 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   val pred_stage = Reg(Vec(FtqSize, UInt(2.W)))
 
   val pdWb_flag = RegInit(VecInit(Seq.fill(FtqSize)(0.B)))
-  val lpPredInfoArray = RegInit(VecInit(Seq.fill(64)(0.U.asTypeOf(new xsLPpredInfo))))
+  val lpPredInfoArray = RegInit(VecInit(Seq.fill(FtqSize)(0.U.asTypeOf(new xsLPpredInfo))))
   val lpPred_flag = RegInit(VecInit(Seq.fill(FtqSize)(0.B)))
   val isDouble = RegInit(VecInit(Seq.fill(FtqSize)(0.B)))
   val isExit = RegInit(VecInit(Seq.fill(FtqSize)(0.B)))
