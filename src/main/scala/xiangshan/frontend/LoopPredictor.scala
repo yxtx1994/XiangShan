@@ -38,17 +38,17 @@ trait LoopPredictorParams extends HasXSParameter with HasBPUParameter {
     val newConf = Mux( (conf === minConf), minConf, (conf - 1.U) )
     newConf
   }
-  def reviseSpecCnt(rawSpecCnt: UInt, tripCnt: UInt) = 
-    Mux(rawSpecCnt === tripCnt, rawSpecCnt, (rawSpecCnt % tripCnt))
+  def reviseSpecCnt(rawTotalSpecCnt: UInt, tripCnt: UInt) = 
+    Mux(rawTotalSpecCnt % tripCnt === 0.U, tripCnt, (rawTotalSpecCnt % tripCnt))
 
-  def doPred(oldSpecCnt: UInt, tripCnt: UInt, conf: UInt, isDouble: Bool): UInt = {
-    val newSpecCnt = WireDefault(oldSpecCnt)
+  def doPred(oldTotalSpecCnt: UInt, tripCnt: UInt, conf: UInt, isDouble: Bool): UInt = {
+    val newSpecCnt = WireDefault(oldTotalSpecCnt)
     when(conf =/= minConf) {
       // newSpecCnt := (oldSpecCnt % tripCnt) + 1.U
-      newSpecCnt := Mux(isDouble, reviseSpecCnt(oldSpecCnt + 2.U, tripCnt), 
-                                  reviseSpecCnt(oldSpecCnt + 1.U, tripCnt))
+      newSpecCnt := Mux(isDouble, reviseSpecCnt(oldTotalSpecCnt + 2.U, tripCnt), 
+                                  reviseSpecCnt(oldTotalSpecCnt + 1.U, tripCnt))
     }.otherwise {
-      newSpecCnt := Mux(isDouble, (oldSpecCnt + 2.U), (oldSpecCnt + 1.U))
+      newSpecCnt := Mux(isDouble, (oldTotalSpecCnt + 2.U), (oldTotalSpecCnt + 1.U))
     }
     newSpecCnt
   }
@@ -198,6 +198,7 @@ class LTB(implicit p: Parameters) extends XSModule with LoopPredictorParams {
 class LPpredInfo (implicit p: Parameters) extends XSBundle with LoopPredictorParams {
   val lpPred       = Bool()
   val predExitLoop = Bool()
+  // val predExitLoop = Vec(predParallel, Bool())
   val predConf     = Bool()
   // val specCnt      = UInt(cntBits.W)
   // val totalSpecCnt = UInt(cntBits.W)
@@ -367,7 +368,7 @@ class LoopPredictor(implicit p: Parameters) extends XSModule with LoopPredictorP
     }
 
     printf("update  pc: %x; new-tripCnt: %d; new-conf: %d; old-tripCnt: %d; " +
-           "pred-totalSpecCnt: %d; old-totalSpecCnt: %d; isDouble: %d" +
+           "pred-totalSpecCnt: %d; old-totalSpecCnt: %d; isDouble: %d " +
            "updateExitLoopDPIdx: %d\n",
            io.update.pc, newTripCnt, updateLTBwriteEntry.conf, 
            updateLTBreadEntry.tripCnt, updatePredTotalSpecCnt, 
@@ -400,12 +401,16 @@ class LoopPredictor(implicit p: Parameters) extends XSModule with LoopPredictorP
 
 class LPmeta(implicit p: Parameters) extends XSBundle with LoopPredictorParams {
   val pc = UInt(VAddrBits.W)
+  val offsetInPredStream = UInt(log2Ceil(PredictWidth).W)
+  val isBypass = Bool()
   val lpPredInfo = new LPpredInfo
 }
 
 class XSlpPredIO(implicit p: Parameters) extends XSBundle with LoopPredictorParams {
   val valid          = Input(Bool())
   val pc             = Input(UInt(VAddrBits.W))
+  val offsetInPredStream = Input(UInt(log2Ceil(PredictWidth).W))
+  val isBypass       = Input(Bool())
   val isDouble       = Input(Bool())
   val meta           = Output(new LPmeta)
   // the signals of xsLPpredInfo
@@ -449,6 +454,8 @@ class XSLoopPredictor(implicit p: Parameters) extends XSModule with LoopPredicto
 
   val lpMeta = WireDefault(0.U.asTypeOf(new LPmeta))
   lpMeta.pc := io.pred.pc
+  lpMeta.offsetInPredStream := io.pred.offsetInPredStream
+  lpMeta.isBypass := io.pred.isBypass
   lpMeta.lpPredInfo := lp.io.pred.lpPredInfo
 
   val isConf = lp.io.pred.lpPredInfo.predConf

@@ -1565,8 +1565,9 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   
   xsLP.io.pred.valid := lpWriteSramEna 
   xsLP.io.pred.pc    := accPC //RegNext(bpu_in_resp.pc(dupForFtq)) 
-  xsLP.io.pred.isDouble := isDouble(lpWriteSramIdx)
- 
+  xsLP.io.pred.offsetInPredStream := RegNext(bpu_in_resp.full_pred(dupForFtq).offsets(0))
+  xsLP.io.pred.isDouble := isDouble(lpWriteSramIdx) && isBypass(lpWriteSramIdx)
+  xsLP.io.pred.isBypass := isBypass(lpWriteSramIdx)
   
   when(xsLP.io.pred.valid) {
     printf("lp-predInput  startPC: %x; accPC: %x; predExitLoop: %d\n", 
@@ -1603,16 +1604,28 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   xsLP.io.redirect.meta := lpRedirectMeta
 
 
-  lpMetaSram.io.ren(1)   := true.B //canCommit // 
+  lpMetaSram.io.ren(1)   := canCommit // true.B //
   lpMetaSram.io.raddr(1) := commPtr.value 
   val lpUpdateMeta        = lpMetaSram.io.rdata(1)
 
+  // val lpUpdateMispred = commit_mispredict.asUInt.orR
+  // val doublePart0Mispred = ( (commit_mispredict.asUInt)(((PredictWidth >> 1) - 1), 0) ).orR
+  // val doublePart1Mispred = ( (commit_mispredict.asUInt)((PredictWidth-1), (PredictWidth >> 1)) ).orR
+  // val lpUpdtPredTaken = !(lpUpdateMeta.lpPredInfo.predExitLoop)
+  // val doubleTaken0 = Mux(doublePart0Mispred, !lpUpdtPredTaken, lpUpdtPredTaken)
+  // val doubleTaken1 = Mux(doublePart1Mispred, !lpUpdtPredTaken, lpUpdtPredTaken)
+  // val singleTaken  = Mux(lpUpdateMispred, !lpUpdtPredTaken, lpUpdtPredTaken)
+  val updateTaken = Mux(lpUpdateMeta.offsetInPredStream === commit_cfi.bits, commit_cfi.valid, false.B)
+  // val bpuTaken = Mux(commit_ftb_entry.brSlots(0).offset === commit_cfi.bits, commit_cfi.valid, false.B)
+
   xsLP.io.update.valid        := commit_valid && do_commit
   // commit_pc_bundle.startAddr + (commit_ftb_entry.brSlots(0).offset << 1)
-  xsLP.io.update.pc := commit_pc_bundle.startAddr + ((commit_ftb_entry.brSlots(0).offset) << 1)
-  //commit_pc_bundle.startAddr 
+  xsLP.io.update.pc := lpUpdateMeta.pc
   xsLP.io.update.isLoopBranch := commit_is_loop
-  xsLP.io.update.updateTaken  := ftbEntryGen.taken_mask
+  // xsLP.io.update.updateTaken  := ftbEntryGen.taken_mask
+  xsLP.io.update.updateTaken(0) := updateTaken
+  // Mux(lpUpdateMeta.isBypass, Mux(lpUpdateMeta.lpPredInfo.isDouble, doubleTaken0, singleTaken), bpuTaken)
+  xsLP.io.update.updateTaken(1) := updateTaken
   xsLP.io.update.meta         := lpUpdateMeta
 
 
@@ -1621,11 +1634,12 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   when(xsLP.io.update.valid) {
     printf("lp-updareRe  startPC: %x; PC0: %x; PC1: %x; " +
       "offset0: %d; offset1: %d; taken0: %d; taken1: %d; " +
-      "pred-isDouble: %d; totalSpecCnt: %d\n", 
+      "pred-isDouble: %d; totalSpecCnt: %d; commit_mispredict: %d\n", 
       xsLP.io.update.pc, updatePC0, updatePC1, 
       commit_ftb_entry.brSlots(0).offset, commit_ftb_entry.tailSlot.offset, 
       ftbEntryGen.taken_mask(0), ftbEntryGen.taken_mask(1), 
-      lpUpdateMeta.lpPredInfo.isDouble, lpUpdateMeta.lpPredInfo.totalSpecCnt(1))
+      lpUpdateMeta.lpPredInfo.isDouble, lpUpdateMeta.lpPredInfo.totalSpecCnt(1), 
+      commit_mispredict.asUInt)
   }
 
   
