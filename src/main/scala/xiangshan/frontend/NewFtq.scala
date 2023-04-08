@@ -1608,14 +1608,21 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   lpMetaSram.io.raddr(1) := commPtr.value 
   val lpUpdateMeta        = lpMetaSram.io.rdata(1)
 
-  // val lpUpdateMispred = commit_mispredict.asUInt.orR
-  // val doublePart0Mispred = ( (commit_mispredict.asUInt)(((PredictWidth >> 1) - 1), 0) ).orR
-  // val doublePart1Mispred = ( (commit_mispredict.asUInt)((PredictWidth-1), (PredictWidth >> 1)) ).orR
-  // val lpUpdtPredTaken = !(lpUpdateMeta.lpPredInfo.predExitLoop)
-  // val doubleTaken0 = Mux(doublePart0Mispred, !lpUpdtPredTaken, lpUpdtPredTaken)
-  // val doubleTaken1 = Mux(doublePart1Mispred, !lpUpdtPredTaken, lpUpdtPredTaken)
-  // val singleTaken  = Mux(lpUpdateMispred, !lpUpdtPredTaken, lpUpdtPredTaken)
-  val updateTaken = Mux(lpUpdateMeta.offsetInPredStream === commit_cfi.bits, commit_cfi.valid, false.B)
+  val updateMispred = commit_mispredict.asUInt.orR
+  val doublePart0Mispred = ( (commit_mispredict.asUInt)(((PredictWidth >> 1) - 1), 0) ).orR
+  val doublePart1Mispred = ( (commit_mispredict.asUInt)((PredictWidth-1), (PredictWidth >> 1)) ).orR
+  val lpUpdtPredTaken = !(lpUpdateMeta.lpPredInfo.predExitLoop)
+  val doubleTaken0 = Mux(doublePart0Mispred, !lpUpdtPredTaken, lpUpdtPredTaken)
+  val doubleTaken1 = Mux(doublePart1Mispred, !lpUpdtPredTaken, lpUpdtPredTaken)
+  val singleTaken  = Mux(updateMispred, !lpUpdtPredTaken, lpUpdtPredTaken)
+  val bpuPredVec = RegInit(VecInit(Seq.fill(FtqSize)(false.B)))
+  when(io.fromBpu.resp.bits.lastStage.valid(dupForFtq)) {
+    bpuPredVec(io.fromBpu.resp.bits.lastStage.ftq_idx.value) := io.fromBpu.resp.bits.lastStage.full_pred(dupForFtq).br_taken_mask(0)
+  }
+  val bpuPred = RegNext(bpuPredVec(commPtr.value))
+  val bpuTaken = Mux(commit_ftb_entry.brSlots(0).offset === lpUpdateMeta.offsetInPredStream, 
+                    Mux(updateMispred, !bpuPred, bpuPred), false.B)
+  // val updateTaken = Mux(lpUpdateMeta.offsetInPredStream === commit_cfi.bits, commit_cfi.valid, false.B)
   // val bpuTaken = Mux(commit_ftb_entry.brSlots(0).offset === commit_cfi.bits, commit_cfi.valid, false.B)
 
   xsLP.io.update.valid        := commit_valid && do_commit
@@ -1623,9 +1630,8 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   xsLP.io.update.pc := lpUpdateMeta.pc
   xsLP.io.update.isLoopBranch := commit_is_loop
   // xsLP.io.update.updateTaken  := ftbEntryGen.taken_mask
-  xsLP.io.update.updateTaken(0) := updateTaken
-  // Mux(lpUpdateMeta.isBypass, Mux(lpUpdateMeta.lpPredInfo.isDouble, doubleTaken0, singleTaken), bpuTaken)
-  xsLP.io.update.updateTaken(1) := updateTaken
+  xsLP.io.update.updateTaken(0) := Mux(lpUpdateMeta.isBypass, Mux(lpUpdateMeta.lpPredInfo.isDouble, doubleTaken0, singleTaken), bpuTaken)
+  xsLP.io.update.updateTaken(1) := doubleTaken1
   xsLP.io.update.meta         := lpUpdateMeta
 
 

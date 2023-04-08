@@ -258,12 +258,11 @@ class LoopPredictor(implicit p: Parameters) extends XSModule with LoopPredictorP
     // predLTBwriteEntry.totalSpecCnt := predLTBreadEntry.totalSpecCnt + 1.U
     // predLTBwriteEntry.debugCnt := predLTBreadEntry.debugCnt + 1.U
 
-    printf("pred  pc: %x; specCnt0: %d; exitLoop: %d; tripCnt: %d; conf: %d;" +
-      " totalSpecCnt0: %d; isDouble: %d; specCnt1: %d; totalSpecCnt1: %d\n", 
-    io.pred.pc, predLTBwriteEntry.specCnt(0), io.pred.lpPredInfo.predExitLoop, 
+    printf("pred  pc: %x; specCnt: %d; exitLoop: %d; tripCnt: %d; conf: %d;" +
+      " totalSpecCnt: %d; isDouble: %d; \n", 
+    io.pred.pc, predLTBwriteEntry.specCnt, io.pred.lpPredInfo.predExitLoop, 
     predLTBreadEntry.tripCnt, predLTBreadEntry.conf, 
-    predLTBwriteEntry.totalSpecCnt(0), io.pred.isDouble, 
-    predLTBwriteEntry.specCnt(1),predLTBwriteEntry.totalSpecCnt(1))
+    predLTBwriteEntry.totalSpecCnt, io.pred.isDouble)
   }
  
   ltb.io.pred.writeEna   := predLTBwena
@@ -312,11 +311,12 @@ class LoopPredictor(implicit p: Parameters) extends XSModule with LoopPredictorP
     printf("recover-specCnt  pc: %x; new-spcCnt: %d; new-totalSpecCnt: %d; " +
       "pred-specCnt0: %d; pred-totalSpecCnt0: %d; " +
       "pred-specCnt1: %d; pred-totalSpecCnt1: %d; " +
-      "crt-totalSpecCnt: %d; doublePartIdx: %d\n", 
+      "crt-totalSpecCnt: %d; doublePartIdx: %d; isdouble: %d\n", 
     redirectPC, redirectLTBwriteEntry.specCnt, redirectLTBwriteEntry.totalSpecCnt, 
     io.redirect.lpPredInfo.specCnt(0), io.redirect.lpPredInfo.totalSpecCnt(0), 
     io.redirect.lpPredInfo.specCnt(1), io.redirect.lpPredInfo.totalSpecCnt(1), 
-    redirectLTBreadEntry.totalSpecCnt, io.redirect.doublePartIdx)
+    redirectLTBreadEntry.totalSpecCnt, io.redirect.doublePartIdx, 
+    io.redirect.lpPredInfo.isDouble)
   }
   ltb.io.recover.writeEna   := redirectIsWriteLTB
   ltb.io.recover.writeIdx   := redirectLTBidx
