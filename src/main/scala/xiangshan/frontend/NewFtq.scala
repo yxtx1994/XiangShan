@@ -1591,14 +1591,18 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   }
 
 
-  lpMetaSram.io.ren(0)   := backendRedirect.valid
-  lpMetaSram.io.raddr(0) := backendRedirect.bits.ftqIdx.value
+  val lpRedirect = Mux(backendRedirect.valid, backendRedirect, 
+                       Mux(fromIfuRedirect.valid, fromIfuRedirect, fromLoopRedirect))
+  lpMetaSram.io.ren(0)   := lpRedirect.valid
+  lpMetaSram.io.raddr(0) := lpRedirect.bits.ftqIdx.value
   val lpRedirectMeta = lpMetaSram.io.rdata(0)
 
-  xsLP.io.redirect.valid := backendRedirectReg.valid
-  xsLP.io.redirect.pc := backendRedirectReg.bits.cfiUpdate.pc
-  xsLP.io.redirect.redirectTaken := backendRedirectReg.bits.cfiUpdate.taken
-  xsLP.io.redirect.doublePartIdx := backendRedirectReg.bits.ftqOffset((log2Up(PredictWidth)) - 1)
+  val lpRedirectReg = Mux(fromBackendRedirect.valid, fromBackendRedirect, 
+                       Mux(ifuRedirectToBpu.valid, ifuRedirectToBpu, fromLoopRedirectReg))
+  xsLP.io.redirect.valid := lpRedirectReg.valid
+  xsLP.io.redirect.pc    := lpRedirectReg.bits.cfiUpdate.pc
+  xsLP.io.redirect.redirectTaken := lpRedirectReg.bits.cfiUpdate.taken
+  xsLP.io.redirect.doublePartIdx := lpRedirectReg.bits.ftqOffset((log2Up(PredictWidth)) - 1)
   xsLP.io.redirect.meta := lpRedirectMeta
 
 
@@ -1606,13 +1610,22 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   lpMetaSram.io.raddr(1) := commPtr.value 
   val lpUpdateMeta        = lpMetaSram.io.rdata(1)
 
-  val updateTaken = Mux(lpUpdateMeta.offsetInPredStream === commit_cfi.bits, commit_cfi.valid, false.B)
+  // val lpUpdateMispred = commit_mispredict.asUInt.orR
+  val doublePart0Mispred = ( (commit_mispredict.asUInt)(((PredictWidth >> 1) - 1), 0) ).orR
+  val doublePart1Mispred = ( (commit_mispredict.asUInt)((PredictWidth-1), (PredictWidth >> 1)) ).orR
+  val bypassPredTaken0  = true.B
+  val bypassPredTaken1  = !isExit(commPtr.value)
+  val doubleTaken0 = Mux(doublePart0Mispred, !bypassPredTaken0, bypassPredTaken0)
+  val doubleTaken1 = Mux(doublePart1Mispred, !bypassPredTaken1, bypassPredTaken1)
+  val updateTaken  = Mux(lpUpdateMeta.offsetInPredStream === commit_cfi.bits, commit_cfi.valid, false.B)
 
-  xsLP.io.update.valid        := commit_valid && do_commit
+  // val updateTaken = Mux(lpUpdateMeta.offsetInPredStream === commit_cfi.bits, commit_cfi.valid, false.B)
+
+  xsLP.io.update.valid := commit_valid && do_commit
   xsLP.io.update.pc := lpUpdateMeta.pc
   xsLP.io.update.isLoopBranch := commit_is_loop
-  xsLP.io.update.updateTaken(0) := updateTaken
-  xsLP.io.update.updateTaken(1) := updateTaken
+  xsLP.io.update.updateTaken(0) := Mux(isDouble(commPtr.value) && isBypass(commPtr.value), doubleTaken0, updateTaken) //updateTaken
+  xsLP.io.update.updateTaken(1) := Mux(isDouble(commPtr.value) && isBypass(commPtr.value), doubleTaken1, updateTaken) //updateTaken
   xsLP.io.update.meta         := lpUpdateMeta
 
 
