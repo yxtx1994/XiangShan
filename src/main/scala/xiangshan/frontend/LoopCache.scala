@@ -98,8 +98,8 @@ class LoopCacheNonSpecIO(implicit p: Parameters) extends XSBundle with HasCircul
 class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule with HasBPUConst with LoopPredictorParams {
   val io = IO(new LoopCacheNonSpecIO)
 
-  val LcHitThreshold: Int = 10
-  val LcHandoverThreshold: Int = 10
+  //val LcHitThreshold: Int = 10
+  //val LcHandoverThreshold: Int = 10
 
   val cache_valid = RegInit(0.B)
   val cache_pc = Reg(UInt(VAddrBits.W))
@@ -155,7 +155,7 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule with HasBPU
 
   val loop_lowerbound = WireInit(20.U)
   when (io.req.fire) {
-    when (cache_valid && io.req.bits.pc === cache_pc && io.req.bits.cfiValid && (io.req.bits.target === cache_pc || io.req.bits.isExit) && io.req.bits.lpInfo.isConf && l0_remainIterNum > LcHitThreshold.U) {
+    when (cache_valid && io.req.bits.pc === cache_pc && io.req.bits.cfiValid && (io.req.bits.target === cache_pc || io.req.bits.isExit) && io.req.bits.lpInfo.isConf /*&& l0_remainIterNum > LcHitThreshold.U*/) {
       l0_hit := true.B
       l0_data := cache_data
       prev_hit := true.B
@@ -199,7 +199,7 @@ class LoopCacheNonSpecEntry(implicit p: Parameters) extends XSModule with HasBPU
     scheduled_redirect_valid := true.B
     scheduled_redirect := l0_redirect
     scheduled_bpu_resp := l0_bpu_resp
-    scheduled_counter := l0_remainIterNum - LcHandoverThreshold.U
+    scheduled_counter := l0_remainIterNum // - LcHandoverThreshold.U
   } .elsewhen (scheduled_redirect_valid && (io.flushFromBpuIfu.shouldFlushByIfu(scheduled_redirect.ftqIdx) || io.flushFromBpuIfu.shouldFlushByStage2(scheduled_redirect.ftqIdx) || io.flushFromBpuIfu.shouldFlushByStage3(scheduled_redirect.ftqIdx))) {
     // if any bpu redirect, flush scheduled redirect
     scheduled_redirect_valid := false.B
