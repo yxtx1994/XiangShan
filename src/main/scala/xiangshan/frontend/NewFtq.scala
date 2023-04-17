@@ -805,6 +805,7 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
 
   XSError(isBefore(bpuPtr, ifuPtr) && !isFull(bpuPtr, ifuPtr), "\nifuPtr is before bpuPtr!\n")
   XSError(isBefore(ifuPtr, ifuWbPtr) && !isFull(ifuPtr, ifuWbPtr), "\nifuWbPtr is before ifuPtr!\n")
+  XSError(isBefore(ifuWbPtr, commPtr) && !isFull(ifuWbPtr, commPtr), "\ncommPtr is before ifuWbPtr!\n")
 
   (0 until copyNum).map{i =>
     XSError(copied_bpu_ptr(i) =/= bpuPtr, "\ncopiedBpuPtr is different from bpuPtr!\n")
@@ -1568,11 +1569,6 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   xsLP.io.pred.isDouble := isDouble(lpWriteSramIdx) && isBypass(lpWriteSramIdx)
   xsLP.io.pred.isBypass := isBypass(lpWriteSramIdx)
   
-  when(xsLP.io.pred.valid) {
-    printf("lp-predInput  startPC: %x; accPC: %x; predExitLoop: %d\n", 
-    xsLP.io.pred.pc, accPC, xsLP.io.pred.meta.lpPredInfo.predExitLoop)
-  }
-  
   val lpMetaSram = Module(new FtqNRSRAM(new LPmeta, 1+1)) // redirect+update
   lpMetaSram.io.wen   := lpWriteSramEna
   lpMetaSram.io.waddr := lpWriteSramIdx
@@ -1609,37 +1605,20 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   lpMetaSram.io.raddr(1) := commPtr.value 
   val lpUpdateMeta        = lpMetaSram.io.rdata(1)
 
-  // val lpUpdateMispred = commit_mispredict.asUInt.orR
   val doublePart0Mispred = ( (commit_mispredict.asUInt)(((PredictWidth >> 1) - 1), 0) ).orR
   val doublePart1Mispred = ( (commit_mispredict.asUInt)((PredictWidth-1), (PredictWidth >> 1)) ).orR
   val bypassPredTaken0  = true.B
-  val bypassPredTaken1  = !isExit(commPtr.value)
+  val bypassPredTaken1  = !isExit(do_commit_ptr.value)
   val doubleTaken0 = Mux(doublePart0Mispred, !bypassPredTaken0, bypassPredTaken0)
   val doubleTaken1 = Mux(doublePart1Mispred, !bypassPredTaken1, bypassPredTaken1)
   val updateTaken  = Mux(lpUpdateMeta.offsetInPredStream === commit_cfi.bits, commit_cfi.valid, false.B)
 
-  // val updateTaken = Mux(lpUpdateMeta.offsetInPredStream === commit_cfi.bits, commit_cfi.valid, false.B)
-
-  xsLP.io.update.valid := commit_valid && do_commit
+  xsLP.io.update.valid := do_commit //commit_valid && do_commit
   xsLP.io.update.pc := lpUpdateMeta.pc
   xsLP.io.update.isLoopBranch := commit_is_loop
-  xsLP.io.update.updateTaken(0) := Mux(isDouble(commPtr.value) && isBypass(commPtr.value), doubleTaken0, updateTaken) //updateTaken
-  xsLP.io.update.updateTaken(1) := Mux(isDouble(commPtr.value) && isBypass(commPtr.value), doubleTaken1, updateTaken) //updateTaken
+  xsLP.io.update.updateTaken(0) := Mux(isDouble(do_commit_ptr.value) && isBypass(do_commit_ptr.value), doubleTaken0, updateTaken) //updateTaken
+  xsLP.io.update.updateTaken(1) := Mux(isDouble(do_commit_ptr.value) && isBypass(do_commit_ptr.value), doubleTaken1, updateTaken) //updateTaken
   xsLP.io.update.meta         := lpUpdateMeta
-
-
-  val updatePC0 = commit_pc_bundle.startAddr + ((commit_ftb_entry.brSlots(0).offset) << 1)
-  val updatePC1 = commit_pc_bundle.startAddr + ((commit_ftb_entry.tailSlot.offset) << 1)
-  when(xsLP.io.update.valid) {
-    printf("lp-updareRe  startPC: %x; PC0: %x; PC1: %x; " +
-      "offset0: %d; offset1: %d; taken0: %d; taken1: %d; " +
-      "pred-isDouble: %d; totalSpecCnt: %d; commit_mispredict: %d\n", 
-      xsLP.io.update.pc, updatePC0, updatePC1, 
-      commit_ftb_entry.brSlots(0).offset, commit_ftb_entry.tailSlot.offset, 
-      ftbEntryGen.taken_mask(0), ftbEntryGen.taken_mask(1), 
-      lpUpdateMeta.lpPredInfo.isDouble, lpUpdateMeta.lpPredInfo.totalSpecCnt(1), 
-      commit_mispredict.asUInt)
-  }
 
   
   // ******************************************************************************

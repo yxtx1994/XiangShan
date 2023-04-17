@@ -358,13 +358,9 @@ class LoopPredictor(implicit p: Parameters) extends XSModule with LoopPredictorP
     updateLTBwriteEntry.tripCnt := newTripCnt
     when(newTripCnt === updateLTBreadEntry.tripCnt) {
       updateLTBwriteEntry.conf := increConf(updateLTBreadEntry.conf)
-    }.otherwise { // elsewhen(updateLTBreadEntry.conf =/= maxConf) {
+    }.otherwise {
       updateLTBwriteEntry.conf := decreConf(updateLTBreadEntry.conf)
     }
-
-    printf("set-tripcnt pc: %x; updateTaken0: %d; updateTaken1: %d; " +
-      "new-tripCnt: %d; old-tripCnt: %d\n", 
-    io.update.pc, updateTaken0, updateTaken1, newTripCnt, updateLTBreadEntry.tripCnt)
   }
   when(updateIsAllocEntry) {
     iterCntArray(updateLTBidx) := 0.U
@@ -373,11 +369,6 @@ class LoopPredictor(implicit p: Parameters) extends XSModule with LoopPredictorP
   ltb.io.update.writeEna := updateLTBwena
   ltb.io.update.writeIdx := updateLTBidx
   ltb.io.update.writeEntry := Mux(updateIsAllocEntry, updateAllocEntry, updateLTBwriteEntry)
-
-  when(updateValid && updateTagMatch && (!updateTaken0 || !updateTaken1)) {
-    printf("update-info pc: %x; updateTaken0: %d; updateTaken1: %d\n", 
-    io.update.pc, updateTaken0, updateTaken1)
-  }
  
   when(updateIsAllocEntry) {
     printf("allocate pc: %x; idx: %d\n", io.update.pc, updateLTBidx)
@@ -457,15 +448,7 @@ class XSLoopPredictor(implicit p: Parameters) extends XSModule with LoopPredicto
   io.pred.target         := 0.U
   io.pred.isInterNumGT2 := true.B
 
-  when(lpPredValid) {
-    printf("xs-pred  pc: %x; conf: %d; remainIterNum: %d; theTripCnt: %d; " +
-           "theSpecCnt: %d; isDouble: %d; totalSpecCnt: %d\n", 
-           io.pred.pc, io.pred.isConf, io.pred.remainIterNum, theTripCnt, 
-           theSpecCnt, io.pred.isDouble, io.pred.meta.lpPredInfo.totalSpecCnt(1))
-  }
-
   lp.io.redirect.valid := io.redirect.valid
-  // lp.io.redirect.pc := io.redirect.meta.pc
   lp.io.redirect.pc := io.redirect.pc
   lp.io.redirect.redirectTaken := io.redirect.redirectTaken
   lp.io.redirect.doublePartIdx := io.redirect.doublePartIdx
