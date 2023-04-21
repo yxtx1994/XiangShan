@@ -1564,7 +1564,7 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
               ((bpu_in_resp.full_pred(dupForFtq).offsets(0)) << 1) ) 
   
   xsLP.io.pred.valid := lpWriteSramEna 
-  xsLP.io.pred.pc    := accPC //RegNext(bpu_in_resp.pc(dupForFtq)) 
+  xsLP.io.pred.pc    := accPC
   xsLP.io.pred.offsetInPredStream := RegNext(bpu_in_resp.full_pred(dupForFtq).offsets(0))
   xsLP.io.pred.isDouble := isDouble(lpWriteSramIdx) && isBypass(lpWriteSramIdx)
   xsLP.io.pred.isBypass := isBypass(lpWriteSramIdx)
@@ -1601,7 +1601,7 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   xsLP.io.redirect.meta := lpRedirectMeta
 
 
-  lpMetaSram.io.ren(1)   := canCommit // true.B //
+  lpMetaSram.io.ren(1)   := canCommit 
   lpMetaSram.io.raddr(1) := commPtr.value 
   val lpUpdateMeta        = lpMetaSram.io.rdata(1)
 
