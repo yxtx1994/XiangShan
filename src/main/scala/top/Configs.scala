@@ -193,6 +193,7 @@ class MinimalConfig(n: Int = 1) extends Config(
               aliasBitsOpt = None
             )
           },
+          respField = Seq(PaddrField(up(SoCParamsKey).PAddrBits)),
           simulation = !site(DebugOptionsKey).FPGAPlatform
         )),
         L3NBanks = 1
@@ -259,7 +260,6 @@ class WithNKBL2
         reqField = Seq(PreferCacheField()),
         echoField = Seq(DirtyField()),
         respField = Seq(PaddrField(up(SoCParamsKey).PAddrBits)),
-        respKey = Seq(PaddrKey),
         prefetch = Some(huancun.prefetch.PrefetchReceiverParams()),
         enablePerf = true,
         sramDepthDiv = 2,
@@ -295,7 +295,6 @@ class WithNKBL3(n: Int, ways: Int = 8, inclusive: Boolean = true, banks: Int = 1
           address = 0x39000000,
           numCores = tiles.size
         )),
-        respField = Seq(PaddrField(up(SoCParamsKey).PAddrBits)),
         sramClkDivBy2 = true,
         sramDepthDiv = 4,
         tagECC = Some("secded"),
