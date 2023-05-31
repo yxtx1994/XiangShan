@@ -58,6 +58,13 @@ class RefillBufferEntry(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheM
         val entry_release_vec = Input(Vec(cfg.nMissEntries, Bool()))
         val mshr_paddr_vec = Input(Vec(cfg.nMissEntries, UInt(PAddrBits.W)))
         val flush = Input(Bool())
+
+        val sbuffer_data = Flipped(ValidIO(new SbufferToRefillBufferIO))
+        val mshr_read = new DCacheBundle {
+            val r = Flipped(ValidIO(new MissEntryReadRefillBufferIO))
+            val resp = ValidIO(new RefillBufferToMissEntry)
+        }
+        val consumed = Output(Bool())
     })
 
     val req = RegInit(0.U.asTypeOf(new RefillPipeReq))
@@ -65,6 +72,16 @@ class RefillBufferEntry(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheM
 
     val s_idle :: s_zombie :: s_wait_second_beat :: s_sleep :: s_send_refill :: Nil = Enum(5)
     val refillBufferState = RegInit(s_idle)
+
+    val s_recv_sbuffer = WireInit(true.B)
+
+    when(refillBufferState =/= s_idle && io.sbuffer_data.valid && io.sbuffer_data.bits.mshr_id === req.miss_id) {
+        s_recv_sbuffer := false.B
+    }
+
+    io.mshr_read.resp.valid := refillBufferState === s_sleep && io.mshr_read.r.valid && io.mshr_read.r.bits.mshr_id === req.miss_id
+    io.mshr_read.resp.bits.data := req.data.asUInt
+    
 
     io.state_sleep := refillBufferState === s_sleep
     io.state_zombie := refillBufferState === s_zombie
@@ -85,7 +102,7 @@ class RefillBufferEntry(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheM
             }
             // req.data.asTypeOf(Vec(blockBytes/beatBytes, UInt(beatBits.W)))(0) := io.mem_grant.bits.data (bad chisel syntax)
             for (i <- 0 until beatRows) {
-                val idx = i.U
+                val idx = i
                 val grant_row = io.mem_grant.bits.data(rowBits * (i + 1) - 1, rowBits * i)
                 req.data(idx) := grant_row
             }
@@ -93,7 +110,7 @@ class RefillBufferEntry(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheM
             refillBufferState := s_sleep
             // req.data.asTypeOf(Vec(blockBytes/beatBytes, UInt(beatBits.W)))(1) := io.mem_grant.bits.data (bad chisel syntax)
             for (i <- 0 until beatRows) {
-                val idx = (1.U << log2Floor(beatRows)) + i.U
+                val idx = (1 << log2Floor(beatRows)) + i
                 val grant_row = io.mem_grant.bits.data(rowBits * (i + 1) - 1, rowBits * i)
                 req.data(idx) := grant_row
             }
@@ -103,6 +120,10 @@ class RefillBufferEntry(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheM
 
     when(io.miss_queue_req.fire()) {
         req := io.miss_queue_req.bits
+        // don't change data
+        req.data := req.data
+        // TODO: remove this
+        assert(req.data.asUInt === io.miss_queue_req.bits.data.asUInt, "data in mshr should equal to data in refillBuffer, otherwise refillBuffer is wrong")
         refillBufferState := s_send_refill
     }
     io.miss_queue_req.ready := refillBufferState === s_sleep
@@ -112,6 +133,54 @@ class RefillBufferEntry(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheM
     }
     io.refill_pipe_req.valid := refillBufferState === s_send_refill
     io.refill_pipe_req.bits := req
+
+    def mergePutData(old_data: UInt, new_data: UInt, wmask: UInt): UInt = {
+        val full_wmask = FillInterleaved(8, wmask)
+        (~full_wmask & old_data | full_wmask & new_data)
+    }
+    val new_data = Wire(Vec(blockRows, UInt(rowBits.W)))
+    val new_mask = Wire(Vec(blockRows, UInt(rowBytes.W)))
+
+    val consumed = WireInit(false.B)
+    io.consumed := consumed
+
+    for (i <- 0 until blockRows) {
+        new_data(i) := io.sbuffer_data.bits.data(rowBits * (i + 1) - 1, rowBits * i)
+        new_mask(i) := io.sbuffer_data.bits.mask(rowBytes * (i + 1) - 1, rowBytes * i)
+    }
+
+    val old_data = Wire(Vec(blockRows, UInt(rowBits.W)))
+    // merge first beat(req.data) and second beat(mem_grant) with data from sbuffer
+    for (i <- 0 until beatRows) {
+        old_data(i) := req.data(i)
+    }
+    for (i <- 0 until beatRows) {
+        val idx = (1 << log2Floor(beatRows)) + i
+        val grant_row = io.mem_grant.bits.data(rowBits * (i + 1) - 1, rowBits * i)
+        old_data(idx) := grant_row
+    }
+
+    when(refillBufferState === s_wait_second_beat && !s_recv_sbuffer) {
+        // grantData situation
+        when(io.mem_grant.fire()) {
+            for (i <- 0 until blockRows) {
+                val idx = i
+                req.data(idx) := mergePutData(old_data(i), new_data(i), new_mask(i))
+                consumed := true.B
+            }
+        }
+    }
+
+    when(refillBufferState === s_sleep && !s_recv_sbuffer) {
+        // grant situation, write req.data using data from sbuffer
+        assert(io.sbuffer_data.bits.mask.andR === true.B)
+        for (i <- 0 until blockRows) {
+            val idx = i
+            val sbuffer_data = io.sbuffer_data.bits.data(rowBits * (i + 1) - 1, rowBits * i)
+            req.data(idx) := sbuffer_data
+            consumed := true.B
+        }
+    }
 
     // flush logic
     // if a mshr is going to release in next cycle, and no coming refill req from it(AMO), release this entry
@@ -147,6 +216,12 @@ class RefillBuffer(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheModule
 
         val entry_release_vec = Input(Vec(cfg.nMissEntries, Bool()))
         val mshr_paddr_vec = Input(Vec(cfg.nMissEntries, UInt(PAddrBits.W)))
+        
+        val sbuffer_data = Flipped(DecoupledIO(new SbufferToRefillBufferIO))
+        val mshr_read = new DCacheBundle {
+            val r = Flipped(ValidIO(new MissEntryReadRefillBufferIO))
+            val resp = ValidIO(new RefillBufferToMissEntry)
+        }
     })
 
     io := DontCare
@@ -204,6 +279,9 @@ class RefillBuffer(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheModule
                 e.io.flush := true.B
                 deqPtrExt := deqPtrExt + 1.U
             }
+            e.io.sbuffer_data.valid := io.sbuffer_data.valid
+            e.io.sbuffer_data.bits := io.sbuffer_data.bits
+            e.io.mshr_read.r <> io.mshr_read.r
     }
     assert(PopCount((0 until DcacheRefillBufferSize).map(i => {state_sleep_vec(i) && io.miss_queue_req.bits.miss_id === req_miss_id_vec(i) && io.miss_queue_req.valid})) <= 1.U, "miss queue req should only match one entry")
 
@@ -225,7 +303,17 @@ class RefillBuffer(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheModule
         io.forward(i).forwardData := ParallelMux(forward_valid_vec zip forwardData_vec)
         assert(!io.forward(i).forward_refillBuffer || (PopCount(forward_valid_vec) === 0.U || PopCount(forward_valid_vec) === 1.U), s"port{$i} can not forward 2 or more entries in refillBuffer")
         // io.forward(i).forward_data := forwardData_vec.zip(forward_valid_vec).reduce(Mux(_._2, _._1, 0.U) | Mux(_._2, _._1, 0.U))
-  })
+    })
+    io.sbuffer_data.ready := VecInit(entries.map(_.io.consumed)).asUInt.orR
+
+    assert(RegNext(PopCount(entries.map(_.io.consumed)) <= 1.U))
+
+    io.mshr_read.resp.valid     := VecInit(entries.map(_.io.mshr_read.resp.valid)).asUInt.orR
+    io.mshr_read.resp.bits.data := ParallelOR((entries.map(_.io.mshr_read.resp)).map{case (resp) => {
+        Fill(resp.bits.data.getWidth, resp.valid.asUInt) & resp.bits.data
+    }})
+
+    assert(RegNext(PopCount(entries.map(_.io.mshr_read.resp.valid)) <= 1.U))
 
     // perf 
     val validCount = distanceBetween(enqPtrExt, deqPtrExt)

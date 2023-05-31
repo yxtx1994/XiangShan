@@ -177,6 +177,14 @@ class MissEntry(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheModule {
 
     val refillBufferReady = Input(Bool())
     val l2_pf_store_only = Input(Bool())
+
+    // read sbuffer to get store's data
+    val sbuffer = ValidIO(new MissEntryReadSbufferIO)
+    // read refill buffer to get amo's refill data
+    val refill_buffer = new DCacheBundle {
+      val r = ValidIO(new MissEntryReadRefillBufferIO)
+      val resp = Flipped(ValidIO(new RefillBufferToMissEntry))
+    }
   })
 
   assert(!RegNext(io.primary_valid && !io.primary_ready))
@@ -248,6 +256,12 @@ class MissEntry(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheModule {
     s_write_storedata := true.B
     assert(RegNext(primary_fire || secondary_fire))
   }
+
+  val sbuffer_ren = WireInit(false.B)
+
+  io.sbuffer.valid           := sbuffer_ren && req_valid && req.isFromStore
+  io.sbuffer.bits.sbuffer_id := req.id
+  io.sbuffer.bits.mshr_id    := io.id
 
   when (primary_fire) {
     req_valid := true.B
@@ -348,6 +362,10 @@ class MissEntry(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheModule {
       }
       w_grantlast := w_grantlast || refill_done
       hasData := true.B
+      when(!refill_done) {
+        // read sbuffer when first beat arrives
+        sbuffer_ren := true.B
+      }
     }.otherwise {
       // Grant
       assert(full_overwrite)
@@ -356,6 +374,8 @@ class MissEntry(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheModule {
       }
       w_grantlast := true.B
       hasData := false.B
+      // read sbuffer when Grant appears
+      sbuffer_ren := true.B
     }
 
     error := io.mem_grant.bits.denied || io.mem_grant.bits.corrupt || error
@@ -530,7 +550,9 @@ class MissEntry(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheModule {
   refill.access := access
   refill.alias := req.vaddr(13, 12) // TODO
 
-  io.main_pipe_req.valid := !s_mainpipe_req && w_grantlast
+  val amo_refill_buffer_data_ready = io.refill_buffer.resp.valid
+
+  io.main_pipe_req.valid := !s_mainpipe_req && w_grantlast && amo_refill_buffer_data_ready
   io.main_pipe_req.bits := DontCare
   io.main_pipe_req.bits.miss := true.B
   io.main_pipe_req.bits.miss_id := io.id
@@ -542,13 +564,16 @@ class MissEntry(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheModule {
   io.main_pipe_req.bits.cmd := req.cmd
   io.main_pipe_req.bits.vaddr := req.vaddr
   io.main_pipe_req.bits.addr := req.addr
-  io.main_pipe_req.bits.store_data := refill_and_store_data.asUInt
+  io.main_pipe_req.bits.store_data := io.refill_buffer.resp.bits.data
   io.main_pipe_req.bits.store_mask := ~0.U(blockBytes.W)
   io.main_pipe_req.bits.word_idx := req.word_idx
   io.main_pipe_req.bits.amo_data := req.amo_data
   io.main_pipe_req.bits.amo_mask := req.amo_mask
   io.main_pipe_req.bits.error := error
   io.main_pipe_req.bits.id := req.id
+
+  io.refill_buffer.r.valid        := !s_mainpipe_req && w_grantlast
+  io.refill_buffer.r.bits.mshr_id := io.id
 
   io.block_addr.valid := req_valid && w_grantlast && !w_refill_resp
   io.block_addr.bits := req.addr
@@ -627,6 +652,12 @@ class MissQueue(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheModule wi
     val mshr_release_vec = Output(Vec(cfg.nMissEntries, Bool()))
     val mshr_paddr_vec = Output(Vec(cfg.nMissEntries, UInt(PAddrBits.W)))
     val l2_pf_store_only = Input(Bool())
+
+    val sbuffer = ValidIO(new MissEntryReadSbufferIO)
+    val refill_buffer = new DCacheBundle {
+      val r = ValidIO(new MissEntryReadRefillBufferIO)
+      val resp = Flipped(ValidIO(new RefillBufferToMissEntry))
+    }
   })
   
   // 128KBL1: FIXME: provide vaddr for l2
@@ -655,6 +686,25 @@ class MissQueue(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheModule wi
   val entry_release_vec = entries.map(_.io.entry_release_next_cycle)
   io.mshr_release_vec := VecInit(entry_release_vec)
   io.mshr_paddr_vec := VecInit(entries.map(_.io.entry_paddr))
+
+  val sbuffer_read_vec = entries.map(_.io.sbuffer)
+  io.sbuffer.valid           := VecInit(sbuffer_read_vec.map(_.valid)).asUInt.orR
+  io.sbuffer.bits.mshr_id    := ParallelOR((sbuffer_read_vec).map{case (ren) => {
+    Fill(ren.bits.mshr_id.getWidth, ren.valid.asUInt) & ren.bits.mshr_id
+  }})
+  io.sbuffer.bits.sbuffer_id := ParallelOR(sbuffer_read_vec.map{case (ren) => {
+    Fill(ren.bits.sbuffer_id.getWidth, ren.valid.asUInt) & ren.bits.sbuffer_id
+  }})
+
+  assert(RegNext(PopCount(sbuffer_read_vec.map(_.valid)) <= 1.U))
+
+  val refill_buffer_read_vec = entries.map(_.io.refill_buffer.r)
+  io.refill_buffer.r.valid := VecInit(refill_buffer_read_vec.map(_.valid)).asUInt.orR
+  io.refill_buffer.r.bits.mshr_id := ParallelOR((refill_buffer_read_vec zip entries.map(_.io.id)).map{case (ren, id) => {
+    Fill(id.getWidth, ren.valid.asUInt) & id
+  }})
+
+  assert(RegNext(PopCount(refill_buffer_read_vec.map(_.valid)) <= 1.U))
 
   assert(RegNext(PopCount(secondary_ready_vec) <= 1.U))
 //  assert(RegNext(PopCount(secondary_reject_vec) <= 1.U))
@@ -710,6 +760,7 @@ class MissQueue(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheModule wi
       io.debug_early_replace(i) := e.io.debug_early_replace
 
       e.io.refillBufferReady := io.refillBufferReady
+      e.io.refill_buffer.resp <> io.refill_buffer.resp
   }
 
   io.req.ready := accept

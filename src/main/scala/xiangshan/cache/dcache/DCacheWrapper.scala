@@ -514,7 +514,7 @@ class DCacheLineIO(implicit p: Parameters) extends DCacheBundle
   val resp = Flipped(DecoupledIO(new DCacheLineResp))
 }
 
-class DCacheToSbufferIO(implicit p: Parameters) extends DCacheBundle { 
+class DCacheToSbufferIO(implicit p: Parameters) extends DCacheBundle {
   // sbuffer will directly send request to dcache main pipe
   val req = Flipped(Decoupled(new DCacheLineReq))
 
@@ -522,6 +522,9 @@ class DCacheToSbufferIO(implicit p: Parameters) extends DCacheBundle {
   val refill_hit_resp = ValidIO(new DCacheLineResp)
 
   val replay_resp = ValidIO(new DCacheLineResp)
+
+  val miss_queue_read = ValidIO(new MissEntryReadSbufferIO)
+  val refill_buffer   = Flipped(DecoupledIO(new SbufferToRefillBufferIO))
 
   def hit_resps: Seq[ValidIO[DCacheLineResp]] = Seq(main_pipe_hit_resp, refill_hit_resp)
 }
@@ -677,6 +680,25 @@ class LduToRefillBufferForwardIO(implicit p: Parameters) extends DCacheBundle {
   }
 }
 
+class MissEntryReadSbufferIO(implicit p: Parameters) extends DCacheBundle {
+  val mshr_id    = UInt(reqIdWidth.W)
+  val sbuffer_id = UInt(reqIdWidth.W)
+}
+
+class SbufferToRefillBufferIO(implicit p: Parameters) extends DCacheBundle {
+  val data    = UInt((cfg.blockBytes * 8).W)
+  val mask    = UInt(cfg.blockBytes.W)
+  val mshr_id = UInt(reqIdWidth.W)
+}
+
+class MissEntryReadRefillBufferIO(implicit p: Parameters) extends DCacheBundle {
+  val mshr_id  = UInt(reqIdWidth.W)
+}
+
+class RefillBufferToMissEntry(implicit p: Parameters) extends DCacheBundle {
+  val data    = UInt((cfg.blockBytes * 8).W)
+}
+
 class DCacheToLsuIO(implicit p: Parameters) extends DCacheBundle {
   val load  = Vec(LoadPipelineWidth, Flipped(new DCacheLoadIO)) // for speculative load
   val lsq = ValidIO(new Refill)  // refill to load queue, wake up load misses
@@ -757,6 +779,7 @@ class DCacheImp(outer: DCache) extends LazyModuleImp(outer) with HasDCacheParame
 
   missQueue.io.hartId := io.hartId
   missQueue.io.l2_pf_store_only := RegNext(io.l2_pf_store_only, false.B)
+  missQueue.io.sbuffer <> io.lsu.store.miss_queue_read
 
   val errors = ldu.map(_.io.error) ++ // load error
     Seq(mainPipe.io.error) // store / misc error 
@@ -1102,6 +1125,10 @@ class DCacheImp(outer: DCache) extends LazyModuleImp(outer) with HasDCacheParame
   } .otherwise {
     assert (!bus.d.fire())
   }
+
+  refillBuffer.io.sbuffer_data <> io.lsu.store.refill_buffer
+  // miss queue read refill buffer for amo use
+  refillBuffer.io.mshr_read <> missQueue.io.refill_buffer
 
   //----------------------------------------
   // replacement algorithm

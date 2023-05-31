@@ -519,6 +519,29 @@ class Sbuffer(implicit p: Parameters) extends DCacheModule with HasSbufferConst 
   }
 
   // ---------------------------------------------------------------------------
+  // MissQueue read sbuffer, result is sent back to RefillBuffer
+  // ---------------------------------------------------------------------------
+
+  val miss_queue_read = io.dcache.miss_queue_read
+  val refill_buffer   = io.dcache.refill_buffer
+  val consumed        = io.dcache.refill_buffer.ready
+
+  val resp_v = RegInit(false.B)
+  when(consumed) {
+    resp_v := false.B
+  }
+  when(miss_queue_read.valid) {
+    resp_v := true.B
+  }
+
+  refill_buffer.valid        := resp_v
+  refill_buffer.bits.data    := RegEnable(data(miss_queue_read.bits.sbuffer_id).asUInt, miss_queue_read.valid)
+  refill_buffer.bits.mask    := RegEnable(mask(miss_queue_read.bits.sbuffer_id).asUInt, miss_queue_read.valid)
+  refill_buffer.bits.mshr_id := RegEnable(miss_queue_read.bits.mshr_id, miss_queue_read.valid)
+
+  assert(!(miss_queue_read.valid && !stateVec(miss_queue_read.bits.sbuffer_id).isInflight), "MissQueue should only read Inflight Sbuffer Entry")
+
+  // ---------------------------------------------------------------------------
   // sbuffer to dcache pipeline
   // ---------------------------------------------------------------------------
 
