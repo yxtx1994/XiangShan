@@ -26,20 +26,6 @@ import freechips.rocketchip.tilelink._
 import mem.{AddPipelineReg}
 import huancun.{PaddrKey, PaddrField}
 
-class RefillBufferPtr(implicit p: Parameters) extends CircularQueuePtr[RefillBufferPtr](
-  p => p(XSCoreParamsKey).DcacheRefillBufferSize
-){
-}
-
-object RefillBufferPtr {
-  def apply(f: Bool, v: UInt)(implicit p: Parameters): RefillBufferPtr = {
-    val ptr = Wire(new RefillBufferPtr)
-    ptr.flag := f
-    ptr.value := v
-    ptr
-  }
-}
-
 class RefillBufferEntry(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheModule {
     val io = IO(new Bundle() {
         // to refill pipe
@@ -51,13 +37,12 @@ class RefillBufferEntry(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheM
         // tilelink D channel
         val mem_grant = Flipped(DecoupledIO(new TLBundleD(edge.bundle)))
 
+        val state_idle = Output(Bool())
         val state_sleep = Output(Bool())
-        val state_zombie = Output(Bool())
         val req_miss_id = Output(UInt(log2Up(cfg.nMissEntries).W))
 
         val entry_release_vec = Input(Vec(cfg.nMissEntries, Bool()))
         val mshr_paddr_vec = Input(Vec(cfg.nMissEntries, UInt(PAddrBits.W)))
-        val flush = Input(Bool())
 
         val sbuffer_data = Flipped(ValidIO(new SbufferToRefillBufferIO))
         val mshr_read = new DCacheBundle {
@@ -70,7 +55,7 @@ class RefillBufferEntry(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheM
     val req = RegInit(0.U.asTypeOf(new RefillPipeReq))
     val opcode_r = RegInit(TLMessages.Grant)
 
-    val s_idle :: s_zombie :: s_wait_second_beat :: s_sleep :: s_send_refill :: Nil = Enum(5)
+    val s_idle :: s_wait_second_beat :: s_sleep :: s_send_refill :: Nil = Enum(4)
     val refillBufferState = RegInit(s_idle)
 
     val s_recv_sbuffer = WireInit(true.B)
@@ -82,9 +67,8 @@ class RefillBufferEntry(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheM
     io.mshr_read.resp.valid := refillBufferState === s_sleep && io.mshr_read.r.valid && io.mshr_read.r.bits.mshr_id === req.miss_id
     io.mshr_read.resp.bits.data := req.data.asUInt
     
-
+    io.state_idle := refillBufferState === s_idle
     io.state_sleep := refillBufferState === s_sleep
-    io.state_zombie := refillBufferState === s_zombie
     io.req_miss_id := req.miss_id
 
     when(io.mem_grant.fire()) {
@@ -122,7 +106,7 @@ class RefillBufferEntry(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheM
         req := io.miss_queue_req.bits
         // don't change data
         req.data := req.data
-        // TODO: remove this
+        // for now, just check the value, TODO: remove this
         assert(req.data.asUInt === io.miss_queue_req.bits.data.asUInt, "data in mshr should equal to data in refillBuffer, otherwise refillBuffer is wrong")
         refillBufferState := s_send_refill
     }
@@ -184,12 +168,7 @@ class RefillBufferEntry(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheM
 
     // flush logic
     // if a mshr is going to release in next cycle, and no coming refill req from it(AMO), release this entry
-    // 1. goto zombie state
     when(refillBufferState =/= s_idle && io.entry_release_vec(req.miss_id)) {
-        refillBufferState := s_zombie
-    }
-    // 2. when deqptr find it, flush it
-    when(io.flush) {
         refillBufferState := s_idle
     }
 
@@ -225,19 +204,18 @@ class RefillBuffer(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheModule
     })
 
     io := DontCare
-    
-    val enqPtrExt = RegInit(0.U.asTypeOf(new RefillBufferPtr))
-    val deqPtrExt = RegInit(0.U.asTypeOf(new RefillBufferPtr))
-
-    val enqPtr = enqPtrExt.value
-    val deqPtr = deqPtrExt.value
 
     val entries = Seq.fill(DcacheRefillBufferSize)(Module(new RefillBufferEntry(edge)))
 
     val forwardInfo_vec = VecInit(entries.map(_.io.forwardInfo))
     val req_miss_id_vec = VecInit(entries.map(_.io.req_miss_id))
+    val state_idle_vec = VecInit(entries.map(_.io.state_idle))
     val state_sleep_vec = VecInit(entries.map(_.io.state_sleep))
-    val state_zombie_vec = VecInit(entries.map(_.io.state_zombie))
+
+    val enqIdx = PriorityEncoder(state_idle_vec)
+    val lastEnqIdx = RegInit(0.U(log2Ceil(DcacheRefillBufferSize).W))
+    val lastEnqIdxValid = RegInit(false.B)
+    val realEnqIdx = Mux(lastEnqIdxValid, lastEnqIdx, enqIdx)
 
     val (_, _, refill_done, _) = edge.count(io.mem_grant)
     
@@ -248,7 +226,7 @@ class RefillBuffer(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheModule
             // incoming tilelink D 
             e.io.mem_grant.valid := false.B
             e.io.mem_grant.bits := DontCare
-            when(enqPtr === i.U) {
+            when(realEnqIdx === i.U) {
                 io.mem_grant.ready := e.io.mem_grant.ready
                 e.io.mem_grant.valid := io.mem_grant.valid
                 e.io.mem_grant.bits := io.mem_grant.bits
@@ -261,24 +239,6 @@ class RefillBuffer(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheModule
                 e.io.miss_queue_req.valid := io.miss_queue_req.valid
                 e.io.miss_queue_req.bits := io.miss_queue_req.bits
             }
-            // outgoing req to refill pipe
-            e.io.refill_pipe_req.ready := false.B
-            when(deqPtr === i.U) {
-                val out_refill_pipe_req_ctrl = Wire(Decoupled(new RefillPipeReqCtrl))
-                out_refill_pipe_req_ctrl.valid := e.io.refill_pipe_req.valid
-                out_refill_pipe_req_ctrl.bits := e.io.refill_pipe_req.bits.getCtrl
-                e.io.refill_pipe_req.ready := out_refill_pipe_req_ctrl.ready
-                for (dup <- io.refill_pipe_req_dup) {
-                    AddPipelineReg(out_refill_pipe_req_ctrl, dup, false.B)
-                }
-                AddPipelineReg(e.io.refill_pipe_req, io.refill_pipe_req, false.B)
-            }
-            // flush logic
-            e.io.flush := false.B
-            when(deqPtr === i.U && state_zombie_vec(i)) {
-                e.io.flush := true.B
-                deqPtrExt := deqPtrExt + 1.U
-            }
             e.io.sbuffer_data.valid := io.sbuffer_data.valid
             e.io.sbuffer_data.bits := io.sbuffer_data.bits
             e.io.mshr_read.r <> io.mshr_read.r
@@ -286,11 +246,23 @@ class RefillBuffer(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheModule
     assert(PopCount((0 until DcacheRefillBufferSize).map(i => {state_sleep_vec(i) && io.miss_queue_req.bits.miss_id === req_miss_id_vec(i) && io.miss_queue_req.valid})) <= 1.U, "miss queue req should only match one entry")
 
     when(io.mem_grant.fire() && refill_done) {
-        enqPtrExt := enqPtrExt + 1.U
+        lastEnqIdxValid := false.B
+    }.elsewhen(io.mem_grant.fire() && !refill_done) {
+        lastEnqIdxValid := true.B
+        lastEnqIdx := enqIdx
     }
-    when(io.refill_pipe_req.fire()) {
-        deqPtrExt := deqPtrExt + 1.U
+
+    // outgoing req to refill pipe
+    val out_refill_pipe_req = Wire(Decoupled(new RefillPipeReq))
+    val out_refill_pipe_req_ctrl = Wire(Decoupled(new RefillPipeReqCtrl))
+    rrArbiter(entries.map(_.io.refill_pipe_req), out_refill_pipe_req, Some("refill_pipe_req_rr_arb"))
+    out_refill_pipe_req_ctrl.valid := out_refill_pipe_req.valid
+    out_refill_pipe_req_ctrl.bits := out_refill_pipe_req.bits.getCtrl
+    out_refill_pipe_req.ready := out_refill_pipe_req_ctrl.ready
+    for (dup <- io.refill_pipe_req_dup) {
+        AddPipelineReg(out_refill_pipe_req_ctrl, dup, false.B)
     }
+    AddPipelineReg(out_refill_pipe_req, io.refill_pipe_req, false.B)
 
     // forward logic
     (0 until LoadPipelineWidth).map(i => {
@@ -316,7 +288,7 @@ class RefillBuffer(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheModule
     assert(RegNext(PopCount(entries.map(_.io.mshr_read.resp.valid)) <= 1.U))
 
     // perf 
-    val validCount = distanceBetween(enqPtrExt, deqPtrExt)
+    val validCount = PopCount(VecInit(state_idle_vec.map(!_)))
     QueuePerf(DcacheRefillBufferSize, validCount, validCount === DcacheRefillBufferSize.U)
     XSPerfAccumulate("forward_refillBuffer", PopCount((0 until LoadPipelineWidth).map(i => io.forward(i).forward_refillBuffer)))
     XSPerfAccumulate("refill_buffer_not_ready", !io.mem_grant.ready)
