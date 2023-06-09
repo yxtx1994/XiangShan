@@ -243,6 +243,7 @@ class StoreUnit(implicit p: Parameters) extends XSModule {
   val io = IO(new Bundle() {
     val stin = Flipped(Decoupled(new ExuInput))
     val redirect = Flipped(ValidIO(new Redirect))
+    val feedbackFast = ValidIO(new RSFeedback)
     val feedbackSlow = ValidIO(new RSFeedback)
     val tlb = new TlbRequestIO()
     val pmp = Flipped(new PMPRespBundle())
@@ -283,9 +284,12 @@ class StoreUnit(implicit p: Parameters) extends XSModule {
 
   PipelineConnect(store_s1.io.out, store_s2.io.in, true.B, store_s1.io.out.bits.uop.robIdx.needFlush(io.redirect))
 
+  // store unit does not need fast feedback
+  io.feedbackFast.valid := false.B
+  io.feedbackFast.bits := DontCare
   // feedback tlb miss to RS in store_s2
-  io.feedbackSlow.bits := RegNext(store_s1.io.rsFeedback.bits)
   io.feedbackSlow.valid := RegNext(store_s1.io.rsFeedback.valid && !store_s1.io.out.bits.uop.robIdx.needFlush(io.redirect))
+  io.feedbackSlow.bits := RegNext(store_s1.io.rsFeedback.bits)
 
   store_s2.io.pmpResp <> io.pmp
   store_s2.io.static_pm := RegNext(io.tlb.resp.bits.static_pm)

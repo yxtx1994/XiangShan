@@ -219,7 +219,7 @@ class CtrlBlockImp(outer: CtrlBlock)(implicit p: Parameters) extends LazyModuleI
     val sqDeq = Input(UInt(log2Ceil(EnsbufferWidth + 1).W))
     val sqCanAccept = Input(Bool())
     val lqCanAccept = Input(Bool())
-    val ld_pc_read = Vec(exuParameters.LduCnt, Flipped(new FtqRead(UInt(VAddrBits.W))))
+    val ld_pc_read = Vec(exuParameters.LduCnt + exuParameters.HyuCnt, Flipped(new FtqRead(UInt(VAddrBits.W))))
     // from int block
     val exuRedirect = Vec(exuParameters.AluCnt + exuParameters.JmpCnt, Flipped(ValidIO(new ExuOutput)))
     val stIn = Vec(exuParameters.StuCnt, Flipped(ValidIO(new ExuInput)))
@@ -256,6 +256,7 @@ class CtrlBlockImp(outer: CtrlBlock)(implicit p: Parameters) extends LazyModuleI
   })
 
   override def writebackSource: Option[Seq[Seq[Valid[ExuOutput]]]] = {
+    val writebackDropHyRS = io.writeback.
     Some(io.writeback.map(writeback => {
       val exuOutput = WireInit(writeback)
       val timer = GTimer()
@@ -281,11 +282,11 @@ class CtrlBlockImp(outer: CtrlBlock)(implicit p: Parameters) extends LazyModuleI
   val redirectGen = Module(new RedirectGenerator)
   val rob = outer.rob.module
 
-  // jumpPc (2) + redirects (1) + loadPredUpdate (1) + jalr_target (1) + [ld pc (LduCnt)] + robWriteback (sum(writebackLengths)) + robFlush (1)
+  // jumpPc (2) + redirects (1) + loadPredUpdate (1) + jalr_target (1) + [ld pc (LduCnt)] + [ld pc (HyuCnt)] + robWriteback (sum(writebackLengths)) + robFlush (1)
   val PCMEMIDX_LD = 5
   val pcMem = Module(new SyncDataModuleTemplate(
     new Ftq_RF_Components, FtqSize,
-    6 + exuParameters.LduCnt, 1, "CtrlPcMem")
+    6 + exuParameters.LduCnt + exuParameters.HyuCnt, 1, "CtrlPcMem")
   )
   pcMem.io.wen.head   := RegNext(io.frontend.fromFtq.pc_mem_wen)
   pcMem.io.waddr.head := RegNext(io.frontend.fromFtq.pc_mem_waddr)
@@ -538,7 +539,7 @@ class CtrlBlockImp(outer: CtrlBlock)(implicit p: Parameters) extends LazyModuleI
   val jalrTargetRead = pcMem.io.rdata(4).startAddr
   val read_from_newest_entry = RegNext(jalrTargetReadPtr) === RegNext(io.frontend.fromFtq.newest_entry_ptr)
   io.jalr_target := Mux(read_from_newest_entry, RegNext(io.frontend.fromFtq.newest_entry_target), jalrTargetRead)
-  for(i <- 0 until exuParameters.LduCnt){
+  for(i <- 0 until exuParameters.LduCnt + exuParameters.HyuCnt){
     // load s0 -> get rdata (s1) -> reg next (s2) -> output (s2)
     pcMem.io.raddr(i + PCMEMIDX_LD) := io.ld_pc_read(i).ptr.value
     io.ld_pc_read(i).data := pcMem.io.rdata(i + 5).getPc(RegNext(io.ld_pc_read(i).offset))

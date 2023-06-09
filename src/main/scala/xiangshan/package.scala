@@ -81,6 +81,7 @@ package object xiangshan {
     def isFpExu(fuType: UInt) = fuType(3, 2) === "b10".U
     def isMemExu(fuType: UInt) = fuType(3, 2) === "b11".U
     def isLoadStore(fuType: UInt) = isMemExu(fuType) && !fuType(1)
+    def isLoadExu(fuType: UInt) = isMemExu(fuType) && !fuType(0)
     def isStoreExu(fuType: UInt) = isMemExu(fuType) && fuType(0)
     def isAMO(fuType: UInt) = fuType(1)
     def isFence(fuType: UInt) = fuType === fence
