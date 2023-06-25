@@ -135,7 +135,7 @@ case class XSCoreParameters
   LoadQueueRARSize: Int = 80,
   LoadQueueRAWSize: Int = 64, // NOTE: make sure that LoadQueueRAWSize is power of 2.
   RollbackGroupSize: Int = 8,
-  LoadQueueReplaySize: Int = 80,
+  LoadQueueReplaySize: Int = 72,
   LoadUncacheBufferSize: Int = 20,
   LoadQueueNWriteBanks: Int = 8, // NOTE: make sure that LoadQueueRARSize/LoadQueueRAWSize is divided by LoadQueueNWriteBanks
   StoreQueueSize: Int = 64,
@@ -159,12 +159,12 @@ case class XSCoreParameters
     FmacCnt = 4,
     FmiscCnt = 2,
     FmiscDivSqrtCnt = 0,
-    LduCnt = 2,
-    StuCnt = 2
+    LduCnt = 3,
+    StuCnt = 3
   ),
   prefetcher: Option[PrefetcherParams] = Some(SMSParams()),
-  LoadPipelineWidth: Int = 2,
-  StorePipelineWidth: Int = 2,
+  LoadPipelineWidth: Int = 3,
+  StorePipelineWidth: Int = 3,
   VecMemSrcInWidth: Int = 2,
   VecMemInstWbWidth: Int = 1,
   VecMemDispatchWidth: Int = 1,
@@ -298,7 +298,7 @@ case class DebugOptions
   EnablePerfDebug: Boolean = true,
   UseDRAMSim: Boolean = false,
   EnableConstantin: Boolean = false,
-  EnableChiselDB: Boolean = false,
+  EnableChiselDB: Boolean = true,
   AlwaysBasicDB: Boolean = true,
 )
 

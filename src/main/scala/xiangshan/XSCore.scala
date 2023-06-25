@@ -377,7 +377,7 @@ class XSCoreImp(outer: XSCoreBase) extends LazyModuleImp(outer)
   } else {
     memBlock.io.perfEventsPTW := DontCare
   }
-  ctrlBlock.perfinfo.perfEventsRs  := outer.exuBlocks.flatMap(b => b.module.getPerf.takeRight(b.scheduler.numRs))
+  // ctrlBlock.perfinfo.perfEventsRs  := outer.exuBlocks.flatMap(b => b.module.getPerf.takeRight(b.scheduler.numRs))
 
   csrioIn.hartId <> io.hartId
   csrioIn.perf <> DontCare

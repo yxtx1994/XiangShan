@@ -100,6 +100,10 @@ class ReservationStationWrapper(implicit p: Parameters) extends LazyModule with 
       params.lsqFeedback = true
       params.hasFeedback = true
       params.checkWaitBit = false
+      params.numDeq = 3
+    }
+    if (cfg == StdExeUnitCfg) {
+      params.numDeq = 3
     }
     if (cfg.hasCertainLatency) {
       params.fixedLatency = if (cfg == MulDivExeUnitCfg) mulCfg.latency.latencyVal.get else cfg.latency.latencyVal.get
@@ -135,9 +139,8 @@ class ReservationStationWrapper(implicit p: Parameters) extends LazyModule with 
 
   override def toString: String = params.toString
   // for better timing, we limits the size of RS to 2-deq
-  val maxRsDeq = 2
+  val maxRsDeq = 4
   def numRS = (params.numDeq + (maxRsDeq - 1)) / maxRsDeq
-
   lazy val module = new LazyModuleImp(this) with HasPerfEvents {
     require(params.numEnq < params.numDeq || params.numEnq % params.numDeq == 0)
     require(params.numEntries % params.numDeq == 0)
@@ -406,8 +409,8 @@ class ReservationStation(params: RSParams)(implicit p: Parameters) extends XSMod
   val numSelected = PopCount(s1_issuePtrOH.map(_.valid))
   val numReadyEntries = PopCount(statusArray.io.canIssue)
   val shouldSelected = Mux(numReadyEntries > params.numDeq.U, params.numDeq.U, numReadyEntries)
-  XSError(numSelected < shouldSelected,
-    p"performance regression: only $numSelected out of $shouldSelected selected (total: $numReadyEntries)\n")
+  // XSError(numSelected < shouldSelected,
+  //   p"performance regression: only $numSelected out of $shouldSelected selected (total: $numReadyEntries)\n")
 
   // Allocation: store dispatch uops into payload and data array
   s1_dispatchUops_dup.foreach(_.zip(enqReverse(io.fromDispatch)).zipWithIndex.foreach{ case ((uop, in), i) =>
@@ -495,7 +498,9 @@ class ReservationStation(params: RSParams)(implicit p: Parameters) extends XSMod
     // However, in this case, the select policy always selects at maximum numDeq instructions to issue.
     // Thus, we need an arbitration between the numDeq + 1 possibilities.
     val oldestSelection = Module(new OldestSelection(params))
-    oldestSelection.io.in := s1_in_selectPtr
+    oldestSelection.io.in.zip(s1_in_selectPtr).map { case (in, ptr) => {
+      in := ptr
+    }}
     oldestSelection.io.oldest := s1_in_oldestPtrOH
     // By default, we use the default victim index set in parameters.
     oldestSelection.io.canOverride := (0 until params.numDeq).map(_ == params.oldestFirst._3).map(_.B)

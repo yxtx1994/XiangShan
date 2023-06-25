@@ -466,11 +466,13 @@ class Sbuffer(implicit p: Parameters) extends DCacheModule with HasSbufferConst 
   val sbuffer_empty = Cat(invalidMask).andR()
   val sq_empty = !Cat(io.in.map(_.valid)).orR()
   val empty = sbuffer_empty && sq_empty
-  val threshold = RegNext(io.csrCtrl.sbuffer_threshold +& 1.U)
+  val threshold = Wire(UInt(5.W)) // RegNext(io.csrCtrl.sbuffer_threshold +& 1.U)
+  threshold := Constantin.createRecord("StoreBufferThreshold_"+p(XSCoreParamsKey).HartId.toString(), initValue = 7.U)
   val ActiveCount = PopCount(activeMask)
   val ValidCount = PopCount(validMask)
   val do_eviction = RegNext(ActiveCount >= threshold || ActiveCount === (StoreBufferSize-1).U || ValidCount === (StoreBufferSize).U, init = false.B)
   require((StoreBufferThreshold + 1) <= StoreBufferSize)
+
 
   XSDebug(p"ActiveCount[$ActiveCount]\n")
 

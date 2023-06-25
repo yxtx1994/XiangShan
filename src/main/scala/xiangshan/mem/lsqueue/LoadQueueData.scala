@@ -31,6 +31,7 @@ import utility._
 // These raw data modules are like SyncDataModuleTemplate, but support cam-like ops
 abstract class LqRawDataModule[T <: Data] (gen: T, numEntries: Int, numRead: Int, numWrite: Int, numWBank: Int, numWDelay: Int, numCamPort: Int = 0)(implicit p: Parameters) extends XSModule {
   val io = IO(new Bundle() {
+    val ren   = Input(Vec(numRead, Bool()))
     val raddr = Input(Vec(numRead, UInt(log2Up(numEntries).W)))
     val rdata = Output(Vec(numRead, gen))
     val wen   = Input(Vec(numWrite, Bool()))
@@ -51,13 +52,14 @@ abstract class LqRawDataModule[T <: Data] (gen: T, numEntries: Int, numRead: Int
   require(numWBank >= 2, "write bank must be greater than or equal to two!")
   require(numWDelay >= 1, "write delay must be greater than or equal to one!")
   require(numCamPort >= 0, "camport must be greater than or equal to zero!")
+  require((numEntries % numWBank) == 0) 
 
   val numEntryPerBank = numEntries / numWBank
 
   val data = Reg(Vec(numEntries, gen))
   // read ports
   for (i <- 0 until numRead) {
-    io.rdata(i) := data(RegNext(io.raddr(i)))
+    io.rdata(i) := RegEnable(data(io.raddr(i)), io.ren(i))
   }
 
   // write ports
