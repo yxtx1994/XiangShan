@@ -103,14 +103,21 @@ class Ibuffer(implicit p: Parameters) extends XSModule with HasCircularQueuePtrH
   val validEntries = distanceBetween(enqPtr, deqPtr)
   val allowEnq = RegInit(true.B)
 
-  val numEnq = Mux(io.in.fire, PopCount(io.in.bits.enqEnable), 0.U)
+  val numEnq = Mux(io.in.fire, PopCount(io.in.bits.valid), 0.U)
+  val numEnqAccurate = Mux(io.in.fire, PopCount(io.in.bits.enqEnable), 0.U)
   val numTryDeq = Mux(validEntries >= DecodeWidth.U, DecodeWidth.U, validEntries)
   val numDeq = Mux(io.out.head.ready, numTryDeq, 0.U)
   deqPtrVecNext := Mux(io.out.head.ready, VecInit(deqPtrVec.map(_ + numTryDeq)), deqPtrVec)
 
   val numAfterEnq = validEntries +& numEnq
+  val numAfterEnqAccurate = validEntries +& numEnqAccurate
+
   val nextValidEntries = Mux(io.out(0).ready, numAfterEnq - numTryDeq, numAfterEnq)
+  val nextValidEntriesAccurate = Mux(io.out(0).ready, numAfterEnqAccurate - numTryDeq, numAfterEnqAccurate)
   allowEnq := (IBufSize - PredictWidth).U >= nextValidEntries
+  val allowEnqAccurate = (IBufSize - PredictWidth).U >= nextValidEntriesAccurate
+
+  XSPerfAccumulate("IbufferFalseFull", allowEnqAccurate && !allowEnq);
 
   // Enque
   io.in.ready := allowEnq
