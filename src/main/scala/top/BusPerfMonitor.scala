@@ -81,7 +81,7 @@ class BusPerfMonitorImp(outer: BusPerfMonitor)
 
 object BusPerfMonitor {
   def apply(enable: Boolean = false)(implicit p: Parameters) = {
-    if(enable){
+    if(false){
       val busPMU = LazyModule(new BusPerfMonitor())
       busPMU.node
     } else {

@@ -245,7 +245,7 @@ class WithNKBL2
         reqField = Seq(PreferCacheField()),
         echoField = Seq(DirtyField()),
         prefetch = Some(huancun.prefetch.PrefetchReceiverParams()),
-        enablePerf = true,
+        enablePerf = false,
         sramDepthDiv = 2,
         tagECC = None,
         dataECC = None,
@@ -277,7 +277,7 @@ class WithNKBL3(n: Int, ways: Int = 8, inclusive: Boolean = true, banks: Int = 1
             blockGranularity = log2Ceil(clientDirBytes / core.L2NBanks / l2params.ways / 64 / tiles.size)
           )
         },
-        enablePerf = true,
+        enablePerf = false,
         ctrl = Some(CacheCtrl(
           address = 0x39000000,
           numCores = tiles.size

@@ -263,7 +263,7 @@ case class DebugOptions
   EnableDifftest: Boolean = false,
   AlwaysBasicDiff: Boolean = true,
   EnableDebug: Boolean = false,
-  EnablePerfDebug: Boolean = true,
+  EnablePerfDebug: Boolean = false,
   UseDRAMSim: Boolean = false
 )
 
