@@ -48,15 +48,11 @@ endif
 override SIM_ARGS += --with-dramsim3
 endif
 
-# top-down
-ifeq ($(CONFIG),DefaultConfig)
-ENABLE_TOPDOWN ?= 1
-endif
-ifneq ($(NUM_CORES),1)
-ENABLE_TOPDOWN = 0
-endif
-ifeq ($(ENABLE_TOPDOWN),1)
-override SIM_ARGS += --enable-topdown
+# dynamic switch CONSTANTIN
+ifeq ($(WITH_CONSTANTIN),0)
+$(info disable WITH_CONSTANTIN)
+else
+override SIM_ARGS += --with-constantin
 endif
 
 # emu for the release version
