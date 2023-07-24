@@ -1,6 +1,0 @@
-set sregfile_list [list
-ftq/ftb_entry_mem/dataBanks_0
-ftq/ftq_pc_mem/mem/dataBanks_0
-ftq/ftq_pd_mem/dataBanks_0
-ibuffer/ibuf/dataBanks_0
-]
