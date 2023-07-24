@@ -60,6 +60,15 @@ class WbBusyArbiter(isInt: Boolean)(implicit p: Parameters) extends XSModule {
   }
 
   arbiters.foreach(_.foreach(_.io.out.ready := true.B))
+
+  val isInt_toString = if (isInt) "Int" else "FpVec"
+//  val isWriteRegfileWritePortTable = WireInit(Constantin.createRecord("isWriteRegfileWritePortTable" + p(XSCoreParamsKey).HartId.toString, initValue = 1.U)).orR
+  val isWriteRegfileWritePortTable = true.B
+  val regfileWritePortTable = ChiselDB.createTable(isInt_toString + "RegfileWritePort_hart" + p(XSCoreParamsKey).HartId.toString, new RegfileWritePortDB)
+  val regfileWritePortData = Wire(new RegfileWritePortDB)
+  require(arbiters.length <= regfileWritePortData.max_port_num)
+  regfileWritePortData.port := Cat(arbiters.map(arb => if (arb.nonEmpty) arb.get.io.out.valid else false.B).reverse).asUInt
+  regfileWritePortTable.log(regfileWritePortData, isWriteRegfileWritePortTable && regfileWritePortData.port.orR, isInt_toString + "RegfileWritePort", clock, reset)
 }
 
 class RFArbiterBundle(addrWidth: Int)(implicit p: Parameters) extends XSBundle {
@@ -128,6 +137,25 @@ class RFReadArbiter(isInt: Boolean)(implicit p: Parameters) extends XSModule {
       addrOut := 0.U.asTypeOf(addrOut)
     }
   }
+
+  val isInt_toString = if (isInt) "Int" else "FpVec"
+//  val isWriteRegfileReadPortTable = WireInit(Constantin.createRecord("isWriteRegfileReadPortTable" + p(XSCoreParamsKey).HartId.toString, initValue = 1.U)).orR
+  val isWriteRegfileReadPortTable = true.B
+  val regfileReadPortTable = ChiselDB.createTable(isInt_toString + "RegfileReadPort_hart" + p(XSCoreParamsKey).HartId.toString, new RegfileReadPortDB)
+  val regfileReadPortData = Wire(new RegfileReadPortDB)
+  require(io.out.length <= regfileReadPortData.max_port_num)
+  regfileReadPortData.port := Cat(io.out.map(_.valid).reverse).asUInt
+  regfileReadPortTable.log(regfileReadPortData, isWriteRegfileReadPortTable && regfileReadPortData.port.orR, isInt_toString + "RegfileReadPort", clock, reset)
+}
+
+class RegfileWritePortDB(implicit p: Parameters) extends XSBundle {
+  def max_port_num = 32 // if not enough, enlarge to that u need
+  val port = UInt(max_port_num.W)
+}
+
+class RegfileReadPortDB(implicit p: Parameters) extends XSBundle {
+  def max_port_num = 32 //
+  val port = UInt(max_port_num.W)
 }
 
 class DataPath(params: BackendParams)(implicit p: Parameters) extends LazyModule {
