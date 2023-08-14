@@ -151,20 +151,6 @@ class StoreUnit(implicit p: Parameters) extends XSModule {
   io.stld_nuke_query.bits.paddr  := s1_paddr
   io.stld_nuke_query.bits.mask   := s1_in.mask
 
-  // Send TLB feedback to store issue queue
-  // Store feedback is generated in store_s1, sent to RS in store_s2
-  io.feedback_slow.valid           := s1_fire
-  io.feedback_slow.bits.hit        := !s1_tlb_miss
-  io.feedback_slow.bits.flushState := io.tlb.resp.bits.ptwBack
-  io.feedback_slow.bits.rsIdx      := s1_in.rsIdx
-  io.feedback_slow.bits.sourceType := RSFeedbackType.tlbMiss
-  XSDebug(io.feedback_slow.valid,
-    "S1 Store: tlbHit: %d robIdx: %d\n",
-    io.feedback_slow.bits.hit,
-    io.feedback_slow.bits.rsIdx
-  )
-  io.feedback_slow.bits.dataInvalidSqIdx := DontCare
-
   // issue
   io.issue.valid := s1_valid && !s1_tlb_miss
   io.issue.bits  := RegEnable(s0_in, s0_valid)
@@ -240,6 +226,8 @@ class StoreUnit(implicit p: Parameters) extends XSModule {
   s2_out.uop.cf.exceptionVec(storeAccessFault) := s2_in.uop.cf.exceptionVec(storeAccessFault) || s2_pmp.st
 
   // feedback tlb miss to RS in store_s2
+  // Send TLB feedback to store issue queue
+  // Store feedback is generated in store_s1, sent to RS in store_s2
   io.feedback_slow.valid := RegNext(s1_feedback.valid && !s1_out.uop.robIdx.needFlush(io.redirect))
   io.feedback_slow.bits  := RegNext(s1_feedback.bits)
 
