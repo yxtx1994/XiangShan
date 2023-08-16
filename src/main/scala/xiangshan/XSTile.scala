@@ -180,25 +180,6 @@ class XSTileImp(outer: XSTile) extends LazyHardenModuleImp(outer) {
     outer.misc.module.beu_errors.l2 <> 0.U.asTypeOf(outer.misc.module.beu_errors.l2)
   }
 
-  val coreMbistIntf = if(outer.coreParams.hasMbist && outer.coreParams.hasShareBus){
-    val params = outer.core.module.mbistPipeline.get.bd.params
-    val node = outer.core.module.mbistPipeline.get.node
-    val intf = Some(Module(new MBISTInterface(
-      params = Seq(params),
-      ids = Seq(node.children.flatMap(_.array_id)),
-      name = s"MBIST_intf_core",
-      pipelineNum = 1
-    )))
-    intf.get.toPipeline.head <> outer.core.module.mbist.get
-    outer.core.module.mbistPipeline.get.genCSV(intf.get.info, "MBIST_Core")
-    intf.get.mbist := DontCare
-    dontTouch(intf.get.mbist)
-    //TODO: add mbist controller connections here
-    intf
-  } else {
-    None
-  }
-
   val l2MbistIntf = if(outer.l2cache.isDefined){
     if(p(XSCoreParamsKey).L2CacheParamsOpt.get.hasMbist && p(XSCoreParamsKey).L2CacheParamsOpt.get.hasShareBus){
       val params = outer.l2cache.get.module.l2TopPipeLine.get.bd.params
