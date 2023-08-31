@@ -162,6 +162,9 @@ clean:
 	$(MAKE) -C ./difftest clean
 	rm -rf ./build
 
+clean-release:
+	rm -rf ./*-Release-*
+
 init:
 	git submodule update --init
 	cd rocket-chip && git submodule update --init api-config-chipsalliance hardfloat
