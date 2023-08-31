@@ -108,6 +108,11 @@ endif
 
 verilog: $(TOP_V)
 
+verilog-release:
+	$(MAKE) verilog RELEASE=1
+	# split rtl modules and sim top, copy extra files
+	python3 scripts/parser.py XSTop --config $(CONFIG)
+
 SIM_TOP_V = $(BUILD_DIR)/$(SIM_TOP).v
 $(SIM_TOP_V): $(SCALA_FILE) $(TEST_FILE)
 	mkdir -p $(@D)
