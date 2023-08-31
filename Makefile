@@ -126,6 +126,12 @@ ifeq ($(MFC),1)
 	rm $(SIM_TOP_V)
 	mv res.v $(SIM_TOP_V)
 endif
+	sed -e 's/\(peripheral\|memory\)_0_\(aw\|ar\|w\|r\|b\)_bits_/m_\1_\2_/g' \
+	-e 's/\(dma\)_0_\(aw\|ar\|w\|r\|b\)_bits_/s_\1_\2_/g' $@ > $(BUILD_DIR)/tmp.v
+	sed -e 's/\(peripheral\|memory\)_0_\(aw\|ar\|w\|r\|b\)_/m_\1_\2_/g' \
+	-e 's/\(dma\)_0_\(aw\|ar\|w\|r\|b\)_\(ready\|valid\)/s_\1_\2_\3/g' $(BUILD_DIR)/tmp.v > $(BUILD_DIR)/tmp1.v
+	rm $@ $(BUILD_DIR)/tmp.v
+	mv $(BUILD_DIR)/tmp1.v $@
 	@git log -n 1 >> .__head__
 	@git diff >> .__diff__
 	@sed -i 's/^/\/\// ' .__head__
@@ -136,8 +142,16 @@ endif
 	sed -i -e 's/$$fatal/xs_assert(`__LINE__)/g' $(SIM_TOP_V)
 
 FILELIST := $(ABS_WORK_DIR)/build/cpu_flist.f
+
 sim-verilog: $(SIM_TOP_V)
 	find $(ABS_WORK_DIR)/build -name "*.v" > $(FILELIST)
+
+sim-verilog-release:
+	$(MAKE) $(SIM_TOP_V) RELEASE=1
+	# split rtl modules and sim top, copy extra files
+	python3 scripts/parser.py SimTop --config $(CONFIG) \
+		--ignore XSTop --include difftest          \
+        --no-sram-conf --no-sram-xlsx --no-extra-files
 
 clean:
 	$(MAKE) -C ./difftest clean
