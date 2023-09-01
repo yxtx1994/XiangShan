@@ -32,7 +32,6 @@ ABS_WORK_DIR := $(shell pwd)
 RUN_BIN_DIR ?= $(ABS_WORK_DIR)/ready-to-run
 RUN_BIN ?= coremark-2-iteration
 CONSIDER_FSDB ?= 1
-MFC ?= 0
 
 ifdef FLASH
 	RUN_OPTS := +flash=$(RUN_BIN_DIR)/$(RUN_BIN).bin
@@ -62,13 +61,8 @@ endif
 RELEASE_ARGS = --disable-all --remove-assert --fpga-platform
 DEBUG_ARGS   = --enable-difftest
 
-ifeq ($(MFC),1)
-RELEASE_ARGS += -X none -E chirrtl --output-file $(TOP).chirrtl.fir
-DEBUG_ARGS += -X none -E chirrtl --output-file $(SIM_TOP).chirrtl.fir
-else
-RELEASE_ARGS += --emission-options disableRegisterRandomization -E verilog --output-file $(TOP).v
-DEBUG_ARGS += --emission-options disableRegisterRandomization -E verilog --output-file $(SIM_TOP).v
-endif
+RELEASE_ARGS += --emission-options disableRegisterRandomization -E verilog
+DEBUG_ARGS += --emission-options disableRegisterRandomization -E verilog
 
 ifeq ($(RELEASE),1)
 override SIM_ARGS += $(RELEASE_ARGS)
@@ -85,13 +79,7 @@ $(TOP_V): $(SCALA_FILE)
 	mkdir -p $(@D)
 	time -o $(@D)/time.log mill -i XiangShan.runMain $(FPGATOP) -td $(@D) \
 		--config $(CONFIG) --full-stacktrace --num-cores $(NUM_CORES) \
-		$(RELEASE_ARGS)
-ifeq ($(MFC),1)
-	time -a -o $(@D)/time.log firtool --disable-all-randomization --disable-annotation-unknown \
-	--annotation-file=$(BUILD_DIR)/$(TOP).anno.json --format=fir \
-	--lowering-options=noAlwaysComb,disallowExpressionInliningInPorts,explicitBitcast \
-	--verilog --dedup -o $(TOP_V) $(BUILD_DIR)/$(TOP).chirrtl.fir
-endif
+		$(RELEASE_ARGS) --output-file $(TOP_V)
 	sed -e 's/\(peripheral\|memory\)_0_\(aw\|ar\|w\|r\|b\)_bits_/m_\1_\2_/g' \
 	-e 's/\(dma\)_0_\(aw\|ar\|w\|r\|b\)_bits_/s_\1_\2_/g' $@ > $(BUILD_DIR)/tmp.v
 	sed -e 's/\(peripheral\|memory\)_0_\(aw\|ar\|w\|r\|b\)_/m_\1_\2_/g' \
@@ -120,17 +108,7 @@ $(SIM_TOP_V): $(SCALA_FILE) $(TEST_FILE)
 	@date -R | tee -a $(@D)/time.log
 	time -o $(@D)/time.log mill -i XiangShan.test.runMain $(SIMTOP) -td $(@D) \
 		--config $(CONFIG) --full-stacktrace --num-cores $(NUM_CORES) \
-		$(SIM_ARGS)
-ifeq ($(MFC),1)
-	time -a -o $(@D)/time.log firtool --disable-all-randomization --disable-annotation-unknown \
-	--annotation-file=$(BUILD_DIR)/$(SIM_TOP).anno.json --format=fir \
-	--lowering-options=noAlwaysComb,disallowExpressionInliningInPorts,explicitBitcast \
-	--verilog --dedup -o $(SIM_TOP_V) $(BUILD_DIR)/$(SIM_TOP).chirrtl.fir
-
-	sed '/\/\/ ----- 8< ----- .*----- 8< -----/,$d' $(SIM_TOP_V) > res.v
-	rm $(SIM_TOP_V)
-	mv res.v $(SIM_TOP_V)
-endif
+		$(SIM_ARGS) --output-file $(SIM_TOP_V)
 	sed -e 's/\(peripheral\|memory\)_0_\(aw\|ar\|w\|r\|b\)_bits_/m_\1_\2_/g' \
 	-e 's/\(dma\)_0_\(aw\|ar\|w\|r\|b\)_bits_/s_\1_\2_/g' $@ > $(BUILD_DIR)/tmp.v
 	sed -e 's/\(peripheral\|memory\)_0_\(aw\|ar\|w\|r\|b\)_/m_\1_\2_/g' \
