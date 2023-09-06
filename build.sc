@@ -23,7 +23,6 @@ import $file.`rocket-chip`.cde.common
 import $file.`rocket-chip`.common
 import $file.`rocket-chip`.hardfloat.build
 import $file.difftest.build
-import $file.difftest.instrumentation.instrumentation.build
 
 object ivys {
   val sv = "2.13.10"
@@ -113,16 +112,7 @@ object huancun extends XSModule with SbtModule {
   )
 }
 
-object difftestDep extends difftest.build.CommonDiffTest {
-
-  object fuzz extends difftest.instrumentation.instrumentation.build.CommonRFuzz {
-    def sourceRoot = T.sources { T.workspace / "difftest" / "instrumentation" / "instrumentation" / "src" }
-
-    def allSources = T { sourceRoot().flatMap(p => os.walk(p.path)).map(PathRef(_)) }
-  }
-
-  override def fuzzModule: PublishModule = fuzz
-
+object difftestDep extends XSModule with SbtModule {
   override def millSourcePath = os.pwd / "difftest"
 }
 

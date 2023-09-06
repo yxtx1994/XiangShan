@@ -1010,7 +1010,7 @@ class RobImp(outer: Rob)(implicit p: Parameters) extends LazyModuleImp(outer)
 
   if (env.EnableDifftest) {
     for (i <- 0 until CommitWidth) {
-      val difftest = DifftestModule(new DiffInstrCommit(NRPhyRegs), delay = 3)
+      val difftest = DifftestModule(new DiffInstrCommit(NRPhyRegs), delay = 3, dontCare = true)
       difftest.clock    := clock
       difftest.coreid   := io.hartId
       difftest.index    := i.U
