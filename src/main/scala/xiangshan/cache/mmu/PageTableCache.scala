@@ -157,7 +157,8 @@ class PtwCache(parentName:String = "Unknown")(implicit p: Parameters) extends XS
     singlePort = sramSinglePort,
     hasMbist = coreParams.hasMbist,
     hasShareBus = coreParams.hasShareBus,
-    parentName = parentName + "l2_"
+    parentName = parentName + "l2_",
+    maxMbistDataWidth = 283
   ))
   val mbistL2Pipeline = if(coreParams.hasMbist && coreParams.hasShareBus) {
     Some(Module(new MBISTPipeline(1,s"${parentName}_mbistL2Pipe")))
