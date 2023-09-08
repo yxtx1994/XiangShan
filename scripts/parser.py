@@ -598,6 +598,7 @@ def create_sram_xlsx(out_dir, collection, sram_conf, top_module, try_prefix=None
 def copy_mbist_files(out_dir, build_path):
     if not (os.path.isdir(out_dir)):
         os.makedirs(out_dir)
+    copy("scripts/sharedBusLvlibGen.tcl", out_dir)
     for f in os.listdir(build_path):
         if f.endswith(".csv"):
             src_path = os.path.join(build_path, f)
