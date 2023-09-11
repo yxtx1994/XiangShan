@@ -26,7 +26,6 @@ import xiangshan.cache._
 import xiangshan.cache.{DCacheWordIO, DCacheLineIO, MemoryOpConstants}
 import xiangshan.backend.rob.{RobLsqIO, RobPtr}
 import difftest._
-import device.RAMHelper
 
 class SqPtr(implicit p: Parameters) extends CircularQueuePtr[SqPtr](
   p => p(XSCoreParamsKey).StoreQueueSize
@@ -746,7 +745,7 @@ class StoreQueue(implicit p: Parameters) extends XSModule
   if (coreParams.dcacheParametersOpt.isEmpty) {
     for (i <- 0 until EnsbufferWidth) {
       val ptr = deqPtrExt(i).value
-      val fakeRAM = Module(new RAMHelper(64L * 1024 * 1024 * 1024))
+      val fakeRAM = DifftestMem(64L * 1024 * 1024 * 1024, 8)
       fakeRAM.clk   := clock
       fakeRAM.en    := allocated(ptr) && committed(ptr) && !mmio(ptr)
       fakeRAM.rIdx  := 0.U

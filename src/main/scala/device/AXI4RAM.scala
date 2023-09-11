@@ -20,22 +20,9 @@ import chipsalliance.rocketchip.config.Parameters
 import chisel3._
 import chisel3.experimental.ExtModule
 import chisel3.util._
+import difftest.common.DifftestMem
 import freechips.rocketchip.amba.axi4.AXI4SlaveNode
 import freechips.rocketchip.diplomacy.{AddressSet, LazyModule}
-import utility.MaskExpand
-
-class RAMHelper(memByte: BigInt) extends ExtModule {
-  val DataBits = 64
-
-  val clk   = IO(Input(Clock()))
-  val en    = IO(Input(Bool()))
-  val rIdx  = IO(Input(UInt(DataBits.W)))
-  val rdata = IO(Output(UInt(DataBits.W)))
-  val wIdx  = IO(Input(UInt(DataBits.W)))
-  val wdata = IO(Input(UInt(DataBits.W)))
-  val wmask = IO(Input(UInt(DataBits.W)))
-  val wen   = IO(Input(Bool()))
-}
 
 class AXI4RAM
 (
@@ -67,18 +54,18 @@ class AXI4RAM
     require(beatBytes >= 8)
 
     val rdata = if (useBlackBox) {
-      val mems = (0 until split).map {_ => Module(new RAMHelper(bankByte))}
-      mems.zipWithIndex map { case (mem, i) =>
-        mem.clk   := clock
-        mem.en    := !reset.asBool() && ((state === s_rdata) || (state === s_wdata))
-        mem.rIdx  := (rIdx << log2Up(split)) + i.U
-        mem.wIdx  := (wIdx << log2Up(split)) + i.U
-        mem.wdata := in.w.bits.data((i + 1) * 64 - 1, i * 64)
-        mem.wmask := MaskExpand(in.w.bits.strb((i + 1) * 8 - 1, i * 8))
-        mem.wen   := wen
-      }
-      val rdata = mems.map {mem => mem.rdata}
-      Cat(rdata.reverse)
+      val mems = (0 until split).map(_ => DifftestMem(bankByte, 8))
+      val ren = in.ar.fire || in.r.fire && in.r.bits.last
+      VecInit(mems.zipWithIndex.map{ case (mem, i) =>
+        when (wen) {
+          mem.write(
+            addr = (wIdx << log2Up(split)) + i.U,
+            data = in.w.bits.data((i + 1) * 64 - 1, i * 64).asTypeOf(Vec(8, UInt(8.W))),
+            mask = in.w.bits.strb((i + 1) * 8 - 1, i * 8).asBools
+          )
+        }
+        mem.readAndHold((rIdx << log2Up(split)) + i.U, ren)
+      }).asUInt
     } else {
       val mem = Mem(memByte / beatBytes, Vec(beatBytes, UInt(8.W)))
 
