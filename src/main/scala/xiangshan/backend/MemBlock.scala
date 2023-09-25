@@ -91,7 +91,7 @@ class mem_to_ooo(implicit p: Parameters ) extends XSBundle{
   }
   val writeback = Vec(exuParameters.LsExuCnt + exuParameters.StuCnt, DecoupledIO(new ExuOutput))
   // TODO: VLSU, implement writeback and feedback
-  val vecWriteback = Vec(exuParameters.VlCnt + exuParameters.VsCnt, DecoupledIO(new ExuOutput(isVpu = true)))
+  val vecWriteback = Vec(exuParameters.VlCnt + exuParameters.VsCnt, DecoupledIO(new ExuOutput))
   val vecfeedback = Vec(exuParameters.VlCnt + exuParameters.VsCnt, ValidIO(Bool()))
 }
 
