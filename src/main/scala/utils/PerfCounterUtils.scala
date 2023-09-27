@@ -257,7 +257,7 @@ object XSPerfRolling extends HasRegularPerfName {
 
 object XSPerfPrint {
   def apply(pable: Printable)(ctrlInfo: LogPerfIO)(implicit p: Parameters): Any = {
-    XSLog(XSLogLevel.PERF)(ctrlInfo)(true, true.B, pable)
+    XSLog(XSLogLevel.PERF, ctrlInfo)(true, true.B, pable)
   }
 }
 
