@@ -140,7 +140,7 @@ class L2Top()(implicit p: Parameters) extends LazyModule
       val l2MissMatch = Output(Bool())
     })
     if (l2cache.isDefined) {
-      l2_hint := l2cache.get.module.io.l2_hint
+      l2_hint := RegNext(l2cache.get.module.io.l2_hint)
       l2cache.get.module.io.debugTopDown.robHeadPaddr.head := debugTopDown.robHeadPaddr
       debugTopDown.l2MissMatch := l2cache.get.module.io.debugTopDown.l2MissMatch.head
     } else {
