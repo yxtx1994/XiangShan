@@ -46,8 +46,9 @@ object XSPerfAccumulate extends HasRegularPerfName {
       val perfClean = helper.io.clean
       val perfDump = helper.io.dump
 
-      val counter = RegInit(0.U(64.W))
-      val next_counter = counter + perfCnt
+      val counter = RegInit(0.U(64.W)).suggestName(perfName + "Counter")
+      val next_counter = WireInit(0.U(64.W)).suggestName(perfName + "Next")
+      next_counter := counter + perfCnt
       counter := Mux(perfClean, 0.U, next_counter)
 
       when (perfDump) {
@@ -79,18 +80,31 @@ object XSPerfHistogram extends HasRegularPerfName {
       val perfClean = helper.io.clean
       val perfDump = helper.io.dump
 
-      val sum = RegInit(0.U(64.W))
-      val nSamples = RegInit(0.U(64.W))
+      val sum = RegInit(0.U(64.W)).suggestName(perfName + "Sum")
+      val nSamples = RegInit(0.U(64.W)).suggestName(perfName + "NSamples")
+      val underflow = RegInit(0.U(64.W)).suggestName(perfName + "Underflow")
+      val overflow = RegInit(0.U(64.W)).suggestName(perfName + "Overflow")
       when (perfClean) {
         sum := 0.U
         nSamples := 0.U
+        underflow := 0.U
+        overflow := 0.U
       } .elsewhen (enable) {
         sum := sum + perfCnt
         nSamples := nSamples + 1.U
+        when (perfCnt < start.U) {
+          underflow := underflow + 1.U
+        }
+        when (perfCnt >= stop.U) {
+          overflow := overflow + 1.U
+        }
       }
 
       when (perfDump) {
         XSPerfPrint(p"${perfName}_mean, ${sum/nSamples}\n")(helper.io)
+        XSPerfPrint(p"${perfName}_sampled, ${nSamples}\n")(helper.io)
+        XSPerfPrint(p"${perfName}_underflow, ${underflow}\n")(helper.io)
+        XSPerfPrint(p"${perfName}_overflow, ${overflow}\n")(helper.io)
       }
       
       // drop each perfCnt value into a bin
@@ -116,7 +130,8 @@ object XSPerfHistogram extends HasRegularPerfName {
           perfCnt >= stop.U && i.U === (nBins - 1).U
         val inc = inRange || leftOutOfRange || rightOutOfRange
 
-        val counter = RegInit(0.U(64.W))
+        val histName = s"${perfName}_${binRangeStart}_${binRangeStop}"
+        val counter = RegInit(0.U(64.W)).suggestName(histName)
         when (perfClean) {
           counter := 0.U
         } .elsewhen(enable && inc) {
@@ -124,7 +139,7 @@ object XSPerfHistogram extends HasRegularPerfName {
         }
 
         when (perfDump) {
-          XSPerfPrint(p"${perfName}_${binRangeStart}_${binRangeStop}, $counter\n")(helper.io)
+          XSPerfPrint(p"${histName}, $counter\n")(helper.io)
         }
       }
     }
@@ -253,11 +268,45 @@ object XSPerfRolling extends HasRegularPerfName {
       rollingTable.log(rollingPt, triggerDB, "", clock, reset)
     }
   }
+  
+  // event interval based mode
+  def apply(
+    perfName: String,
+    perfCntX: UInt,
+    perfCntY: UInt,
+    granularity: Int,
+    eventTrigger: UInt,
+    clock: Clock,
+    reset: Reset
+  )(implicit p: Parameters) = {
+    judgeName(perfName)
+    val env = p(DebugOptionsKey)
+    if (env.EnableRollingDB && !env.FPGAPlatform) {
+      val tableName = perfName + "_rolling_" + p(XSCoreParamsKey).HartId.toString
+      val rollingTable = ChiselDB.createTable(tableName, new RollingEntry(), basicDB=true)
+
+      val xAxisCnt = RegInit(0.U(64.W))
+      val yAxisCnt = RegInit(0.U(64.W))
+      val eventCnt = RegInit(0.U(64.W))
+      xAxisCnt := xAxisCnt + perfCntX
+      yAxisCnt := yAxisCnt + perfCntY
+      eventCnt := eventCnt + eventTrigger
+
+      val triggerDB = eventCnt >= granularity.U
+      when(triggerDB) {
+        eventCnt := eventTrigger
+        xAxisCnt := perfCntX
+        yAxisCnt := perfCntY
+      }
+      val rollingPt = new RollingEntry().apply(xAxisCnt, yAxisCnt)
+      rollingTable.log(rollingPt, triggerDB, "", clock, reset)
+    }
+  }
 }
 
 object XSPerfPrint {
   def apply(pable: Printable)(ctrlInfo: LogPerfIO)(implicit p: Parameters): Any = {
-    XSLog(XSLogLevel.PERF)(ctrlInfo)(true, true.B, pable)
+    XSLog(XSLogLevel.PERF, ctrlInfo)(true, true.B, pable)
   }
 }
 

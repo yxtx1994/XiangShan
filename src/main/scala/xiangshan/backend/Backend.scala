@@ -205,6 +205,7 @@ class BackendImp(outer: Backend)(implicit p: Parameters) extends LazyModuleImp(o
     val distributedUpdate = Vec(2, Flipped(new DistributedCSRUpdateReq))
 
     val l2_pf_enable = Output(Bool())
+    val debugRolling = new RobDebugRollingIO
   })
 
   val ctrlBlock = outer.ctrlBlock.module
@@ -378,6 +379,7 @@ class BackendImp(outer: Backend)(implicit p: Parameters) extends LazyModuleImp(o
 
   // if l2 prefetcher use stream prefetch, it should be placed in XSCore
   io.l2_pf_enable := csrioIn.customCtrl.l2_pf_enable
+  io.debugRolling := ctrlBlock.io.debugRolling
 
   val resetTree = ResetGenNode(
     exuBlocks.tail.map(m => ModuleNode(m))

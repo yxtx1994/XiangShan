@@ -356,14 +356,14 @@ class ICacheMainPipe(implicit p: Parameters) extends ICacheModule
 
   if (env.EnableDifftest) {
     (0 until PortNumber).foreach { i =>
-      val diffPIQ = DifftestModule(new DiffRefillEvent)
-      diffPIQ.clock := clock
+      val diffPIQ = DifftestModule(new DiffRefillEvent, dontCare = true)
       diffPIQ.coreid := io.hartId
       diffPIQ.index := (i + 7).U
       if (i == 0) diffPIQ.valid := s1_fire && !s1_port_hit(i) && !s1_ipf_hit_latch(i) && s1_piq_hit_latch(i) && !tlbExcp(0)
       else diffPIQ.valid := s1_fire && !s1_port_hit(i) && !s1_ipf_hit_latch(i) && s1_piq_hit_latch(i) && s1_double_line && !tlbExcp(0) && !tlbExcp(1)
       diffPIQ.addr := s1_req_paddr(i)
       diffPIQ.data := s1_piq_data(i).asTypeOf(diffPIQ.data)
+      diffPIQ.idtfr := DontCare
     }
   }
 
@@ -498,7 +498,7 @@ class ICacheMainPipe(implicit p: Parameters) extends ICacheModule
 
   val s2_except     = VecInit(Seq(s2_except_tlb_pf(0) || s2_except_tlb_af(0), s2_double_line && (s2_except_tlb_pf(1) || s2_except_tlb_af(1))))
   val s2_has_except = s2_valid && s2_except.reduce(_||_)
-  val s2_mmio       = s2_valid && DataHoldBypass(io.pmp(0).resp.mmio && !s2_except(0) && !s2_except_pmp_af(0), RegNext(s1_fire)).asBool()
+  val s2_mmio       = s2_valid && DataHoldBypass(io.pmp(0).resp.mmio && !s2_except(0) && !s2_except_pmp_af(0), RegNext(s1_fire)).asBool
   // pmp port
   io.pmp.zipWithIndex.map { case (p, i) =>
     p.req.valid := s2_valid && !missSwitchBit
@@ -511,7 +511,7 @@ class ICacheMainPipe(implicit p: Parameters) extends ICacheModule
   val wait_idle :: wait_queue_ready :: wait_send_req  :: wait_two_resp :: wait_0_resp :: wait_1_resp :: wait_one_resp ::wait_finish :: wait_pmp_except :: Nil = Enum(9)
   val wait_state = RegInit(wait_idle)
 
-//  val port_miss_fix  = VecInit(Seq(fromMSHR(0).fire() && !s2_port_hit(0),   fromMSHR(1).fire() && s2_double_line && !s2_port_hit(1) ))
+//  val port_miss_fix  = VecInit(Seq(fromMSHR(0).fire && !s2_port_hit(0),   fromMSHR(1).fire && s2_double_line && !s2_port_hit(1) ))
 
   // secondary miss record registers
   class MissSlot(implicit p: Parameters) extends  ICacheBundle {
@@ -633,31 +633,31 @@ class ICacheMainPipe(implicit p: Parameters) extends ICacheModule
     }
 
     is(wait_one_resp) {
-      when( (miss_0_except_1_latch ||only_0_miss_latch || miss_0_hit_1_latch) && fromMSHR(0).fire()){
+      when( (miss_0_except_1_latch ||only_0_miss_latch || miss_0_hit_1_latch) && fromMSHR(0).fire){
         wait_state := wait_finish
-      }.elsewhen( hit_0_miss_1_latch && fromMSHR(1).fire()){
+      }.elsewhen( hit_0_miss_1_latch && fromMSHR(1).fire){
         wait_state := wait_finish
       }
     }
 
     is(wait_two_resp) {
-      when(fromMSHR(0).fire() && fromMSHR(1).fire()){
+      when(fromMSHR(0).fire && fromMSHR(1).fire){
         wait_state := wait_finish
-      }.elsewhen( !fromMSHR(0).fire() && fromMSHR(1).fire() ){
+      }.elsewhen( !fromMSHR(0).fire && fromMSHR(1).fire ){
         wait_state := wait_0_resp
-      }.elsewhen(fromMSHR(0).fire() && !fromMSHR(1).fire()){
+      }.elsewhen(fromMSHR(0).fire && !fromMSHR(1).fire){
         wait_state := wait_1_resp
       }
     }
 
     is(wait_0_resp) {
-      when(fromMSHR(0).fire()){
+      when(fromMSHR(0).fire){
         wait_state := wait_finish
       }
     }
 
     is(wait_1_resp) {
-      when(fromMSHR(1).fire()){
+      when(fromMSHR(1).fire){
         wait_state := wait_finish
       }
     }
@@ -677,13 +677,13 @@ class ICacheMainPipe(implicit p: Parameters) extends ICacheModule
     toMSHR(i).bits.waymask  := s2_waymask(i)
 
 
-    when(toMSHR(i).fire() && missStateQueue(i) === m_invalid){
+    when(toMSHR(i).fire && missStateQueue(i) === m_invalid){
       missStateQueue(i)     := m_valid
       missSlot(i).m_vSetIdx := s2_req_vsetIdx(i)
       missSlot(i).m_pTag    := get_phy_tag(s2_req_paddr(i))
     }
 
-    when(fromMSHR(i).fire() && missStateQueue(i) === m_valid ){
+    when(fromMSHR(i).fire && missStateQueue(i) === m_valid ){
       missStateQueue(i)         := m_refilled
       missSlot(i).m_data        := fromMSHR(i).bits.data
       missSlot(i).m_corrupt     := fromMSHR(i).bits.corrupt
@@ -706,7 +706,7 @@ class ICacheMainPipe(implicit p: Parameters) extends ICacheModule
       }
     }
 
-    when(missStateQueue(i) === m_check_final && toMSHR(i).fire()){
+    when(missStateQueue(i) === m_check_final && toMSHR(i).fire){
       missStateQueue(i)     :=  m_valid
       missSlot(i).m_vSetIdx := s2_req_vsetIdx(i)
       missSlot(i).m_pTag    := get_phy_tag(s2_req_paddr(i))
@@ -817,8 +817,7 @@ class ICacheMainPipe(implicit p: Parameters) extends ICacheModule
       discard
     }
     (0 until PortNumber).map { i =>
-      val diffMainPipeOut = DifftestModule(new DiffRefillEvent)
-      diffMainPipeOut.clock := clock
+      val diffMainPipeOut = DifftestModule(new DiffRefillEvent, dontCare = true)
       diffMainPipeOut.coreid := io.hartId
       diffMainPipeOut.index := (4 + i).U
       if (i == 0) diffMainPipeOut.valid := s2_fire && !discards(0)
@@ -834,7 +833,7 @@ class ICacheMainPipe(implicit p: Parameters) extends ICacheModule
         .elsewhen(s2_prefetch_hit(i)) {
           when (s2_prefetch_hit_in_ipf(i)) { diffMainPipeOut.idtfr := 2.U  }
             .elsewhen(s2_prefetch_hit_in_piq(i)) { diffMainPipeOut.idtfr := 3.U }
-            .otherwise { XSWarn(true.B, "should not in this situation\n")}
+            .otherwise { diffMainPipeOut.idtfr := DontCare; XSWarn(true.B, "should not in this situation\n") }
         }
         .otherwise { diffMainPipeOut.idtfr := 4.U }
       diffMainPipeOut

@@ -75,7 +75,7 @@ class XSTile()(implicit p: Parameters) extends LazyModule
   l2top.d_mmio_port := core.memBlock.uncache.clientNode
 
   // =========== IO Connection ============
-  lazy val module = new LazyModuleImp(this) {
+  class XSTileImp(wrapper: LazyModule) extends LazyModuleImp(wrapper)  {
     val io = IO(new Bundle {
       val hartId = Input(UInt(64.W))
       val reset_vector = Input(UInt(PAddrBits.W))
@@ -100,6 +100,7 @@ class XSTile()(implicit p: Parameters) extends LazyModule
     if (l2cache.isDefined) {
       // TODO: add perfEvents of L2
       // core.module.io.perfEvents.zip(l2cache.get.module.io.perfEvents.flatten).foreach(x => x._1.value := x._2)
+      core.module.io.perfEvents <> 0.U.asTypeOf(core.module.io.perfEvents)
     }
     else {
       core.module.io.perfEvents <> 0.U.asTypeOf(core.module.io.perfEvents)
@@ -129,4 +130,6 @@ class XSTile()(implicit p: Parameters) extends LazyModule
 //    )
 //    ResetGen(resetChain, reset, !debugOpts.FPGAPlatform)
   }
+
+  lazy val module = new XSTileImp(this)
 }

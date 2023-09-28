@@ -253,13 +253,13 @@ class PrefetchBuffer(implicit p: Parameters) extends IPrefetchModule
   XSPerfAccumulate("fdip_fencei_cycle", io.fencei)
 
   if (env.EnableDifftest) {
-    val difftest = DifftestModule(new DiffRefillEvent)
-    difftest.clock   := clock
+    val difftest = DifftestModule(new DiffRefillEvent, dontCare = true)
     difftest.coreid  := io.hartId
     difftest.index   := 6.U
     difftest.valid   := toICacheData.fire
     difftest.addr    := toICacheData.bits.paddr
     difftest.data    := toICacheData.bits.data.asTypeOf(difftest.data)
+    difftest.idtfr   := DontCare
   }
 }
 
@@ -479,9 +479,9 @@ class IPrefetchPipe(implicit p: Parameters) extends  IPrefetchModule
 
   /** PerfAccumulate */
   // the number of prefetch request received from ftq
-  XSPerfAccumulate("prefetch_req_receive", fromFtq.req.fire())
+  XSPerfAccumulate("prefetch_req_receive", fromFtq.req.fire)
   // the number of prefetch request sent to PIQ
-  XSPerfAccumulate("prefetch_req_send", toPIQEnqReq.fire())
+  XSPerfAccumulate("prefetch_req_send", toPIQEnqReq.fire)
   /**
     * Count the number of requests that are filtered for various reasons.
     * The number of prefetch discard in Performance Accumulator may be
@@ -742,10 +742,10 @@ class PrefetchQueue(edge: TLEdgeOut)(implicit p: Parameters) extends IPrefetchMo
         }
       }
       is(s_memReadReq) {
-        state := Mux(io.mem_acquire.fire(), s_memReadResp, s_memReadReq)
+        state := Mux(io.mem_acquire.fire, s_memReadResp, s_memReadReq)
       }
       is(s_memReadResp) {
-        when (edge.hasData(io.mem_grant.bits) && io.mem_grant.fire()) {
+        when (edge.hasData(io.mem_grant.bits) && io.mem_grant.fire) {
           handleEntry.readBeatCnt := handleEntry.readBeatCnt + 1.U
           handleEntry.respData(handleEntry.readBeatCnt) := io.mem_grant.bits.data
           when (handleEntry.readBeatCnt === (refillCycles - 1).U) {
@@ -782,13 +782,13 @@ class PrefetchQueue(edge: TLEdgeOut)(implicit p: Parameters) extends IPrefetchMo
   }
 
   if (env.EnableDifftest) {
-    val diffipfrefill = DifftestModule(new DiffRefillEvent)
-    diffipfrefill.clock    := clock
+    val diffipfrefill = DifftestModule(new DiffRefillEvent, dontCare = true)
     diffipfrefill.coreid   := io.hartId
     diffipfrefill.index    := 3.U
     diffipfrefill.valid    := handleEntry.valid && handleEntry.finish
     diffipfrefill.addr     := handleEntry.paddr
     diffipfrefill.data     := handleEntry.cacheline.asTypeOf(diffipfrefill.data)
+    diffipfrefill.idtfr    := DontCare
   }
 }
 

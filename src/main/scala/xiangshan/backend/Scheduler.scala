@@ -32,7 +32,6 @@ import xiangshan.backend.regfile.{Regfile, RfReadPort}
 import xiangshan.backend.rename.{BusyTable, BusyTableReadIO}
 import xiangshan.backend.rob.RobPtr
 import xiangshan.mem.{LsqEnqCtrl, LsqEnqIO, MemWaitUpdateReq, SqPtr}
-import chisel3.ExcitingUtils
 
 class DispatchArbiter(func: Seq[MicroOp => Bool])(implicit p: Parameters) extends XSModule {
   val numTarget = func.length
@@ -47,7 +46,7 @@ class DispatchArbiter(func: Seq[MicroOp => Bool])(implicit p: Parameters) extend
     o.bits := io.in.bits
   }
 
-  io.in.ready := VecInit(io.out.map(_.fire())).asUInt.orR
+  io.in.ready := VecInit(io.out.map(_.fire)).asUInt.orR
 }
 
 object DispatchArbiter {
@@ -529,13 +528,11 @@ class SchedulerImp(outer: Scheduler) extends LazyModuleImp(outer) with HasXSPara
 
   if ((env.AlwaysBasicDiff || env.EnableDifftest) && intRfConfig._1) {
     val difftest = DifftestModule(new DiffArchIntRegState, delay = 2)
-    difftest.clock  := clock
     difftest.coreid := io.hartId
     difftest.value  := VecInit(intRfReadData.takeRight(32))
   }
   if ((env.AlwaysBasicDiff || env.EnableDifftest) && fpRfConfig._1) {
     val difftest = DifftestModule(new DiffArchFpRegState, delay = 2)
-    difftest.clock  := clock
     difftest.coreid := io.hartId
     difftest.value  := VecInit(fpRfReadData.takeRight(32))
   }

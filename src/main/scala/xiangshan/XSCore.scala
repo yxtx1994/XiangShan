@@ -39,7 +39,7 @@ abstract class XSModule(implicit val p: Parameters) extends Module
 //remove this trait after impl module logic
 trait NeedImpl {
   this: RawModule =>
-  override protected def IO[T <: Data](iodef: T): T = {
+  protected def IO[T <: Data](iodef: T): T = {
     println(s"[Warn]: (${this.name}) please reomve 'NeedImpl' after implement this module")
     val io = chisel3.experimental.IO(iodef)
     io <> DontCare
@@ -94,7 +94,7 @@ trait HasWritebackSink {
   }
 
   def writebackSinksParams: Seq[WritebackSourceParams] = {
-    writebackSinks.map{ case (s, i) => s.zip(i).map(x => x._1.writebackSourceParams(x._2)).reduce(_ ++ _) }
+    writebackSinks.map{ case (s, i) => s.zip(i).map(x => x._1.writebackSourceParams(x._2)).reduce(_ ++ _) }.toSeq
   }
   final def writebackSinksMod(
      thisMod: Option[HasWritebackSource] = None,
@@ -103,7 +103,7 @@ trait HasWritebackSink {
     require(thisMod.isDefined == thisModImp.isDefined)
     writebackSinks.map(_._1.map(source =>
       if (thisMod.isDefined && source == thisMod.get) thisModImp.get else source.writebackSourceImp)
-    )
+    ).toSeq
   }
   final def writebackSinksImp(
     thisMod: Option[HasWritebackSource] = None,
@@ -112,7 +112,7 @@ trait HasWritebackSink {
     val sourceMod = writebackSinksMod(thisMod, thisModImp)
     writebackSinks.zip(sourceMod).map{ case ((s, i), m) =>
       s.zip(i).zip(m).flatMap(x => x._1._1.writebackSource(x._2)(x._1._2))
-    }
+    }.toSeq
   }
   def selWritebackSinks(func: WritebackSourceParams => Int): Int = {
     writebackSinksParams.zipWithIndex.minBy(params => func(params._1))._2
@@ -194,6 +194,7 @@ class XSCoreImp(outer: XSCoreBase) extends LazyModuleImp(outer)
   memBlock.io.inner_beu_errors_icache <> frontend.io.error.toL1BusErrorUnitInfo()
   io.beu_errors.icache <> memBlock.io.outer_beu_errors_icache
   io.beu_errors.dcache <> memBlock.io.error.toL1BusErrorUnitInfo()
+  io.beu_errors.l2 <> DontCare
 
   frontend.io.backend <> backend.io.frontend.frontend2Ctrl
   frontend.io.sfence <> backend.io.frontend.sfence
@@ -260,6 +261,11 @@ class XSCoreImp(outer: XSCoreBase) extends LazyModuleImp(outer)
   memBlock.io.l2_hint.valid := io.l2_hint.valid
   memBlock.io.l2_hint.bits.sourceId := io.l2_hint.bits.sourceId
   memBlock.io.l2PfqBusy := io.l2PfqBusy
+  memBlock.io.int2vlsu <> DontCare
+  memBlock.io.vec2vlsu <> DontCare
+  memBlock.io.vlsu2vec <> DontCare
+  memBlock.io.vlsu2int <> DontCare
+  memBlock.io.vlsu2ctrl <> DontCare
 
   // if l2 prefetcher use stream prefetch, it should be placed in XSCore
   memBlock.io.inner_l2_pf_enable := backend.io.l2_pf_enable
@@ -272,6 +278,7 @@ class XSCoreImp(outer: XSCoreBase) extends LazyModuleImp(outer)
   backend.io.debugTopDown.l2MissMatch := io.debugTopDown.l2MissMatch
   backend.io.debugTopDown.l3MissMatch := io.debugTopDown.l3MissMatch
   backend.io.debugTopDown.fromMem := memBlock.io.debugTopDown.toCore
+  memBlock.io.debugRolling := backend.io.debugRolling
 
   // Modules are reset one by one
   // val resetTree = ResetGenNode(
