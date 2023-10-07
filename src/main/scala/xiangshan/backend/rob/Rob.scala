@@ -311,7 +311,6 @@ class ExceptionGen(implicit p: Parameters) extends XSModule with HasCircularQueu
 
   def getOldest(valid: Seq[Bool], bits: Seq[RobExceptionInfo]): (Seq[Bool], Seq[RobExceptionInfo]) = {
     assert(valid.length == bits.length)
-    assert(isPow2(valid.length))
     if (valid.length == 1) {
       (valid, bits)
     } else if (valid.length == 2) {
@@ -324,7 +323,7 @@ class ExceptionGen(implicit p: Parameters) extends XSModule with HasCircularQueu
       (Seq(oldest.valid), Seq(oldest.bits))
     } else {
       val left = getOldest(valid.take(valid.length / 2), bits.take(valid.length / 2))
-      val right = getOldest(valid.takeRight(valid.length / 2), bits.takeRight(valid.length / 2))
+      val right = getOldest(valid.takeRight(valid.length - valid.length / 2), bits.takeRight(valid.length - valid.length / 2))
       getOldest(left._1 ++ right._1, left._2 ++ right._2)
     }
   }
@@ -1181,7 +1180,7 @@ class RobImp(outer: Rob)(implicit p: Parameters) extends LazyModuleImp(outer)
   io.debugTopDown.toDispatch.robHeadLsIssue := debug_lsIssue(deqPtr.value)
   io.debugTopDown.robHeadLqIdx.valid := debug_lqIdxValid(deqPtr.value)
   io.debugTopDown.robHeadLqIdx.bits  := debug_microOp(deqPtr.value).lqIdx
-  
+
   // rolling
   io.debugRolling.robTrueCommit := ifCommitReg(trueCommitCnt)
 

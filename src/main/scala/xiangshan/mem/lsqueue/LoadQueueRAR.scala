@@ -48,6 +48,9 @@ class LoadQueueRAR(implicit p: Parameters) extends XSModule
   })
 
   println("LoadQueueRAR: size: " + LoadQueueRARSize)
+  val a = WireInit(-1.S)
+  println(a)
+
   //  LoadQueueRAR field
   //  +-------+-------+-------+----------+
   //  | Valid |  Uop  | PAddr | Released |
