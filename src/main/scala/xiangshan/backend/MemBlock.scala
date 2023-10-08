@@ -45,7 +45,7 @@ class Std(implicit p: Parameters) extends FunctionUnit {
 
 // Frontend bus goes through MemBlock
 class FrontendBridge()(implicit p: Parameters) extends LazyModule {
-  val icache_node = TLIdentityNode()
+  val icache_node = TLBuffer()
   val instr_uncache_node = TLIdentityNode()
   lazy val module = new LazyModuleImp(this) {
     // Nothing
