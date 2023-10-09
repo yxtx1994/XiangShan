@@ -86,7 +86,7 @@ class PrefetchBurstGenerator(is_store: Boolean)(implicit p: Parameters) extends 
     val prefetch_req = Vec(StorePipelineWidth, DecoupledIO(new StorePrefetchReq))
   })
 
-  require(StorePipelineWidth == 3)
+  // require(StorePipelineWidth == 2)
 
   val SIZE = BURST_ENGINE_SIZE
 
@@ -129,8 +129,12 @@ class PrefetchBurstGenerator(is_store: Boolean)(implicit p: Parameters) extends 
     out_decouple(1).valid := deq_valid && data_next(PAGEOFFSET) === pg_bit && out_decouple(0).fire
     out_decouple(1).bits := DontCare
     out_decouple(1).bits.vaddr := data_next
-    out_decouple(2).valid := false.B
-    out_decouple(2).bits := DontCare
+
+    if (StorePipelineWidth == 3) {
+      out_decouple(2).valid := false.B
+      out_decouple(2).bits := DontCare
+    }
+
     when(out_decouple(1).fire) {
       // fired 2 prefetch reqs
       data := data_next_next
