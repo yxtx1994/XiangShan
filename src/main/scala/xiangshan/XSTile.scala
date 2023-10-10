@@ -123,6 +123,22 @@ class XSTile()(implicit p: Parameters) extends LazyModule
     io.debugTopDown.robHeadPaddr := core.module.io.debugTopDown.robHeadPaddr
     core.module.io.debugTopDown.l3MissMatch := io.debugTopDown.l3MissMatch
 
+    core.module.io.l2_tlb_req.req.bits := DontCare
+    core.module.io.l2_tlb_req.req.valid := l2cache.get.module.io.l2_tlb_req.req.valid
+    core.module.io.l2_tlb_req.req.bits.vaddr := l2cache.get.module.io.l2_tlb_req.req.bits.vaddr
+    core.module.io.l2_tlb_req.req.bits.cmd := l2cache.get.module.io.l2_tlb_req.req.bits.cmd
+    core.module.io.l2_tlb_req.req.bits.size := l2cache.get.module.io.l2_tlb_req.req.bits.size
+    core.module.io.l2_tlb_req.req.bits.kill := l2cache.get.module.io.l2_tlb_req.req.bits.kill
+    core.module.io.l2_tlb_req.req.bits.no_translate := l2cache.get.module.io.l2_tlb_req.req.bits.no_translate
+    core.module.io.l2_tlb_req.req_kill := l2cache.get.module.io.l2_tlb_req.req_kill
+    core.module.io.l2_tlb_req.resp.ready := l2cache.get.module.io.l2_tlb_req.resp.ready
+    l2cache.get.module.io.l2_tlb_req.req.ready := core.module.io.l2_tlb_req.req.ready
+    l2cache.get.module.io.l2_tlb_req.resp.valid := core.module.io.l2_tlb_req.resp.valid
+    l2cache.get.module.io.l2_tlb_req.resp.bits.paddr := core.module.io.l2_tlb_req.resp.bits.paddr
+    l2cache.get.module.io.l2_tlb_req.resp.bits.miss := core.module.io.l2_tlb_req.resp.bits.miss
+    l2cache.get.module.io.l2_tlb_req.resp.bits.excp <> core.module.io.l2_tlb_req.resp.bits.excp
+    l2cache.get.module.io.l2_tlb_req.resp.bits.ptwBack := core.module.io.l2_tlb_req.resp.bits.ptwBack
+
     // Modules are reset one by one
     // io_reset ----
     //             |
