@@ -113,6 +113,7 @@ class XSTile()(implicit p: Parameters) extends LazyModule
     l2top.module.beu_errors.dcache <> core.module.io.beu_errors.dcache
 
     l2top.module.beu_errors.l2 <> 0.U.asTypeOf(l2top.module.beu_errors.l2) // TODO: add ECC interface of L2
+    core.module.io.l2_tlb_req <> l2top.module.l2_tlb_req
     core.module.io.l2_hint.bits.sourceId := l2top.module.l2_hint.bits
     core.module.io.l2_hint.valid := l2top.module.l2_hint.valid
     core.module.io.l2PfqBusy := false.B
@@ -122,22 +123,6 @@ class XSTile()(implicit p: Parameters) extends LazyModule
 
     io.debugTopDown.robHeadPaddr := core.module.io.debugTopDown.robHeadPaddr
     core.module.io.debugTopDown.l3MissMatch := io.debugTopDown.l3MissMatch
-
-    core.module.io.l2_tlb_req.req.bits := DontCare
-    core.module.io.l2_tlb_req.req.valid := l2cache.get.module.io.l2_tlb_req.req.valid
-    core.module.io.l2_tlb_req.req.bits.vaddr := l2cache.get.module.io.l2_tlb_req.req.bits.vaddr
-    core.module.io.l2_tlb_req.req.bits.cmd := l2cache.get.module.io.l2_tlb_req.req.bits.cmd
-    core.module.io.l2_tlb_req.req.bits.size := l2cache.get.module.io.l2_tlb_req.req.bits.size
-    core.module.io.l2_tlb_req.req.bits.kill := l2cache.get.module.io.l2_tlb_req.req.bits.kill
-    core.module.io.l2_tlb_req.req.bits.no_translate := l2cache.get.module.io.l2_tlb_req.req.bits.no_translate
-    core.module.io.l2_tlb_req.req_kill := l2cache.get.module.io.l2_tlb_req.req_kill
-    core.module.io.l2_tlb_req.resp.ready := l2cache.get.module.io.l2_tlb_req.resp.ready
-    l2cache.get.module.io.l2_tlb_req.req.ready := core.module.io.l2_tlb_req.req.ready
-    l2cache.get.module.io.l2_tlb_req.resp.valid := core.module.io.l2_tlb_req.resp.valid
-    l2cache.get.module.io.l2_tlb_req.resp.bits.paddr := core.module.io.l2_tlb_req.resp.bits.paddr
-    l2cache.get.module.io.l2_tlb_req.resp.bits.miss := core.module.io.l2_tlb_req.resp.bits.miss
-    l2cache.get.module.io.l2_tlb_req.resp.bits.excp <> core.module.io.l2_tlb_req.resp.bits.excp
-    l2cache.get.module.io.l2_tlb_req.resp.bits.ptwBack := core.module.io.l2_tlb_req.resp.bits.ptwBack
 
     // Modules are reset one by one
     // io_reset ----
