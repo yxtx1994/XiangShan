@@ -1126,25 +1126,30 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   s3_ld_raw_data_frm_cache.forward_result_valid := RegEnable(s2_fwd_data_valid, false.B, s2_valid)
 
   val s3_merged_data_frm_cache = s3_ld_raw_data_frm_cache.mergedData()
-  val s3_picked_data_frm_cache = LookupTree(s3_ld_raw_data_frm_cache.addrOffset, List(
-    "b0000".U -> s3_merged_data_frm_cache(63,    0),
-    "b0001".U -> s3_merged_data_frm_cache(63,    8),
-    "b0010".U -> s3_merged_data_frm_cache(63,   16),
-    "b0011".U -> s3_merged_data_frm_cache(63,   24),
-    "b0100".U -> s3_merged_data_frm_cache(63,   32),
-    "b0101".U -> s3_merged_data_frm_cache(63,   40),
-    "b0110".U -> s3_merged_data_frm_cache(63,   48),
-    "b0111".U -> s3_merged_data_frm_cache(63,   56),
-    "b1000".U -> s3_merged_data_frm_cache(127,  64),
-    "b1001".U -> s3_merged_data_frm_cache(127,  72),
-    "b1010".U -> s3_merged_data_frm_cache(127,  80),
-    "b1011".U -> s3_merged_data_frm_cache(127,  88),
-    "b1100".U -> s3_merged_data_frm_cache(127,  96),
-    "b1101".U -> s3_merged_data_frm_cache(127, 104),
-    "b1110".U -> s3_merged_data_frm_cache(127, 112),
-    "b1111".U -> s3_merged_data_frm_cache(127, 120)
+  val s3_picked_data_frm_cache_lo = ParallelLookUp(s3_ld_raw_data_frm_cache.addrOffset(2, 0), List(
+    "b000".U -> s3_merged_data_frm_cache(63,    0),
+    "b001".U -> s3_merged_data_frm_cache(63,    8),
+    "b010".U -> s3_merged_data_frm_cache(63,   16),
+    "b011".U -> s3_merged_data_frm_cache(63,   24),
+    "b100".U -> s3_merged_data_frm_cache(63,   32),
+    "b101".U -> s3_merged_data_frm_cache(63,   40),
+    "b110".U -> s3_merged_data_frm_cache(63,   48),
+    "b111".U -> s3_merged_data_frm_cache(63,   56)
   ))
-  val s3_ld_data_frm_cache = rdataHelper(s3_ld_raw_data_frm_cache.uop, s3_picked_data_frm_cache)
+  val s3_picked_data_frm_cache_hi = ParallelLookUp(s3_ld_raw_data_frm_cache.addrOffset(2, 0), List(
+    "b000".U -> s3_merged_data_frm_cache(127,  64),
+    "b001".U -> s3_merged_data_frm_cache(127,  72),
+    "b010".U -> s3_merged_data_frm_cache(127,  80),
+    "b011".U -> s3_merged_data_frm_cache(127,  88),
+    "b100".U -> s3_merged_data_frm_cache(127,  96),
+    "b101".U -> s3_merged_data_frm_cache(127, 104),
+    "b110".U -> s3_merged_data_frm_cache(127, 112),
+    "b111".U -> s3_merged_data_frm_cache(127, 120)
+  ))
+  val s3_picked_data_frm_cache = ParallelLookUp(s3_ld_raw_data_frm_cache.addrOffset(3), List(
+    "b0".U -> s3_picked_data_frm_cache_lo,
+    "b1".U -> s3_picked_data_frm_cache_hi
+  ))
 
   // FIXME: add 1 cycle delay ?
   io.lsq.uncache.ready := !s3_out.valid
