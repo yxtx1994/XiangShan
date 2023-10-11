@@ -47,7 +47,7 @@ object LqPtr {
 trait HasLoadHelper { this: XSModule =>
   def rdataHelper(uop: MicroOp, rdata: UInt): UInt = {
     val fpWen = uop.ctrl.fpWen
-    LookupTree(uop.ctrl.fuOpType, List(
+    ParallelLookUp(uop.ctrl.fuOpType, List(
       LSUOpType.lb   -> SignExt(rdata(7, 0) , XLEN),
       LSUOpType.lh   -> SignExt(rdata(15, 0), XLEN),
       /*
