@@ -188,8 +188,8 @@ case class XSCoreParameters
     numWrite = None,
   ),
   prefetcher: Option[PrefetcherParams] = Some(SMSParams()),
-  LoadPipelineWidth: Int = 2,
-  StorePipelineWidth: Int = 2,
+  LoadPipelineWidth: Int = 3,
+  StorePipelineWidth: Int = 3,
   VecMemSrcInWidth: Int = 2,
   VecMemInstWbWidth: Int = 1,
   VecMemDispatchWidth: Int = 1,
@@ -362,15 +362,18 @@ case class XSCoreParameters
       IssueBlockParams(Seq(
         ExeUnitParams("LDU0", Seq(LduCfg), Seq(IntWB(6, 0), VfWB(6, 0)), Seq(Seq(IntRD(12, 0)))),
         ExeUnitParams("LDU1", Seq(LduCfg), Seq(IntWB(7, 0), VfWB(7, 0)), Seq(Seq(IntRD(13, 0)))),
-      ), numEntries = IssueQueueSize, numEnq = 2),
+        ExeUnitParams("LDU2", Seq(LduCfg), Seq(IntWB(8, 0), VfWB(8, 0)), Seq(Seq(IntRD(14, 0)))),
+      ), numEntries = IssueQueueSize, numEnq = 3),
       IssueBlockParams(Seq(
         ExeUnitParams("STA0", Seq(StaCfg, MouCfg), Seq(IntWB(10, 0)), Seq(Seq(IntRD(3, 1)))),
         ExeUnitParams("STA1", Seq(StaCfg, MouCfg), Seq(IntWB(11, 0)), Seq(Seq(IntRD(1, 1)))),
-      ), numEntries = IssueQueueSize, numEnq = 2),
+        ExeUnitParams("STA2", Seq(StaCfg, MouCfg), Seq(IntWB(12, 0)), Seq(Seq(IntRD(2, 1)))),
+      ), numEntries = IssueQueueSize, numEnq = 3),
       IssueBlockParams(Seq(
         ExeUnitParams("STD0", Seq(StdCfg, MoudCfg), Seq(), Seq(Seq(IntRD(13, 1), VfRD(12, Int.MaxValue)))),
-        ExeUnitParams("STD1", Seq(StdCfg, MoudCfg), Seq(), Seq(Seq(IntRD(5, 1), VfRD(10, Int.MaxValue)))),
-      ), numEntries = IssueQueueSize, numEnq = 2),
+        ExeUnitParams("STD1", Seq(StdCfg, MoudCfg), Seq(), Seq(Seq(IntRD(12, 1), VfRD(10, Int.MaxValue)))),
+        ExeUnitParams("STD2", Seq(StdCfg, MoudCfg), Seq(), Seq(Seq(IntRD(10, 1), VfRD(11, Int.MaxValue)))),
+      ), numEntries = IssueQueueSize, numEnq = 3),
       IssueBlockParams(Seq(
         ExeUnitParams("VLDU0", Seq(VlduCfg), Seq(VfWB(6, 1)), Seq(Seq(VfRD(0, 0)), Seq(VfRD(1, 0)), Seq(VfRD(2, 0)), Seq(VfRD(3, 0)), Seq(VfRD(4, 0)))),
         ExeUnitParams("VLDU1", Seq(VlduCfg), Seq(VfWB(7, 1)), Seq(Seq(VfRD(5, 0)), Seq(VfRD(6, 0)), Seq(VfRD(7, 0)), Seq(VfRD(8, 0)), Seq(VfRD(9, 0)))),
@@ -389,8 +392,8 @@ case class XSCoreParameters
   def iqWakeUpParams = {
     Seq(
       WakeUpConfig(
-        Seq("ALU0", "ALU1", "MUL0", "MUL1", "BJU0", "LDU0", "LDU1") ->
-        Seq("ALU0", "ALU1", "MUL0", "MUL1", "BJU0", "BJU1", "BJU2", "LDU0", "LDU1", "STA0", "STA1", "STD0", "STD1")
+        Seq("ALU0", "ALU1", "MUL0", "MUL1", "BJU0", "LDU0", "LDU1", "LDU2") ->
+        Seq("ALU0", "ALU1", "MUL0", "MUL1", "BJU0", "BJU1", "BJU2", "LDU0", "LDU1", "LDU2", "STA0", "STA1", "STA2", "STD0", "STD1", "STD2")
       ),
       WakeUpConfig(Seq("IMISC0") -> Seq("FEX0")),
     ).flatten

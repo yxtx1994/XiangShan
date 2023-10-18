@@ -348,8 +348,8 @@ class Dispatch2IqMemImp(override val wrapper: Dispatch2Iq)(implicit p: Parameter
 
   import FuType._
   private val dispatchCfg: Seq[(Seq[BigInt], Int)] = Seq(
-    (Seq(ldu.ohid), 2),
-    (Seq(stu.ohid, mou.ohid), 2),
+    (Seq(ldu.ohid), 3),
+    (Seq(stu.ohid, mou.ohid), 3),
     (Seq(vldu.ohid), 2),
   )
 

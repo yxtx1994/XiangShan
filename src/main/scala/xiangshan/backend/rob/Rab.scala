@@ -251,8 +251,8 @@ class RenameBuffer(size: Int)(implicit p: Parameters) extends XSModule with HasC
     }
   }
 
-  val allowEnqueue = RegNext(numValidEntries + enqCount <= (size - RenameWidth).U, true.B)
   val numValidEntries = distanceBetween(enqPtr, deqPtr)
+  val allowEnqueue = RegNext(numValidEntries + enqCount <= (size - RenameWidth).U, true.B)
 
   io.canEnq := allowEnqueue && state === s_idle
   io.enqPtrVec := enqPtrVec
