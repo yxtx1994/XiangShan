@@ -92,7 +92,7 @@ class ExeUnitImp(
       samePort.wbPortConfigs.map(
         x => x match {
           case IntWB(port, priority) => {
-            if (!samePort.latencyCertain) assert(priority == 1,
+            if (!samePort.latencyCertain) assert(priority == 1 || samePort.hasLoadFu,
               s"${samePort.name}: IntWbPort $port must latencyCertain priority=0 or latencyUnCertain priority=1")
             else assert(priority == 0,
               s"${samePort.name}: IntWbPort $port must latencyCertain priority=0 or latencyUnCertain priority=1")
@@ -111,7 +111,7 @@ class ExeUnitImp(
       samePort.wbPortConfigs.map(
         x => x match {
           case VfWB(port, priority) => {
-            if (!samePort.latencyCertain) assert(priority == 1,
+            if (!samePort.latencyCertain) assert(priority == 1 || samePort.hasLoadFu,
               s"${samePort.name}: VfWbPort $port must latencyCertain priority=0 or latencyUnCertain priority=1")
             else assert(priority == 0,
               s"${samePort.name}: VfWbPort $port must latencyCertain priority=0 or latencyUnCertain priority=1")
