@@ -362,7 +362,7 @@ case class XSCoreParameters
       IssueBlockParams(Seq(
         ExeUnitParams("LDU0", Seq(LduCfg), Seq(IntWB(6, 0), VfWB(6, 0)), Seq(Seq(IntRD(12, 0)))),
         ExeUnitParams("LDU1", Seq(LduCfg), Seq(IntWB(7, 0), VfWB(7, 0)), Seq(Seq(IntRD(13, 0)))),
-        ExeUnitParams("LDU2", Seq(LduCfg), Seq(IntWB(8, 0), VfWB(8, 0)), Seq(Seq(IntRD(14, 0)))),
+        ExeUnitParams("LDU2", Seq(LduCfg), Seq(IntWB(8, 1), VfWB(8, 1)), Seq(Seq(IntRD(14, 0)))),
       ), numEntries = IssueQueueSize, numEnq = 3),
       IssueBlockParams(Seq(
         ExeUnitParams("STA0", Seq(StaCfg, MouCfg), Seq(IntWB(10, 0)), Seq(Seq(IntRD(3, 1)))),

@@ -73,6 +73,7 @@ class XSArgs(object):
         # Makefile arguments
         self.threads = args.threads
         self.with_dramsim3 = 1 if args.with_dramsim3 else None
+        self.mfc = 1 if args.mfc else None
         self.is_release = 1 if args.release else None
         self.is_spike = "Spike" if args.spike else None
         self.trace = 1 if args.trace or not args.disable_fork and not args.trace_fst else None
@@ -119,6 +120,7 @@ class XSArgs(object):
         makefile_args = [
             (self.threads,       "EMU_THREADS"),
             (self.with_dramsim3, "WITH_DRAMSIM3"),
+            (self.mfc, "MFC"),
             (self.is_release,    "RELEASE"),
             (self.is_spike,      "REF"),
             (self.trace,         "EMU_TRACE"),
@@ -493,6 +495,7 @@ if __name__ == "__main__":
     parser.add_argument('--no-diff', action='store_true', help='disable difftest')
     parser.add_argument('--ram-size', nargs='?', type=str, help='manually set simulation memory size (8GB by default)')
     parser.add_argument('--no-db', action='store_true', help='disable chiseldb dump')
+    parser.add_argument('--mfc', action='store_true', help='mfc')
 
     args = parser.parse_args()
 

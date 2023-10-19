@@ -217,7 +217,7 @@ trait XiangShan extends XiangShanModule with HasChisel {
 
   def yunsuanModule = yunsuan(crossValue)
 
-  override def forkArgs = Seq("-Xmx20G", "-Xss256m")
+  override def forkArgs = Seq("-Xmx100G", "-Xss256m")
 
   override def sources = T.sources {
     super.sources() ++ Seq(PathRef(millSourcePath / s"src-${crossValue}" / "main" / "scala"))
