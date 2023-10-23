@@ -119,7 +119,7 @@ $(SIM_TOP_V): $(SCALA_FILE) $(TEST_FILE)
 	@date -R | tee -a $(TIMELOG)
 	$(TIME_CMD) mill -i xiangshan[$(ChiselVersion)].test.runMain $(SIMTOP)    \
 		-td $(@D) --config $(CONFIG) $(SIM_MEM_ARGS)                          \
-		--num-cores $(NUM_CORES) $(SIM_ARGS) --full-stacktrace
+		--num-cores $(NUM_CORES) $(SIM_ARGS) --full-stacktrace --firtool-binary-path /nfs/home/share/firtool-1.56.1/bin/firtool
 ifeq ($(MFC),1)
 	$(SPLIT_VERILOG) $(BUILD_DIR) $(SIM_TOP).v
 	$(MEM_GEN_SEP) "$(MEM_GEN)" "$(SIM_TOP_V).conf" "$(BUILD_DIR)"
