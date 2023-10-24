@@ -649,7 +649,8 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
     loadUnits(i).io.ld_fast_fuOpType := io.ooo_to_mem.loadFastFuOpType(i)
     loadUnits(i).io.replay <> lsq.io.replay(i)
 
-    loadUnits(i).io.l2_hint <> io.l2_hint
+    val l2_hint = RegNext(io.l2_hint)
+    loadUnits(i).io.l2_hint <> l2_hint
 
     // passdown to lsq (load s2)
     lsq.io.ldu.ldin(i) <> loadUnits(i).io.lsq.ldin
@@ -657,8 +658,8 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
     lsq.io.ld_raw_data(i) <> loadUnits(i).io.lsq.ld_raw_data
     lsq.io.trigger(i) <> loadUnits(i).io.lsq.trigger
 
-    lsq.io.l2_hint.valid := io.l2_hint.valid
-    lsq.io.l2_hint.bits.sourceId := io.l2_hint.bits.sourceId
+    lsq.io.l2_hint.valid := l2_hint.valid
+    lsq.io.l2_hint.bits.sourceId := l2_hint.bits.sourceId
 
     // alter writeback exception info
     io.s3_delayed_load_error(i) := loadUnits(i).io.s3_dly_ld_err
