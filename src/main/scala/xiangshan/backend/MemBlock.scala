@@ -286,8 +286,8 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
   io.mem_to_ooo.writebackLda <> loadUnits.map(_.io.ldout)
   io.mem_to_ooo.writebackSta <> storeUnits.map(_.io.stout)
   io.mem_to_ooo.writebackStd <> stdExeUnits.map(_.io.out)
-  io.mem_to_ooo.writebackHyu.foreach(_(0) <> VecInit(hybridUnits.map(_.io.ldout)))
-  io.mem_to_ooo.writebackHyu.foreach(_(1) <> VecInit(hybridUnits.map(_.io.stout)))
+  io.mem_to_ooo.writebackHyu.head(0) <> hybridUnits.head.io.ldout
+  io.mem_to_ooo.writebackHyu.head(1) <> hybridUnits.head.io.stout
   io.mem_to_ooo.otherFastWakeup := DontCare
   io.mem_to_ooo.otherFastWakeup.take(LduCnt).zip(loadUnits.map(_.io.fast_uop)).foreach{case(a,b)=> a := b}
   io.mem_to_ooo.otherFastWakeup.drop(LduCnt).take(HyuCnt).zip(hybridUnits.map(_.io.ldu_io.fast_uop)).foreach{case(a,b)=> a:=b}
