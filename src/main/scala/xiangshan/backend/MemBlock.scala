@@ -124,6 +124,7 @@ class mem_to_ooo(implicit val p: Parameters) extends MemBlockBundle {
   val writebackStd = Vec(StdCnt, DecoupledIO(new MemExuOutput))
   val writebackHyu = Vec(HyuCnt, Vec(2, DecoupledIO(new MemExuOutput)))
   val writebackVlda = Vec(VlduCnt, DecoupledIO(new MemExuOutput(isVector = true)))
+  val writebackVStu = Vec(VstuCnt, DecoupledIO(new MemExuOutput(isVector = true)))
 
   val ldaIqFeedback = Vec(LdExeCnt, new MemRSFeedbackIO)
   val staIqFeedback = Vec(StAddrCnt, new MemRSFeedbackIO)
