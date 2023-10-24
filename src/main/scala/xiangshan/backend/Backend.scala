@@ -522,7 +522,11 @@ class BackendMemIO(implicit p: Parameters, params: BackendParams) extends XSBund
   val storePcRead = Vec(params.StaCnt, Output(UInt(VAddrBits.W)))
   val hyuPcRead = Vec(params.HyuCnt, Output(UInt(VAddrBits.W)))
   // Input
-  val writeBack = MixedVec(Seq.fill(params.LduCnt + params.StaCnt + params.StdCnt + 2*params.HyuCnt)(Flipped(DecoupledIO(new MemExuOutput()))) ++ Seq.fill(params.VlduCnt)(Flipped(DecoupledIO(new MemExuOutput(true)))))
+  val writebackLda = Vec(params.LduCnt, Flipped(DecoupledIO(new MemExuOutput)))
+  val writebackSta = Vec(params.StaCnt, Flipped(DecoupledIO(new MemExuOutput)))
+  val writebackStd = Vec(params.StdCnt, Flipped(DecoupledIO(new MemExuOutput)))
+  val writebackHyu = Vec(params.HyuCnt, Flipped(Vec(2, DecoupledIO(new MemExuOutput))))
+  val writebackVlda = Vec(params.VlduCnt, Flipped(DecoupledIO(new MemExuOutput(true))))
 
   val s3_delayed_load_error = Input(Vec(LoadPipelineWidth, Bool()))
   val stIn = Input(Vec(params.StaCnt, ValidIO(new DynInst())))
