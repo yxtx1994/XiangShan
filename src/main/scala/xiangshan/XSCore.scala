@@ -157,7 +157,7 @@ class XSCoreImp(outer: XSCoreBase) extends LazyModuleImp(outer)
   memBlock.io.hartId := io.hartId
   memBlock.io.ooo_to_mem.issueLda <> backend.io.mem.issueLda
   memBlock.io.ooo_to_mem.issueSta <> backend.io.mem.issueSta
-  memBlock.io.ooo_to_mem.issueStd <> backend.io.mem.issueStd ++ backend.io.mem.issueHyd
+  memBlock.io.ooo_to_mem.issueStd <> backend.io.mem.issueStd
   memBlock.io.ooo_to_mem.issueHya <> backend.io.mem.issueHya
   memBlock.io.ooo_to_mem.issueVldu <> backend.io.mem.issueVldu
 
