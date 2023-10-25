@@ -552,6 +552,7 @@ trait HasXSParameter {
   val RobSize = coreParams.RobSize
   val RabSize = coreParams.RabSize
   val IntRefCounterWidth = log2Ceil(RobSize)
+  val LSQEnqWidth = coreParams.dpParams.LsDqDeqWidth
   val VirtualLoadQueueSize = coreParams.VirtualLoadQueueSize
   val LoadQueueRARSize = coreParams.LoadQueueRARSize
   val LoadQueueRAWSize = coreParams.LoadQueueRAWSize
