@@ -133,7 +133,7 @@ class Entries(implicit p: Parameters, params: IssueBlockParams) extends XSModule
   private val OthersEntryNum = params.numEntries - params.numEnq
   val io = IO(new EntriesIO)
 
-  val resps: Vec[Vec[ValidIO[EntryDeqRespBundle]]] = if(params.isLdAddrIQ) VecInit(io.deqResp, io.og0Resp, io.finalIssueResp.get, io.memAddrIssueResp.get)
+  val resps: Vec[Vec[ValidIO[EntryDeqRespBundle]]] = if(params.isLdAddrIQ) VecInit(io.deqResp, io.og0Resp, io.og1Resp, io.memAddrIssueResp.get, io.finalIssueResp.get)
                                                      else if(params.isMemAddrIQ) VecInit(io.deqResp, io.og0Resp, io.og1Resp, io.fromMem.get.fastResp, io.fromMem.get.slowResp)
                                                      else VecInit(io.deqResp, io.og0Resp, io.og1Resp, 0.U.asTypeOf(io.deqResp))
 
