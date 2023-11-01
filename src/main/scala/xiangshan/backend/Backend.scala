@@ -372,6 +372,21 @@ class BackendImp(override val wrapper: Backend)(implicit p: Parameters) extends 
     sink.bits.debugInfo := source.bits.uop.debugInfo
     sink.bits.lqIdx.foreach(_ := source.bits.uop.lqIdx)
     sink.bits.sqIdx.foreach(_ := source.bits.uop.sqIdx)
+    sink.bits.mask.foreach(_ := source.bits.srcMask.getOrElse(0.U))
+    sink.bits.vecInfo.foreach { case v =>
+      val vpu = source.bits.uop.vpu
+      v.ta := vpu.vta
+      v.ma := vpu.vma
+      v.vl := vpu.vl
+      v.vstart := vpu.vstart
+      v.eew := vpu.veew
+      v.vsew := vpu.vsew
+      v.vdIdx := source.bits.vdIdx.getOrElse(0.U)
+      v.vlmul := vpu.vlmul
+      v.valid := DontCare
+      v.narrow := DontCare
+      v.dstMask := DontCare
+    }
   }
 
   // to mem

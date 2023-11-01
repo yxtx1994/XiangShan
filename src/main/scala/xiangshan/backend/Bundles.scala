@@ -15,6 +15,7 @@ import xiangshan.backend.exu.ExeUnitParams
 import xiangshan.backend.fu.FuType
 import xiangshan.backend.fu.fpu.Bundles.Frm
 import xiangshan.backend.fu.vector.Bundles._
+import xiangshan.backend.fu.vector.VecInfo
 import xiangshan.backend.issue.{IssueBlockParams, IssueQueueDeqRespBundle, IssueQueueJumpBundle, SchedulerType, EntryDeqRespBundle}
 import xiangshan.backend.regfile.{RfReadPortWithConfig, RfWritePortWithConfig}
 import xiangshan.backend.rob.RobPtr
@@ -538,6 +539,8 @@ object Bundles {
     val lqIdx        = if (params.hasLoadFu)    Some(new LqPtr())             else None
     val sqIdx        = if (params.hasStoreAddrFu || params.hasStdFu)
                                                 Some(new SqPtr())             else None
+    val mask         = if (params.hasVLoadFu)   Some(UInt(VLEN.W))            else None
+    val vecInfo      = if (params.hasVLoadFu)   Some(new VecInfo())           else None
     // uop info
     val predecodeInfo = if(params.hasPredecode) Some(new PreDecodeInfo) else None
     val debug = new DebugBundle
@@ -677,6 +680,8 @@ object Bundles {
     val uop = new DynInst
     val data = if (isVector) UInt(VLEN.W) else UInt(XLEN.W)
     val mask = if (isVector) Some(UInt((VLEN/8).W)) else None
+    val srcMask = if (isVector) Some(UInt(VLEN.W)) else None
+    val vdIdx = if (isVector) Some(UInt(3.W)) else None // TODO: parameterize width
     val debug = new DebugBundle
   }
 
