@@ -16,14 +16,14 @@
 
 package xiangshan.backend.rename
 
-import chipsalliance.rocketchip.config.Parameters
+import org.chipsalliance.cde.config.Parameters
 import chisel3._
 import chisel3.util._
 import xiangshan._
 import utils._
 import utility._
 import xiangshan.backend.Bundles._
-import xiangshan.backend.datapath.WbConfig.{IntWB, VfWB, PregWB}
+import xiangshan.backend.datapath.WbConfig.{IntWB, VfWB, NoWB, PregWB}
 import xiangshan.backend.issue.SchdBlockParams
 import xiangshan.backend.datapath.{DataSource}
 
@@ -68,12 +68,14 @@ class BusyTable(numReadPorts: Int, numWritePorts: Int, numPhyPregs: Int, pregWB:
   val wbMask = reqVecToMask(io.wbPregs)
   val allocMask = reqVecToMask(io.allocPregs)
   val wakeUpMask = pregWB match {
-    case _: IntWB => ParallelOR(wakeUpFilterLS.map(x => Mux(x.valid && x.bits.rfWen && !x.bits.loadDependency.asUInt.orR, UIntToOH(x.bits.pdest), 0.U))) //TODO: dont implement "load -> wakeUp other -> wakeUp BusyTable" now
-    case _: VfWB => ParallelOR(wakeUpFilterLS.map(x => Mux(x.valid && (x.bits.fpWen || x.bits.vecWen) && !x.bits.loadDependency.asUInt.orR, UIntToOH(x.bits.pdest), 0.U)))
+    case _: IntWB => ParallelOR(wakeUpFilterLS.map(x => Mux(x.valid && x.bits.rfWen && !x.bits.loadDependency.asUInt.orR, UIntToOH(x.bits.pdest), 0.U)).toSeq) //TODO: dont implement "load -> wakeUp other -> wakeUp BusyTable" now
+    case _: VfWB => ParallelOR(wakeUpFilterLS.map(x => Mux(x.valid && (x.bits.fpWen || x.bits.vecWen) && !x.bits.loadDependency.asUInt.orR, UIntToOH(x.bits.pdest), 0.U)).toSeq)
+    case _: NoWB => throw new IllegalArgumentException("NoWB is not permitted")
   }
   val cancelMask = pregWB match {
     case _: IntWB => ParallelOR(io.cancel.map(x => Mux(x.valid && x.bits.rfWen, UIntToOH(x.bits.pdest), 0.U)))
     case _: VfWB => ParallelOR(io.cancel.map(x => Mux(x.valid && (x.bits.fpWen || x.bits.vecWen), UIntToOH(x.bits.pdest), 0.U)))
+    case _: NoWB => throw new IllegalArgumentException("NoWB is not permitted")
   }
 
   /*
@@ -102,10 +104,11 @@ class BusyTable(numReadPorts: Int, numWritePorts: Int, numPhyPregs: Int, pregWB:
   io.read.foreach{ case res =>
     res.resp := Mux(!cancelMask(res.req), !table(res.req).andR, false.B)
     res.dataSource.value := Mux(table(res.req) === DataSource.bypass, DataSource.bypass, DataSource.reg)
-    val wakeUpExuOHVec = wakeUpReg.map{ case x =>
+    val wakeUpExuOHVec = wakeUpReg.toSeq.map{ case x =>
       val v: Bool = pregWB match {
         case _: IntWB => x.valid && x.bits.rfWen
         case _: VfWB => x.valid && (x.bits.fpWen || x.bits.vecWen)
+    case _: NoWB => throw new IllegalArgumentException("NoWB is not permitted")
       }
       val pdestHit = res.req === x.bits.pdest
       val isBypass = table(res.req) === DataSource.bypass

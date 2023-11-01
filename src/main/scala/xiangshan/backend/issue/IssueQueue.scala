@@ -257,7 +257,7 @@ class IssueQueueImp(override val wrapper: IssueQueue)(implicit p: Parameters, va
         case Some(value) => value.zip(srcWakeUpEnqByIQMatrix(i)).zipWithIndex.foreach {
           case ((exuOH, wakeUpByIQOH), srcIdx) =>
             when(wakeUpByIQOH.asUInt.orR) {
-              exuOH := Mux1H(wakeUpByIQOH, io.wakeupFromIQ.map(x => MathUtils.IntToOH(x.bits.exuIdx).U(backendParams.numExu.W)))
+              exuOH := Mux1H(wakeUpByIQOH, io.wakeupFromIQ.toSeq.map(x => MathUtils.IntToOH(x.bits.exuIdx).U(backendParams.numExu.W)))
             }.otherwise {
               exuOH := s0_enqBits(i).l1ExuOH(srcIdx)
             }

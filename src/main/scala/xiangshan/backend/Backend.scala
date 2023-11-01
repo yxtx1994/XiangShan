@@ -441,12 +441,11 @@ class BackendImp(override val wrapper: Backend)(implicit p: Parameters) extends 
   io.mem.lsqEnqIO <> memScheduler.io.memIO.get.lsqEnqIO
   io.mem.robLsqIO <> ctrlBlock.io.robio.lsq
 
-  private val intFinalIssueBlock = intExuBlock.io.in.flatten.map(_ => false.B)
-  private val vfFinalIssueBlock = vfExuBlock.io.in.flatten.map(_ => false.B)
-  private val memFinalIssueBlock = io.mem.issueUops zip memExuBlocksHasLDU.flatten map {
-    case (out, isLdu) =>
-      if (isLdu) RegNext(out.valid && !out.ready, false.B)
-      else false.B
+  private val intFinalIssueBlock = intExuBlock.io.in.flatten.toSeq.map(_ => false.B)
+  private val vfFinalIssueBlock = vfExuBlock.io.in.flatten.toSeq.map(_ => false.B)
+  private val memFinalIssueBlock = io.mem.issueUops.toSeq zip memExuBlocksHasLDU.flatten.toSeq map {
+    case (out, true) => RegNext(out.valid && !out.ready, false.B)
+    case (_, false) => false.B
   }
   og0CancelOHFromFinalIssue := VecInit(intFinalIssueBlock ++ vfFinalIssueBlock ++ memFinalIssueBlock).asUInt
 

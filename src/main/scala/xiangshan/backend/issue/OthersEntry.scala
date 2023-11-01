@@ -151,7 +151,7 @@ class OthersEntry(implicit p: Parameters, params: IssueBlockParams) extends XSMo
       entryRegNext.status.srcWakeUpL1ExuOH.get.zip(srcWakeUpByIQVec).zip(srcWakeUp).zipWithIndex.foreach {
         case (((exuOH: UInt, wakeUpByIQOH: Vec[Bool]), wakeUp: Bool), srcIdx) =>
           when(wakeUpByIQOH.asUInt.orR) {
-            exuOH := Mux1H(wakeUpByIQOH, io.wakeUpFromIQ.map(x => MathUtils.IntToOH(x.bits.exuIdx).U(backendParams.numExu.W)))
+            exuOH := Mux1H(wakeUpByIQOH, io.wakeUpFromIQ.toSeq.map(x => MathUtils.IntToOH(x.bits.exuIdx).U(backendParams.numExu.W)))
           }.elsewhen(wakeUp) {
             exuOH := 0.U.asTypeOf(exuOH)
           }.otherwise {

@@ -41,7 +41,7 @@ class CancelNetworkImp(backendParams: BackendParams, override val wrapper: LazyM
 
   private val og0CancelOH = Wire(ExuOH(numExu))
   private val og1CancelOH = WireInit(io.in.og1CancelOH)
-  private val transferredCancelOH = RegInit(0.U.asTypeOf(ExuOH(numExu)))
+  private val transferredCancelOH = RegInit(0.U(numExu.W))
 
   private val isInferWakeUpVec = WireInit(VecInit(allExuParams.map(_.isIQWakeUpSink.B)))
   dontTouch(isInferWakeUpVec)
