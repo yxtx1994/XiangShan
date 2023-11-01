@@ -39,7 +39,7 @@ class BusyTableReadIO(implicit p: Parameters) extends XSBundle {
   val req = Input(UInt(PhyRegIdxWidth.W))
   val resp = Output(Bool())
   val dataSource = Output(DataSource())
-  val l1ExuOH = Output(ExuVec())
+  val l1ExuOH = Output(ExuOH())
 }
 
 class BusyTable(numReadPorts: Int, numWritePorts: Int, numPhyPregs: Int, pregWB: PregWB)(implicit p: Parameters, params: SchdBlockParams) extends XSModule with HasPerfEvents {
@@ -111,7 +111,7 @@ class BusyTable(numReadPorts: Int, numWritePorts: Int, numPhyPregs: Int, pregWB:
       val isBypass = table(res.req) === DataSource.bypass
       Mux(v && pdestHit && isBypass, MathUtils.IntToOH(x.bits.exuIdx).U(backendParams.numExu.W), 0.U)
     }
-    res.l1ExuOH := Mux(table(res.req) === DataSource.bypass, ParallelOR(wakeUpExuOHVec), 0.U).asBools
+    res.l1ExuOH := Mux(table(res.req) === DataSource.bypass, ParallelOR(wakeUpExuOHVec), 0.U)
   }
 
   table := tableUpdate
