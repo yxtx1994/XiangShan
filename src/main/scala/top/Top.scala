@@ -180,7 +180,9 @@ class XSTop()(implicit p: Parameters) extends BaseXSSoc() with HasSoCParameter
       for(node <- core_rst_nodes){
         node.out.head._1 := false.B.asAsyncReset()
       }
-      if(l3cacheOpt.get.module.dfx_reset.isDefined) {
+    }
+    if (l3cacheOpt.isDefined) {
+      if (l3cacheOpt.get.module.dfx_reset.isDefined) {
         l3cacheOpt.get.module.dfx_reset.get := dfx_reset
       }
     }
