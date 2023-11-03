@@ -174,13 +174,12 @@ class MissReqPipeRegBundle(edge: TLEdgeOut)(implicit p: Parameters) extends DCac
     val merge_load = (req.isFromLoad || req.isFromStore || req.isFromPrefetch) && new_req.isFromLoad
 
     val set_match = addr_to_dcache_set(req.vaddr) === addr_to_dcache_set(new_req.vaddr)
-    val way_match = req.way_en === new_req.way_en
     Mux(
         alloc,
         Mux(
             block_match,
             !alias_match || !merge_load,
-            set_match && way_match
+            set_match
           ),
         false.B
       )
@@ -588,7 +587,7 @@ class MissEntry(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheModule {
       Mux(
         block_match,
         (!before_req_sent_can_merge(new_req) && !before_data_refill_can_merge(new_req)) || !alias_match,
-        set_match && new_req.way_en === req.way_en
+        set_match
       )
   }
 
