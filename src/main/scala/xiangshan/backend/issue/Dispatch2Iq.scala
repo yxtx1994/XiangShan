@@ -41,7 +41,7 @@ class Dispatch2Iq(val schdBlockParams : SchdBlockParams)(implicit p: Parameters)
   val isMem = schdBlockParams.schdType == MemScheduler()
 
   lazy val module: Dispatch2IqImp = schdBlockParams.schdType match {
-    case IntScheduler() => new Dispatch2IqArithImp(this)(p, schdBlockParams)
+    case IntScheduler() => new Dispatch2IqIntImp(this)(p, schdBlockParams)
     case MemScheduler() => new Dispatch2IqMemImp(this)(p, schdBlockParams)
     case VfScheduler() => new Dispatch2IqArithImp(this)(p, schdBlockParams)
     case _ => null
@@ -63,6 +63,7 @@ abstract class Dispatch2IqImp(override val wrapper: Dispatch2Iq)(implicit p: Par
     val readVfState = if (numVfStateRead > 0) Some(Vec(numVfStateRead, Flipped(new BusyTableReadIO))) else None
     val out = MixedVec(params.issueBlockParams.filter(iq => iq.StdCnt == 0).map(x => Vec(x.numEnq, DecoupledIO(new DynInst))))
     val enqLsqIO = if (wrapper.isMem) Some(Flipped(new LsqEnqIO)) else None
+    val IQValidNumVec = if (params.isIntSchd) Some(Input(Vec(4, Vec(2,UInt(6.W))))) else None
   })
 
 
@@ -137,6 +138,228 @@ abstract class Dispatch2IqImp(override val wrapper: Dispatch2Iq)(implicit p: Par
       Mux(fuType === FuType.alu.U, false.B, Cat(fuConfigs.map(_.fuType.U === fuType).toSeq).orR)
     }
   }
+}
+
+class Dispatch2IqIntImp(override val wrapper: Dispatch2Iq)(implicit p: Parameters, params: SchdBlockParams)
+  extends Dispatch2IqImp(wrapper)
+    with HasXSParameter {
+  val IQValidNumVec = io.IQValidNumVec.get
+  // numEnq = 4 + 4 + 2
+  private val numEnq = io.in.size
+
+  val uopsIn = Wire(Vec(wrapper.numIn, DecoupledIO(new DynInst)))
+  val numInPorts = io.in.size
+  val outs = io.out.flatten
+  require(outs.size == uopsIn.size, "Dispatch2IqInt outs.size =/= uopsIn.size")
+  uopsIn <> io.in
+
+  val uopsInDq0 = uopsIn.take(4)
+  val uopsInDq1 = uopsIn.drop(4).take(4)
+  val uopsInDq2 = uopsIn.drop(8).take(2)
+  val uopsOutDq0 = outs.take(4)
+  val uopsOutDq1 = outs.drop(4).take(4)
+  val uopsOutDq2 = outs.drop(8).take(2)
+  uopsOutDq2.zip(uopsInDq2).map{ case (outDq2,inDq2) =>
+    inDq2.ready := outDq2.ready
+    outDq2.valid := inDq2.valid
+    outDq2.bits := inDq2.bits
+  }
+  val IQ0Deq0Num = IQValidNumVec(0)(0)
+  val IQ0Deq1Num = IQValidNumVec(0)(1)
+  val IQ1Deq0Num = IQValidNumVec(1)(0)
+  val IQ1Deq1Num = IQValidNumVec(1)(1)
+  val IQ2Deq0Num = IQValidNumVec(2)(0)
+  val IQ2Deq1Num = IQValidNumVec(2)(1)
+  val IQ3Deq0Num = IQValidNumVec(3)(0)
+  val IQ3Deq1Num = IQValidNumVec(3)(1)
+  val IQ0Deq0IsLess = IQ1Deq0Num > IQ0Deq0Num
+  val IQ0Deq1IsLess = IQ1Deq1Num > IQ0Deq1Num
+  val isDq0Deq0 = uopsInDq0.map{case in => FuType.isIntDq0Deq0(in.bits.fuType)}
+  val isDq0Deq1 = uopsInDq0.map{case in => FuType.isIntDq0Deq1(in.bits.fuType)}
+  val IQ0Enq0Select = Wire(Vec(4, Bool()))
+  val IQ0Enq1Select = Wire(Vec(4, Bool()))
+  val IQ1Enq0Select = Wire(Vec(4, Bool()))
+  val IQ1Enq1Select = Wire(Vec(4, Bool()))
+  val IQ0Enq0Select0 = (IQ0Deq0IsLess && isDq0Deq0(0)) || (IQ0Deq1IsLess && isDq0Deq1(0))
+  val IQ1Enq0Select0 = (!IQ0Deq0IsLess && isDq0Deq0(0)) || (!IQ0Deq1IsLess && isDq0Deq1(0))
+  val IQ0Enq1Select1 = (IQ0Deq0IsLess && isDq0Deq0(1)) || (IQ0Deq1IsLess && isDq0Deq1(1))
+  val IQ1Enq1Select1 = (!IQ0Deq0IsLess && isDq0Deq0(1)) || (!IQ0Deq1IsLess && isDq0Deq1(1))
+  val IQ0Enq0Select2 = !IQ0Enq0Select0 && ((IQ0Deq0IsLess && isDq0Deq0(2)) || (IQ0Deq1IsLess && isDq0Deq1(2)) || (IQ1Enq0Select0 && IQ1Enq1Select1))
+  val IQ0Enq1Select2 = !IQ0Enq1Select1 && ((IQ0Deq0IsLess && isDq0Deq0(2)) || (IQ0Deq1IsLess && isDq0Deq1(2)))
+  val IQ0Enq0Select3 = !IQ0Enq0Select0 && !IQ0Enq0Select2
+  val IQ0Enq1Select3 = !IQ0Enq1Select1 && !IQ0Enq1Select2
+  val IQ1Enq0Select2 = !IQ1Enq0Select0 && ((!IQ0Deq0IsLess && isDq0Deq0(2)) || (!IQ0Deq1IsLess && isDq0Deq1(2)) || (IQ0Enq0Select0 && IQ0Enq1Select1))
+  val IQ1Enq0Select3 = !IQ1Enq0Select0 && !IQ1Enq0Select2
+  val IQ1Enq1Select2 = !IQ1Enq1Select1 && ((!IQ0Deq0IsLess && isDq0Deq0(2)) || (!IQ0Deq1IsLess && isDq0Deq1(2)))
+  val IQ1Enq1Select3 = !IQ1Enq1Select1 && !IQ1Enq1Select2
+  when(uopsOutDq0.head.ready && uopsOutDq0.last.ready){
+    IQ0Enq0Select := Cat(IQ0Enq0Select3, IQ0Enq0Select2, false.B, IQ0Enq0Select0).asBools
+    IQ0Enq1Select := Cat(IQ0Enq1Select3, IQ0Enq1Select2, IQ0Enq1Select1, false.B).asBools
+    IQ1Enq0Select := Cat(IQ1Enq0Select3, IQ1Enq0Select2, false.B, IQ1Enq0Select0).asBools
+    IQ1Enq1Select := Cat(IQ1Enq1Select3, IQ1Enq1Select2, IQ1Enq1Select1, false.B).asBools
+    uopsInDq0.zip(uopsOutDq0).map { case (in, out) => in.ready := out.ready }
+  }.elsewhen(uopsOutDq0.head.ready){
+    IQ0Enq0Select := Cat(false.B, false.B, false.B, true.B).asBools
+    IQ0Enq1Select := Cat(false.B, false.B, true.B, false.B).asBools
+    IQ1Enq0Select := Cat(false.B, false.B, false.B, false.B).asBools
+    IQ1Enq1Select := Cat(false.B, false.B, false.B, false.B).asBools
+    uopsInDq0.zip(uopsOutDq0).map{ case (in,out) => in.ready := out.ready }
+  }.elsewhen(uopsOutDq0.last.ready){ // only IQ1 ready
+    IQ0Enq0Select := Cat(false.B, false.B, false.B, false.B).asBools
+    IQ0Enq1Select := Cat(false.B, false.B, false.B, false.B).asBools
+    IQ1Enq0Select := Cat(false.B, false.B, false.B, true.B).asBools
+    IQ1Enq1Select := Cat(false.B, false.B, true.B, false.B).asBools
+    uopsInDq0.zip(uopsOutDq0.reverse).map { case (in, out) => in.ready := out.ready }
+  }.otherwise{
+    IQ0Enq0Select := Cat(false.B, false.B, false.B, false.B).asBools
+    IQ0Enq1Select := Cat(false.B, false.B, false.B, false.B).asBools
+    IQ1Enq0Select := Cat(false.B, false.B, false.B, false.B).asBools
+    IQ1Enq1Select := Cat(false.B, false.B, false.B, false.B).asBools
+    uopsInDq0.zip(uopsOutDq0).map { case (in, out) => in.ready := out.ready }
+  }
+  dontTouch(IQ0Enq0Select)
+  dontTouch(IQ0Enq1Select)
+  dontTouch(IQ1Enq0Select)
+  dontTouch(IQ1Enq1Select)
+  dontTouch(IQ0Enq0Select)
+  dontTouch(IQ0Enq1Select)
+  dontTouch(IQ1Enq0Select)
+  dontTouch(IQ1Enq1Select)
+  uopsOutDq0(0).bits :=  Mux1H(IQ0Enq0Select, uopsInDq0.map(_.bits))
+  uopsOutDq0(1).bits :=  Mux1H(IQ0Enq1Select, uopsInDq0.map(_.bits))
+  uopsOutDq0(2).bits :=  Mux1H(IQ1Enq0Select, uopsInDq0.map(_.bits))
+  uopsOutDq0(3).bits :=  Mux1H(IQ1Enq1Select, uopsInDq0.map(_.bits))
+  uopsOutDq0(0).valid := Mux1H(IQ0Enq0Select, uopsInDq0.map(_.valid))
+  uopsOutDq0(1).valid := Mux1H(IQ0Enq1Select, uopsInDq0.map(_.valid))
+  uopsOutDq0(2).valid := Mux1H(IQ1Enq0Select, uopsInDq0.map(_.valid))
+  uopsOutDq0(3).valid := Mux1H(IQ1Enq1Select, uopsInDq0.map(_.valid))
+
+
+  val IQ2Deq0IsLess = IQ3Deq0Num > IQ2Deq0Num
+  val IQ2Deq1IsLess = IQ3Deq1Num > IQ2Deq1Num
+  val isDq1Deq0 = uopsInDq1.map { case in => FuType.isIntDq1Deq0(in.bits.fuType) }
+  val isDq1Deq1 = uopsInDq1.map { case in => FuType.isIntDq1Deq1(in.bits.fuType) }
+  val IQ2Enq0Select = Wire(Vec(4, Bool()))
+  val IQ2Enq1Select = Wire(Vec(4, Bool()))
+  val IQ3Enq0Select = Wire(Vec(4, Bool()))
+  val IQ3Enq1Select = Wire(Vec(4, Bool()))
+  val IQ2Enq0Select0 = (IQ2Deq0IsLess && isDq1Deq0(0)) || (IQ2Deq1IsLess && isDq1Deq1(0))
+  val IQ3Enq0Select0 = (!IQ2Deq0IsLess && isDq1Deq0(0)) || (!IQ2Deq1IsLess && isDq1Deq1(0))
+  val IQ2Enq1Select1 = (IQ2Deq0IsLess && isDq1Deq0(1)) || (IQ2Deq1IsLess && isDq1Deq1(1))
+  val IQ3Enq1Select1 = (!IQ2Deq0IsLess && isDq1Deq0(1)) || (!IQ2Deq1IsLess && isDq1Deq1(1))
+  val IQ2Enq0Select2 = !IQ2Enq0Select0 && ((IQ2Deq0IsLess && isDq1Deq0(2)) || (IQ2Deq1IsLess && isDq1Deq1(2)) || (IQ3Enq0Select0 && IQ3Enq1Select1))
+  val IQ2Enq1Select2 = !IQ2Enq1Select1 && ((IQ2Deq0IsLess && isDq1Deq0(2)) || (IQ2Deq1IsLess && isDq1Deq1(2)))
+  val IQ2Enq0Select3 = !IQ2Enq0Select0 && !IQ2Enq0Select2
+  val IQ2Enq1Select3 = !IQ2Enq1Select1 && !IQ2Enq1Select2
+  val IQ3Enq0Select2 = !IQ3Enq0Select0 && ((!IQ2Deq0IsLess && isDq1Deq0(2)) || (!IQ2Deq1IsLess && isDq1Deq1(2)) || (IQ2Enq0Select0 && IQ2Enq1Select1))
+  val IQ3Enq0Select3 = !IQ3Enq0Select0 && !IQ3Enq0Select2
+  val IQ3Enq1Select2 = !IQ3Enq1Select1 && ((!IQ2Deq0IsLess && isDq1Deq0(2)) || (!IQ2Deq1IsLess && isDq1Deq1(2)))
+  val IQ3Enq1Select3 = !IQ3Enq1Select1 && !IQ3Enq1Select2
+  when(uopsOutDq1.head.ready && uopsOutDq1.last.ready) {
+    IQ2Enq0Select := Cat(IQ2Enq0Select3, IQ2Enq0Select2, false.B, IQ2Enq0Select0).asBools
+    IQ2Enq1Select := Cat(IQ2Enq1Select3, IQ2Enq1Select2, IQ2Enq1Select1, false.B).asBools
+    IQ3Enq0Select := Cat(IQ3Enq0Select3, IQ3Enq0Select2, false.B, IQ3Enq0Select0).asBools
+    IQ3Enq1Select := Cat(IQ3Enq1Select3, IQ3Enq1Select2, IQ3Enq1Select1, false.B).asBools
+    uopsInDq1.zip(uopsOutDq1).map { case (in, out) => in.ready := out.ready }
+  }.elsewhen(uopsOutDq1.head.ready) {
+    IQ2Enq0Select := Cat(false.B, false.B, false.B, true.B).asBools
+    IQ2Enq1Select := Cat(false.B, false.B, true.B, false.B).asBools
+    IQ3Enq0Select := Cat(false.B, false.B, false.B, false.B).asBools
+    IQ3Enq1Select := Cat(false.B, false.B, false.B, false.B).asBools
+    uopsInDq1.zip(uopsOutDq1).map { case (in, out) => in.ready := out.ready }
+  }.elsewhen(uopsOutDq1.last.ready) { // only IQ1 ready
+    IQ2Enq0Select := Cat(false.B, false.B, false.B, false.B).asBools
+    IQ2Enq1Select := Cat(false.B, false.B, false.B, false.B).asBools
+    IQ3Enq0Select := Cat(false.B, false.B, false.B, true.B).asBools
+    IQ3Enq1Select := Cat(false.B, false.B, true.B, false.B).asBools
+    uopsInDq1.zip(uopsOutDq1.reverse).map { case (in, out) => in.ready := out.ready }
+  }.otherwise {
+    IQ2Enq0Select := Cat(false.B, false.B, false.B, false.B).asBools
+    IQ2Enq1Select := Cat(false.B, false.B, false.B, false.B).asBools
+    IQ3Enq0Select := Cat(false.B, false.B, false.B, false.B).asBools
+    IQ3Enq1Select := Cat(false.B, false.B, false.B, false.B).asBools
+    uopsInDq1.zip(uopsOutDq1).map { case (in, out) => in.ready := out.ready }
+  }
+  dontTouch(IQ2Enq0Select)
+  dontTouch(IQ2Enq1Select)
+  dontTouch(IQ3Enq0Select)
+  dontTouch(IQ3Enq1Select)
+  dontTouch(IQ2Enq0Select)
+  dontTouch(IQ2Enq1Select)
+  dontTouch(IQ3Enq0Select)
+  dontTouch(IQ3Enq1Select)
+  uopsOutDq1(0).bits :=  Mux1H(IQ2Enq0Select, uopsInDq1.map(_.bits))
+  uopsOutDq1(1).bits :=  Mux1H(IQ2Enq1Select, uopsInDq1.map(_.bits))
+  uopsOutDq1(2).bits :=  Mux1H(IQ3Enq0Select, uopsInDq1.map(_.bits))
+  uopsOutDq1(3).bits :=  Mux1H(IQ3Enq1Select, uopsInDq1.map(_.bits))
+  uopsOutDq1(0).valid := Mux1H(IQ2Enq0Select, uopsInDq1.map(_.valid))
+  uopsOutDq1(1).valid := Mux1H(IQ2Enq1Select, uopsInDq1.map(_.valid))
+  uopsOutDq1(2).valid := Mux1H(IQ3Enq0Select, uopsInDq1.map(_.valid))
+  uopsOutDq1(3).valid := Mux1H(IQ3Enq1Select, uopsInDq1.map(_.valid))
+
+
+  private val reqPsrcVec: IndexedSeq[UInt] = uopsIn.flatMap(in => in.bits.psrc.take(numRegSrc))
+  private val intSrcStateVec = if (io.readIntState.isDefined) Some(Wire(Vec(numEnq * numRegSrc, SrcState()))) else None
+  private val vfSrcStateVec  = if (io.readVfState.isDefined)  Some(Wire(Vec(numEnq * numRegSrc, SrcState()))) else None
+  private val intDataSourceVec = if (io.readIntState.isDefined) Some(Wire(Vec(numEnq * numRegSrc, DataSource()))) else None
+  private val vfDataSourceVec = if (io.readVfState.isDefined) Some(Wire(Vec(numEnq * numRegSrc, DataSource()))) else None
+  private val intL1ExuOHVec = if (io.readIntState.isDefined) Some(Wire(Vec(numEnq * numRegSrc, ExuVec()))) else None
+  private val vfL1ExuOHVec = if (io.readVfState.isDefined) Some(Wire(Vec(numEnq * numRegSrc, ExuVec()))) else None
+  // We always read physical register states when in gives the instructions.
+  // This usually brings better timing.
+  if (io.readIntState.isDefined) {
+    require(io.readIntState.get.size >= reqPsrcVec.size,
+      s"[Dispatch2IqArithImp] io.readIntState.get.size: ${io.readIntState.get.size}, psrc size: ${reqPsrcVec.size}")
+    io.readIntState.get.map(_.req).zip(reqPsrcVec).foreach(x => x._1 := x._2)
+    io.readIntState.get.map(_.resp).zip(intSrcStateVec.get).foreach(x => x._2 := x._1)
+    io.readIntState.get.map(_.dataSource).zip(intDataSourceVec.get).foreach(x => x._2.value := x._1.value)
+    io.readIntState.get.map(_.l1ExuOH).zip(intL1ExuOHVec.get).foreach(x => x._2 := x._1)
+  }
+  uopsIn
+    .flatMap(x => x.bits.srcState.take(numRegSrc) zip x.bits.srcType.take(numRegSrc))
+    .zip(
+      intSrcStateVec.getOrElse(VecInit(Seq.fill(numEnq * numRegSrc)(SrcState.busy).toSeq)) zip vfSrcStateVec.getOrElse(VecInit(Seq.fill(numEnq * numRegSrc)(SrcState.busy).toSeq))
+    )
+    .foreach {
+      case ((state: UInt, srcType), (intState, vfState)) =>
+        state := Mux1H(Seq(
+          SrcType.isXp(srcType) -> intState,
+          SrcType.isVfp(srcType) -> vfState,
+          SrcType.isNotReg(srcType) -> true.B,
+        ))
+    }
+  uopsIn
+    .flatMap(x => x.bits.dataSource.take(numRegSrc) zip x.bits.srcType.take(numRegSrc))
+    .zip(
+      intDataSourceVec.getOrElse(VecInit(Seq.fill(numEnq * numRegSrc)(0.U.asTypeOf(DataSource())).toSeq)) zip vfDataSourceVec.getOrElse(VecInit(Seq.fill(numEnq * numRegSrc)(0.U.asTypeOf(DataSource())).toSeq))
+    )
+    .foreach {
+      case ((dataSource, srcType), (intSource, vfSource)) =>
+        dataSource.value := Mux1H(Seq(
+          SrcType.isXp(srcType) -> intSource.value,
+          SrcType.isVfp(srcType) -> vfSource.value,
+          SrcType.isNotReg(srcType) -> 0.U,
+        ))
+    }
+  uopsIn
+    .flatMap(x => x.bits.l1ExuOH.take(numRegSrc) zip x.bits.srcType.take(numRegSrc))
+    .zip(
+      intL1ExuOHVec.getOrElse(VecInit(Seq.fill(numEnq * numRegSrc)(0.U.asTypeOf(ExuVec())).toSeq)) zip vfL1ExuOHVec.getOrElse(VecInit(Seq.fill(numEnq * numRegSrc)(0.U.asTypeOf(ExuVec())).toSeq))
+    )
+    .foreach {
+      case ((l1ExuOH: Vec[Bool], srcType), (intL1ExuOH, vfL1ExuOH)) =>
+        l1ExuOH := Mux1H(Seq(
+          SrcType.isXp(srcType) -> intL1ExuOH.asUInt,
+          SrcType.isVfp(srcType) -> vfL1ExuOH.asUInt,
+          SrcType.isNotReg(srcType) -> 0.U,
+        )).asBools
+    }
+
+
+  XSPerfAccumulate("in_valid", PopCount(io.in.map(_.valid)))
+  XSPerfAccumulate("in_fire", PopCount(io.in.map(_.fire)))
+  XSPerfAccumulate("out_valid", PopCount(io.out.flatMap(_.map(_.valid))))
+  XSPerfAccumulate("out_fire", PopCount(io.out.flatMap(_.map(_.fire))))
 }
 
 class Dispatch2IqArithImp(override val wrapper: Dispatch2Iq)(implicit p: Parameters, params: SchdBlockParams)

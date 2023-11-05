@@ -84,7 +84,10 @@ class CtrlBlockImp(
   val rat = Module(new RenameTableWrapper)
   val rename = Module(new Rename)
   val dispatch = Module(new Dispatch)
-  val intDq = Module(new DispatchQueue(dpParams.IntDqSize, RenameWidth, dpParams.IntDqDeqWidth))
+//  val intDq = Module(new DispatchQueue(dpParams.IntDqSize, RenameWidth, dpParams.IntDqDeqWidth))
+  val intDq0 = Module(new DispatchQueue(10, RenameWidth, 4))
+  val intDq1 = Module(new DispatchQueue(10, RenameWidth, 4))
+  val intDq2 = Module(new DispatchQueue( 8, RenameWidth, 2))
   val fpDq = Module(new DispatchQueue(dpParams.FpDqSize, RenameWidth, dpParams.FpDqDeqWidth))
   val lsDq = Module(new DispatchQueue(dpParams.LsDqSize, RenameWidth, dpParams.LsDqDeqWidth))
   val redirectGen = Module(new RedirectGenerator)
@@ -408,6 +411,11 @@ class CtrlBlockImp(
     PipelineConnect(renameOut(i), dispatch.io.fromRename(i), dispatch.io.recv(i), s1_s3_redirect.valid)
   }
 
+  dispatch.io.IQValidNumVec := io.IQValidNumVec
+  dispatch.io.fromIntDQ.intDQ0ValidDeq0Num := intDq0.io.validDeq0Num
+  dispatch.io.fromIntDQ.intDQ0ValidDeq1Num := intDq0.io.validDeq1Num
+  dispatch.io.fromIntDQ.intDQ1ValidDeq0Num := intDq1.io.validDeq0Num
+  dispatch.io.fromIntDQ.intDQ1ValidDeq1Num := intDq1.io.validDeq1Num
   dispatch.io.hartId := io.fromTop.hartId
   dispatch.io.redirect := s1_s3_redirect
   dispatch.io.enqRob <> rob.io.enq
@@ -419,16 +427,21 @@ class CtrlBlockImp(
   dispatch.io.robFull := rob.io.robFull
   dispatch.io.singleStep := RegNext(io.csrCtrl.singlestep)
 
-  intDq.io.enq <> dispatch.io.toIntDq
-  intDq.io.redirect <> s2_s4_redirect
-
+//  intDq.io.enq <> dispatch.io.toIntDq
+//  intDq.io.redirect <> s2_s4_redirect
+  intDq0.io.enq <> dispatch.io.toIntDq0
+  intDq0.io.redirect <> s2_s4_redirect
+  intDq1.io.enq <> dispatch.io.toIntDq1
+  intDq1.io.redirect <> s2_s4_redirect
+  intDq2.io.enq <> dispatch.io.toIntDq2
+  intDq2.io.redirect <> s2_s4_redirect
   fpDq.io.enq <> dispatch.io.toFpDq
   fpDq.io.redirect <> s2_s4_redirect
 
   lsDq.io.enq <> dispatch.io.toLsDq
   lsDq.io.redirect <> s2_s4_redirect
 
-  io.toIssueBlock.intUops <> intDq.io.deq
+  io.toIssueBlock.intUops <> (intDq0.io.deq :++ intDq1.io.deq :++ intDq2.io.deq)
   io.toIssueBlock.vfUops  <> fpDq.io.deq
   io.toIssueBlock.memUops <> lsDq.io.deq
   io.toIssueBlock.allocPregs <> dispatch.io.allocPregs
@@ -445,8 +458,18 @@ class CtrlBlockImp(
   io.toExuBlock.flush := s2_s4_redirect
 
   for ((pcMemIdx, i) <- pcMemRdIndexes("exu").zipWithIndex) {
-    pcMem.io.raddr(pcMemIdx) := intDq.io.deqNext(i).ftqPtr.value
-    jumpPcVec(i) := pcMem.io.rdata(pcMemIdx).getPc(RegNext(intDq.io.deqNext(i).ftqOffset))
+    if (i < 4) {
+      pcMem.io.raddr(pcMemIdx) := intDq0.io.deqNext(i).ftqPtr.value
+      jumpPcVec(i) := pcMem.io.rdata(pcMemIdx).getPc(RegNext(intDq0.io.deqNext(i).ftqOffset))
+    }
+    else if (i < 8){
+      pcMem.io.raddr(pcMemIdx) := intDq1.io.deqNext(i-4).ftqPtr.value
+      jumpPcVec(i) := pcMem.io.rdata(pcMemIdx).getPc(RegNext(intDq1.io.deqNext(i-4).ftqOffset))
+    }
+    else {
+      pcMem.io.raddr(pcMemIdx) := intDq2.io.deqNext(i-8).ftqPtr.value
+      jumpPcVec(i) := pcMem.io.rdata(pcMemIdx).getPc(RegNext(intDq2.io.deqNext(i-8).ftqOffset))
+    }
   }
 
   val dqOuts = Seq(io.toIssueBlock.intUops) ++ Seq(io.toIssueBlock.vfUops) ++ Seq(io.toIssueBlock.memUops)
@@ -498,7 +521,7 @@ class CtrlBlockImp(
   io.debugRolling := rob.io.debugRolling
 
   io.perfInfo.ctrlInfo.robFull := RegNext(rob.io.robFull)
-  io.perfInfo.ctrlInfo.intdqFull := RegNext(intDq.io.dqFull)
+  io.perfInfo.ctrlInfo.intdqFull := RegNext(intDq0.io.dqFull || intDq1.io.dqFull || intDq2.io.dqFull)
   io.perfInfo.ctrlInfo.fpdqFull := RegNext(fpDq.io.dqFull)
   io.perfInfo.ctrlInfo.lsdqFull := RegNext(lsDq.io.dqFull)
 
@@ -512,7 +535,7 @@ class CtrlBlockImp(
     val perfEventsEu1     = Input(Vec(6, new PerfEvent))
   })
 
-  val allPerfEvents = Seq(decode, rename, dispatch, intDq, fpDq, lsDq, rob).flatMap(_.getPerf)
+  val allPerfEvents = Seq(decode, rename, dispatch, intDq0, intDq1, intDq2, fpDq, lsDq, rob).flatMap(_.getPerf)
   val hpmEvents = allPerfEvents ++ perfinfo.perfEventsEu0 ++ perfinfo.perfEventsEu1 ++ perfinfo.perfEventsRs
   val perfEvents = HPerfMonitor(csrevents, hpmEvents).getPerfEvents
   generatePerfEvent()
@@ -537,6 +560,7 @@ class CtrlBlockIO()(implicit p: Parameters, params: BackendParams) extends XSBun
   val fromDataPath = new Bundle{
     val vtype = Input(new VType)
   }
+  val IQValidNumVec = Input(Vec(4, Vec(2,UInt(6.W))))
   val toDataPath = new Bundle {
     val vtypeAddr = Output(UInt(PhyRegIdxWidth.W))
     val flush = ValidIO(new Redirect)

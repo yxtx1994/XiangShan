@@ -66,6 +66,9 @@ object FuType extends OHEnumeration {
   val vstu = addType(name = "vstu")
 
   val intArithAll = Seq(jmp, brh, i2f, i2v, csr, alu, mul, div, fence, bku)
+  val intDq0All = Seq(brh, alu, mul, bku)
+  val intDq1All = Seq(brh, alu, jmp)
+  val intDq2All = Seq(i2f, csr, div, fence)
   val fpArithAll = Seq(fmac, fmisc, fDivSqrt)
   val scalaMemAll = Seq(ldu, stu, mou)
   val vecOPI = Seq(vipu, vialuF, vppu, vimac)
@@ -85,6 +88,16 @@ object FuType extends OHEnumeration {
   def apply() = UInt(num.W)
 
   def isInt(fuType: UInt): Bool = FuTypeOrR(fuType, intArithAll) || FuTypeOrR(fuType, vsetiwi, vsetiwf)
+
+  def isIntDq0(fuType: UInt): Bool = FuTypeOrR(fuType, intDq0All)
+  def isIntDq0Deq0(fuType: UInt): Bool = FuTypeOrR(fuType, Seq(alu, mul, bku))
+  def isIntDq0Deq1(fuType: UInt): Bool = FuTypeOrR(fuType, Seq(brh))
+  def isIntDq1Deq0(fuType: UInt): Bool = FuTypeOrR(fuType, Seq(alu))
+  def isIntDq1Deq1(fuType: UInt): Bool = FuTypeOrR(fuType, Seq(brh, jmp))
+  def isIntDq1(fuType: UInt): Bool = FuTypeOrR(fuType, intDq1All)
+  def isAlu(fuType: UInt): Bool = FuTypeOrR(fuType, Seq(alu))
+  def isBrh(fuType: UInt): Bool = FuTypeOrR(fuType, Seq(brh))
+  def isIntDq2(fuType: UInt): Bool = FuTypeOrR(fuType, intDq2All) || FuTypeOrR(fuType, vsetiwi, vsetiwf)
 
   def isVset(fuType: UInt): Bool = FuTypeOrR(fuType, vecVSET)
 

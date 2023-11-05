@@ -160,6 +160,7 @@ class BackendImp(override val wrapper: Backend)(implicit p: Parameters) extends 
   private val og0CancelOH: UInt = og0CancelOHFromDataPath | og0CancelOHFromCancelNet | og0CancelOHFromFinalIssue
   private val cancelToBusyTable = dataPath.io.cancelToBusyTable
 
+  ctrlBlock.io.IQValidNumVec := intScheduler.io.IQValidNumVec
   ctrlBlock.io.fromTop.hartId := io.fromTop.hartId
   ctrlBlock.io.frontend <> io.frontend
   ctrlBlock.io.fromWB.wbData <> wbDataPath.io.toCtrlBlock.writeback
@@ -181,6 +182,7 @@ class BackendImp(override val wrapper: Backend)(implicit p: Parameters) extends 
   ctrlBlock.io.debugEnqLsq.resp := io.mem.lsqEnqIO.resp
   ctrlBlock.io.debugEnqLsq.req := memScheduler.io.memIO.get.lsqEnqIO.req
   ctrlBlock.io.debugEnqLsq.needAlloc := memScheduler.io.memIO.get.lsqEnqIO.needAlloc
+  ctrlBlock.io.IQValidNumVec := intScheduler.io.IQValidNumVec
 
 
   intScheduler.io.fromTop.hartId := io.fromTop.hartId

@@ -55,6 +55,7 @@ class IssueQueueIO()(implicit p: Parameters, params: IssueBlockParams) extends X
 
   // Outputs
   val deq: MixedVec[DecoupledIO[IssueQueueIssueBundle]] = params.genIssueDecoupledBundle
+  val validCntDeqVec = Output(Vec(params.numDeq,UInt(params.numEntries.U.getWidth.W)))
   val wakeupToIQ: MixedVec[ValidIO[IssueQueueIQWakeUpBundle]] = params.genIQWakeUpSourceValidBundle
   val status = Output(new IssueQueueStatusBundle(params.numEnq))
   // val statusNext = Output(new IssueQueueStatusBundle(params.numEnq))
@@ -621,6 +622,20 @@ class IssueQueueImp(override val wrapper: IssueQueue)(implicit p: Parameters, va
   private val enqHasValid = validVec.take(params.numEnq).reduce(_ | _)
   private val enqEntryValidCnt = PopCount(validVec.take(params.numEnq))
   private val othersValidCnt = PopCount(validVec.drop(params.numEnq))
+  private val enqEntryValidCntDeq0 = PopCount(
+    validVec.take(params.numEnq).zip(deqCanAcceptVec(0).take(params.numEnq)).map{case (a,b) => a && b}
+  )
+  private val othersValidCntDeq0 = PopCount(
+    validVec.drop(params.numEnq).zip(deqCanAcceptVec(0).drop(params.numEnq)).map { case (a, b) => a && b }
+  )
+  private val enqEntryValidCntDeq1 = PopCount(
+    validVec.take(params.numEnq).zip(deqCanAcceptVec.head.take(params.numEnq)).map { case (a, b) => a && b }
+  )
+  private val othersValidCntDeq1 = PopCount(
+    validVec.drop(params.numEnq).zip(deqCanAcceptVec.head.drop(params.numEnq)).map { case (a, b) => a && b }
+  )
+  io.validCntDeqVec.head := enqEntryValidCntDeq0 + othersValidCntDeq0 // validCntDeqVec(0)
+  io.validCntDeqVec.last := enqEntryValidCntDeq1 + othersValidCntDeq1 // validCntDeqVec(1)
   io.status.leftVec(0) := validVec.drop(params.numEnq).reduce(_ & _)
   for (i <- 0 until params.numEnq) {
     io.status.leftVec(i + 1) := othersValidCnt === (params.numEntries - params.numEnq - (i + 1)).U
