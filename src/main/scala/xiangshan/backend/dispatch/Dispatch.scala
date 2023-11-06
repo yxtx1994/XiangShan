@@ -154,14 +154,22 @@ class Dispatch(implicit p: Parameters) extends XSModule with HasPerfEvents {
   val Dq1SumDeq1 = DQ1Deq1 + IQ23Deq1 + Dq1EnqDeq1
   val lessDeq0IsDq0 = Dq1SumDeq0 > Dq0SumDeq0
   val lessDeq1IsDq0 = Dq1SumDeq1 > Dq0SumDeq1
+  val equalDeq0IsDq0 = Dq1SumDeq0 === Dq0SumDeq0
+  val equalDeq1IsDq0 = Dq1SumDeq1 === Dq0SumDeq1
   val diffDeq0 = Mux(lessDeq0IsDq0, Dq1SumDeq0 - Dq0SumDeq0, Dq0SumDeq0 - Dq1SumDeq0)
   val diffDeq1 = Mux(lessDeq1IsDq0, Dq1SumDeq1 - Dq0SumDeq1, Dq0SumDeq1 - Dq1SumDeq1)
   val popAluIsMore = popAlu.map(_ > diffDeq0)
   val popBrhIsMore = popBrh.map(_ > diffDeq1)
-  val aluSelectLessDq = isAlu.zip(popAluIsMore).zip(popAlu).map{ case((i,pm),p) => i && (!pm || p(0).asBool) }
-  val brhSelectLessDq = isBrh.zip(popBrhIsMore).zip(popBrh).map{ case((i,pm),p) => i && (!pm || p(0).asBool) }
-  val aluSelectDq0 = isAlu.zip(aluSelectLessDq).map{ case (i,a) => i && Mux(lessDeq0IsDq0, a, !a) }
-  val brhSelectDq0 = isBrh.zip(brhSelectLessDq).map{ case (i,b) => i && Mux(lessDeq0IsDq0, b, !b) }
+  val lastLastAluSelectDq0 = RegInit(false.B)
+  val lastLastBrhSelectDq0 = RegInit(false.B)
+  val aluSelectLessDq = isAlu.zip(popAluIsMore).zip(popAlu).map{ case((i,pm),p) => i && (!pm || (pm && p(0).asBool) ^ lastLastAluSelectDq0) }
+  val brhSelectLessDq = isBrh.zip(popBrhIsMore).zip(popBrh).map{ case((i,pm),p) => i && (!pm || (pm && p(0).asBool) ^ lastLastBrhSelectDq0) }
+  val aluSelectDq0 = isAlu.zip(aluSelectLessDq).zip(popAlu).map{ case ((i,a),p) => i && Mux(equalDeq0IsDq0, p(0).asBool ^ lastLastAluSelectDq0, Mux(lessDeq0IsDq0, a, !a)) }
+  val brhSelectDq0 = isBrh.zip(brhSelectLessDq).zip(popBrh).map{ case ((i,b),p) => i && Mux(equalDeq1IsDq0, p(0).asBool ^ lastLastBrhSelectDq0, Mux(lessDeq1IsDq0, b, !b)) }
+  val lastAluSelectDq0 = PriorityMuxDefault(isAlu.reverse.zip(aluSelectDq0.reverse), false.B)
+  val lastBrhSelectDq0 = PriorityMuxDefault(isBrh.reverse.zip(brhSelectDq0.reverse), false.B)
+  lastLastAluSelectDq0 := Mux(equalDeq0IsDq0, lastAluSelectDq0, Mux(popAluIsMore.last, lastAluSelectDq0, false.B))
+  lastLastBrhSelectDq0 := Mux(equalDeq1IsDq0, lastBrhSelectDq0, Mux(popBrhIsMore.last, lastBrhSelectDq0, false.B))
   val toIntDq0Valid = Wire(Vec(RenameWidth, Bool()))
   val toIntDq1Valid = Wire(Vec(RenameWidth, Bool()))
   dontTouch(toIntDq0Valid)
@@ -352,6 +360,18 @@ class Dispatch(implicit p: Parameters) extends XSModule with HasPerfEvents {
     XSDebug(io.toLsDq.req(i).valid , p"pc 0x${Hexadecimal(io.toLsDq.req(i).bits.pc )} ls  index $i\n")
   }
 
+  val enq_dq0_cnt = io.toIntDq0.needAlloc.zip(io.toIntDq0.req.map(_.valid)).map{ case(needAlloc, valid) => needAlloc && valid}
+  XSPerfAccumulate("enq_dq0_cnt", PopCount(enq_dq0_cnt))
+  val enq_dq1_cnt = io.toIntDq1.needAlloc.zip(io.toIntDq1.req.map(_.valid)).map { case (needAlloc, valid) => needAlloc && valid }
+  XSPerfAccumulate("enq_dq1_cnt", PopCount(enq_dq1_cnt))
+  val enq_dq0_alu_cnt = enq_dq0_cnt.zip(isAlu).map{ case (enq,isalu) => enq && isalu }
+  XSPerfAccumulate("enq_dq0_alu_cnt", PopCount(enq_dq0_alu_cnt))
+  val enq_dq1_alu_cnt = enq_dq1_cnt.zip(isAlu).map{ case (enq,isalu) => enq && isalu }
+  XSPerfAccumulate("enq_dq1_alu_cnt", PopCount(enq_dq1_alu_cnt))
+  val enq_dq0_brh_cnt = enq_dq0_cnt.zip(isBrh).map { case (enq, isbrh) => enq && isbrh }
+  XSPerfAccumulate("enq_dq0_brh_cnt", PopCount(enq_dq0_brh_cnt))
+  val enq_dq1_brh_cnt = enq_dq1_cnt.zip(isBrh).map { case (enq, isbrh) => enq && isbrh }
+  XSPerfAccumulate("enq_dq1_brh_cnt", PopCount(enq_dq1_brh_cnt))
   /**
     * Part 4: send response to rename when dispatch queue accepts the uop
     */

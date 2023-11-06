@@ -629,13 +629,13 @@ class IssueQueueImp(override val wrapper: IssueQueue)(implicit p: Parameters, va
     validVec.drop(params.numEnq).zip(deqCanAcceptVec(0).drop(params.numEnq)).map { case (a, b) => a && b }
   )
   private val enqEntryValidCntDeq1 = PopCount(
-    validVec.take(params.numEnq).zip(deqCanAcceptVec.head.take(params.numEnq)).map { case (a, b) => a && b }
+    validVec.take(params.numEnq).zip(deqCanAcceptVec.last.take(params.numEnq)).map { case (a, b) => a && b }
   )
   private val othersValidCntDeq1 = PopCount(
-    validVec.drop(params.numEnq).zip(deqCanAcceptVec.head.drop(params.numEnq)).map { case (a, b) => a && b }
+    validVec.drop(params.numEnq).zip(deqCanAcceptVec.last.drop(params.numEnq)).map { case (a, b) => a && b }
   )
-  io.validCntDeqVec.head := enqEntryValidCntDeq0 + othersValidCntDeq0 // validCntDeqVec(0)
-  io.validCntDeqVec.last := enqEntryValidCntDeq1 + othersValidCntDeq1 // validCntDeqVec(1)
+  io.validCntDeqVec.head := enqEntryValidCntDeq0 +& othersValidCntDeq0 // validCntDeqVec(0)
+  io.validCntDeqVec.last := enqEntryValidCntDeq1 +& othersValidCntDeq1 // validCntDeqVec(1)
   io.status.leftVec(0) := validVec.drop(params.numEnq).reduce(_ & _)
   for (i <- 0 until params.numEnq) {
     io.status.leftVec(i + 1) := othersValidCnt === (params.numEntries - params.numEnq - (i + 1)).U
@@ -659,6 +659,12 @@ class IssueQueueImp(override val wrapper: IssueQueue)(implicit p: Parameters, va
   // enq count
   XSPerfAccumulate("enq_valid_cnt", PopCount(io.enq.map(_.fire)))
   XSPerfAccumulate("enq_fire_cnt", PopCount(io.enq.map(_.fire)))
+  XSPerfAccumulate("enq_alu_fire_cnt", PopCount(io.enq.map{case enq => enq.fire && FuType.isAlu(enq.bits.fuType)}))
+  XSPerfAccumulate("enq_brh_fire_cnt", PopCount(io.enq.map{case enq => enq.fire && FuType.isBrh(enq.bits.fuType)}))
+  XSPerfAccumulate("deqDelay0_fire_cnt", PopCount(io.deqDelay.head.fire))
+  XSPerfAccumulate("deqDelay1_fire_cnt", PopCount(io.deqDelay.last.fire))
+  XSPerfAccumulate("deq0_fire_cnt", PopCount(io.deq.head.fire))
+  XSPerfAccumulate("deq1_fire_cnt", PopCount(io.deq.last.fire))
   // valid count
   XSPerfHistogram("enq_entry_valid_cnt", enqEntryValidCnt, true.B, 0, params.numEnq + 1)
   XSPerfHistogram("other_entry_valid_cnt", othersValidCnt, true.B, 0, params.numEntries - params.numEnq + 1)
