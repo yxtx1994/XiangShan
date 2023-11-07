@@ -185,13 +185,15 @@ class XSTile()(implicit p: Parameters) extends LazyModule
       // misc.module.beu_errors.l2.ecc_error.valid := l2cache.get.module.io.ecc_error.valid
       // misc.module.beu_errors.l2.ecc_error.bits := l2cache.get.module.io.ecc_error.bits
       misc.module.beu_errors.l2 <> 0.U.asTypeOf(misc.module.beu_errors.l2)
-      core.module.io.l2_hint.bits.sourceId := l2cache.get.module.io.l2_hint.bits
+      core.module.io.l2_hint.bits.isKeyword := l2cache.get.module.io.l2_hint.bits.isKeyword
+      core.module.io.l2_hint.bits.sourceId := l2cache.get.module.io.l2_hint.bits.sourceId
       core.module.io.l2_hint.valid := l2cache.get.module.io.l2_hint.valid
       core.module.io.l2PfqBusy := false.B
       core.module.io.debugTopDown.l2MissMatch := l2cache.get.module.io.debugTopDown.l2MissMatch.head
       l2cache.get.module.io.debugTopDown.robHeadPaddr.head := core.module.io.debugTopDown.robHeadPaddr
     } else {
       misc.module.beu_errors.l2 <> 0.U.asTypeOf(misc.module.beu_errors.l2)
+      core.module.io.l2_hint.bits.isKeyword := false.B
       core.module.io.l2_hint.bits.sourceId := DontCare
       core.module.io.l2_hint.valid := false.B
       core.module.io.l2PfqBusy := false.B

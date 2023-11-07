@@ -612,6 +612,7 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
 
     lsq.io.l2_hint.valid := io.l2_hint.valid
     lsq.io.l2_hint.bits.sourceId := io.l2_hint.bits.sourceId
+    lsq.io.l2_hint.bits.isKeyword := io.l2_hint.bits.isKeyword
 
     // alter writeback exception info
     io.s3_delayed_load_error(i) := loadUnits(i).io.s3_dly_ld_err
