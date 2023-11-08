@@ -157,10 +157,10 @@ trait HaveAXI4MemPort {
     TLCacheCork() :=*
     bankedNode
 
-  mem_xbar :=
-    TLWidthWidget(8) :=
-    TLBuffer.chainNode(3, name = Some("PeripheralXbar_to_MemXbar_buffer")) :=
-    peripheralXbar
+//  mem_xbar :=
+//    TLWidthWidget(8) :=
+//    TLBuffer.chainNode(3, name = Some("PeripheralXbar_to_MemXbar_buffer")) :=
+//    peripheralXbar
 
   memAXI4SlaveNode :=
     AXI4Buffer() :=
