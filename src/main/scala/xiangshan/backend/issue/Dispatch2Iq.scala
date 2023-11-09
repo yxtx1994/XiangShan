@@ -315,8 +315,8 @@ class Dispatch2IqIntImp(override val wrapper: Dispatch2Iq)(implicit p: Parameter
   private val vfSrcStateVec  = if (io.readVfState.isDefined)  Some(Wire(Vec(numEnq * numRegSrc, SrcState()))) else None
   private val intDataSourceVec = if (io.readIntState.isDefined) Some(Wire(Vec(numEnq * numRegSrc, DataSource()))) else None
   private val vfDataSourceVec = if (io.readVfState.isDefined) Some(Wire(Vec(numEnq * numRegSrc, DataSource()))) else None
-  private val intL1ExuOHVec = if (io.readIntState.isDefined) Some(Wire(Vec(numEnq * numRegSrc, ExuVec()))) else None
-  private val vfL1ExuOHVec = if (io.readVfState.isDefined) Some(Wire(Vec(numEnq * numRegSrc, ExuVec()))) else None
+  private val intL1ExuOHVec = if (io.readIntState.isDefined) Some(Wire(Vec(numEnq * numRegSrc, ExuOH()))) else None
+  private val vfL1ExuOHVec = if (io.readVfState.isDefined) Some(Wire(Vec(numEnq * numRegSrc, ExuOH()))) else None
   // We always read physical register states when in gives the instructions.
   // This usually brings better timing.
   if (io.readIntState.isDefined) {
@@ -356,15 +356,15 @@ class Dispatch2IqIntImp(override val wrapper: Dispatch2Iq)(implicit p: Parameter
   uopsIn
     .flatMap(x => x.bits.l1ExuOH.take(numRegSrc) zip x.bits.srcType.take(numRegSrc))
     .zip(
-      intL1ExuOHVec.getOrElse(VecInit(Seq.fill(numEnq * numRegSrc)(0.U.asTypeOf(ExuVec())).toSeq)) zip vfL1ExuOHVec.getOrElse(VecInit(Seq.fill(numEnq * numRegSrc)(0.U.asTypeOf(ExuVec())).toSeq))
+      intL1ExuOHVec.getOrElse(VecInit(Seq.fill(numEnq * numRegSrc)(0.U.asTypeOf(ExuOH())).toSeq)) zip vfL1ExuOHVec.getOrElse(VecInit(Seq.fill(numEnq * numRegSrc)(0.U.asTypeOf(ExuOH())).toSeq))
     )
     .foreach {
-      case ((l1ExuOH: Vec[Bool], srcType), (intL1ExuOH, vfL1ExuOH)) =>
+      case ((l1ExuOH, srcType), (intL1ExuOH, vfL1ExuOH)) =>
         l1ExuOH := Mux1H(Seq(
           SrcType.isXp(srcType) -> intL1ExuOH.asUInt,
           SrcType.isVfp(srcType) -> vfL1ExuOH.asUInt,
           SrcType.isNotReg(srcType) -> 0.U,
-        )).asBools
+        ))
     }
 
   XSPerfAccumulate("not_ready_iq0", PopCount(!uopsOutDq0(0).ready))

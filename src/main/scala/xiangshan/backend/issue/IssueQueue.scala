@@ -369,11 +369,18 @@ class IssueQueueImp(override val wrapper: IssueQueue)(implicit p: Parameters, va
   if (params.numDeq == 2 && params.deqFuSame) {
     enqEntryOldestSel := DontCare
 
-    othersEntryOldestSel(0) := AgeDetector(numEntries = params.numEntries - params.numEnq,
+    othersEntryOldestSel := AgeDetector(numEntries = params.numEntries - params.numEnq,
       enq = VecInit(transEntryDeqVec.zip(transSelVec).map{ case (transEntry, transSel) => Fill(params.numEntries-params.numEnq, transEntry.valid) & transSel }),
-      canIssue = canIssueVec.asUInt(params.numEntries-1, params.numEnq)
+      canIssue = VecInit(canIssueVec.asUInt(params.numEntries-1, params.numEnq), canIssueVec.asUInt(params.numEntries - 1, params.numEnq) ^ othersEntryOldestSel(0).bits)
     )
-    othersEntryOldestSel(1) := DontCare
+//    othersEntryOldestSel(1) := DontCare
+
+    val enqsCanDeq = canIssueVec.asUInt(params.numEnq, 0).asUInt.orR
+    val enq0CanDeq = canIssueVec(0)
+    val enq1CanDeq = canIssueVec(1)
+    val othersEntryCanDeq = canIssueVec.asUInt.head(params.numEntries - params.numEnq).orR
+    val deq0SelEnq0 = canIssueVec.asUInt.head(params.numEntries - params.numEnq) === 0.U && enq0CanDeq
+    val deq0SelEnq1 = canIssueVec.asUInt.head(params.numEntries - params.numEnq) === 0.U && !enq0CanDeq && enq1CanDeq
 
     subDeqRequest.get := canIssueVec.asUInt & ~Cat(othersEntryOldestSel(0).bits, 0.U((params.numEnq).W))
 
@@ -382,12 +389,20 @@ class IssueQueueImp(override val wrapper: IssueQueue)(implicit p: Parameters, va
     subDeqSelValidVec.get := subDeqPolicy.io.deqSelOHVec.map(oh => oh.valid)
     subDeqSelOHVec.get := subDeqPolicy.io.deqSelOHVec.map(oh => oh.bits)
 
-    deqSelValidVec(0) := othersEntryOldestSel(0).valid || subDeqSelValidVec.get(1)
-    deqSelValidVec(1) := subDeqSelValidVec.get(0)
+    deqSelValidVec(0) := othersEntryOldestSel(0).valid || enqsCanDeq
+    deqSelValidVec(1) := othersEntryOldestSel(1).valid || (othersEntryCanDeq && enqsCanDeq) || (enq0CanDeq && enq1CanDeq)
     deqSelOHVec(0) := Mux(othersEntryOldestSel(0).valid,
                           Cat(othersEntryOldestSel(0).bits, 0.U((params.numEnq).W)),
-                          subDeqSelOHVec.get(1)) & canIssueMergeAllBusy(0)
-    deqSelOHVec(1) := subDeqSelOHVec.get(0) & canIssueMergeAllBusy(1)
+                          Mux(enq0CanDeq, 1.U, 2.U)) & canIssueMergeAllBusy(0)
+    deqSelOHVec(1) := Mux(othersEntryOldestSel(1).valid,
+                          Cat(othersEntryOldestSel(1).bits, 0.U((params.numEnq).W)),
+                          Mux(deq0SelEnq0, 2.U, Mux(enq0CanDeq, 1.U, 2.U))) & canIssueMergeAllBusy(1)
+//    deqSelValidVec(0) := othersEntryOldestSel(0).valid || subDeqSelValidVec.get(1)
+//    deqSelValidVec(1) := subDeqSelValidVec.get(0)
+//    deqSelOHVec(0) := Mux(othersEntryOldestSel(0).valid,
+//                          Cat(othersEntryOldestSel(0).bits, 0.U((params.numEnq).W)),
+//                          subDeqSelOHVec.get(1)) & canIssueMergeAllBusy(0)
+//    deqSelOHVec(1) := subDeqSelOHVec.get(0) & canIssueMergeAllBusy(1)
 
     finalDeqSelValidVec.zip(finalDeqSelOHVec).zip(deqSelValidVec).zip(deqSelOHVec).zipWithIndex.foreach { case ((((selValid, selOH), deqValid), deqOH), i) =>
       selValid := deqValid && deqOH.orR && io.deq(i).ready
