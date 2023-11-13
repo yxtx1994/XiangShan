@@ -337,7 +337,7 @@ case class XSCoreParameters
         ExeUnitParams("VFEX1", Seq(VfaluCfg, VfmaCfg, VimacCfg, VipuCfg, VfcvtCfg), Seq(VfWB(port = 1, 0), IntWB(port = 8, 0)), Seq(Seq(VfRD(7, 0)), Seq(VfRD(8, 0)), Seq(VfRD(9, 0)), Seq(VfRD(10, 0)), Seq(VfRD(11, 0)))),
       ), numEntries = IssueQueueSize, numEnq = 2),
       IssueBlockParams(Seq(
-        ExeUnitParams("VFEX2", Seq(VfdivCfg), Seq(VfWB(port = 5, 1)), Seq(Seq(VfRD(7, 0)), Seq(VfRD(8, 0)), Seq(VfRD(9, 0)), Seq(VfRD(10, 0)), Seq(VfRD(11, 0)))),
+        ExeUnitParams("VFEX2", Seq(VfdivCfg), Seq(VfWB(port = 5, 1)), Seq(Seq(VfRD(12, 0)), Seq(VfRD(13, 0)), Seq(VfRD(14, 0)), Seq(VfRD(15, 0)), Seq(VfRD(16, 0)))),
       ), numEntries = IssueQueueSize, numEnq = 2),
     ),
       numPregs = vfPreg.numEntries,
