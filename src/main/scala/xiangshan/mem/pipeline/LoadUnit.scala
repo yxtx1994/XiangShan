@@ -82,6 +82,7 @@ class LoadToLoadIO(implicit p: Parameters) extends XSBundle {
   val valid      = Bool()
   val data       = UInt(XLEN.W) // load to load fast path is limited to ld (64 bit) used as vaddr src1 only
   val dly_ld_err = Bool()
+  val dly_ld_rep = Bool()
 }
 
 class LoadUnitTriggerIO(implicit p: Parameters) extends XSBundle {
@@ -1168,15 +1169,15 @@ class LoadUnit(implicit p: Parameters) extends XSModule
 
   // fast load to load forward
   if (EnableLoadToLoadForward) {
-    io.l2l_fwd_out.valid      := s3_valid && !s3_in.mmio && !s3_rep_info.need_rep
+    io.l2l_fwd_out.valid      := s3_valid && !s3_in.mmio
     io.l2l_fwd_out.data       := Mux(s3_in.vaddr(3), s3_merged_data_frm_cache(127, 64), s3_merged_data_frm_cache(63, 0))
-    io.l2l_fwd_out.dly_ld_err := s3_dly_ld_err || // ecc delayed error
-                                 s3_ldld_rep_inst ||
-                                 s3_rep_frm_fetch
+    io.l2l_fwd_out.dly_ld_err := s3_dly_ld_err // ecc delayed error
+    io.l2l_fwd_out.dly_ld_rep := io.lsq.ldin.bits.rep_info.need_rep // delayed replay
   } else {
     io.l2l_fwd_out.valid := false.B
     io.l2l_fwd_out.data := DontCare
     io.l2l_fwd_out.dly_ld_err := DontCare
+    io.l2l_fwd_out.dly_ld_rep := DontCare
   }
 
 
