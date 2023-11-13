@@ -766,14 +766,9 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   // if such exception happen, that inst and its exception info
   // will be force writebacked to rob
   val s2_exception_vec = WireInit(s2_in.uop.cf.exceptionVec)
-  when (!s2_in.delayedLoadError) {
-    s2_exception_vec(loadAccessFault) := s2_in.uop.cf.exceptionVec(loadAccessFault) || s2_pmp.ld ||
-                                       (io.dcache.resp.bits.tag_error && RegNext(io.csrCtrl.cache_error_enable))
-  }
-
-  // soft prefetch will not trigger any exception (but ecc error interrupt may
-  // be triggered)
-  when (!s2_in.delayedLoadError && (s2_prf || s2_in.tlbMiss)) {
+  s2_exception_vec(loadAccessFault) := s2_in.uop.cf.exceptionVec(loadAccessFault) || s2_pmp.ld
+  // soft prefetch will not trigger any exception (but ecc error interrupt may be triggered)
+  when (s2_prf || s2_in.tlbMiss) {
     s2_exception_vec := 0.U.asTypeOf(s2_exception_vec.cloneType)
   }
   val s2_exception = ExceptionNO.selectByFu(s2_exception_vec, lduCfg).asUInt.orR
