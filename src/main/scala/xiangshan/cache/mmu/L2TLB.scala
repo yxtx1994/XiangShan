@@ -408,10 +408,15 @@ class L2TLBImp(outer: L2TLB)(implicit p: Parameters) extends PtwModule(outer) wi
   // not_super means that this is a normal page
   // valididx(i) will be all true when super page to be convenient for l1 tlb matching
   def contiguous_pte_to_merge_ptwResp(pte: UInt, vpn: UInt, af: Bool, af_first: Boolean, not_super: Boolean = true) : PtwMergeResp = {
-    assert(tlbcontiguous == 8, "Only support tlbcontiguous = 8!")
+    assert(tlbcontiguous == 4, "Only support tlbcontiguous = 4!")
     val ptw_merge_resp = Wire(new PtwMergeResp())
     for (i <- 0 until tlbcontiguous) {
-      val pte_in = pte(64 * i + 63, 64 * i).asTypeOf(new PteBundle())
+      val pte_in = WireInit((0.U.asTypeOf(new PteBundle())))
+      when (vpn(sectortlbwidth)) {
+        pte_in := pte(64 * (i+4) + 63, 64 * (i+4)).asTypeOf(new PteBundle())
+      } .otherwise {
+        pte_in := pte(64 * i + 63, 64 * i).asTypeOf(new PteBundle())
+      }
       val ptw_resp = Wire(new PtwMergeEntry(tagLen = sectorvpnLen, hasPerm = true, hasLevel = true))
       ptw_resp.ppn := pte_in.ppn(ppnLen - 1, sectortlbwidth)
       ptw_resp.ppn_low := pte_in.ppn(sectortlbwidth - 1, 0)
@@ -431,7 +436,7 @@ class L2TLBImp(outer: L2TLB)(implicit p: Parameters) extends PtwModule(outer) wi
   }
 
   def merge_ptwResp_to_sector_ptwResp(pte: PtwMergeResp) : PtwSectorResp = {
-    assert(tlbcontiguous == 8, "Only support tlbcontiguous = 8!")
+    assert(tlbcontiguous == 4, "Only support tlbcontiguous = 4!")
     val ptw_sector_resp = Wire(new PtwSectorResp)
     ptw_sector_resp.entry.tag := pte.entry(OHToUInt(pte.pteidx)).tag
     ptw_sector_resp.entry.asid := pte.entry(OHToUInt(pte.pteidx)).asid
