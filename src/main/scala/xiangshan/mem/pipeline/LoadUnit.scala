@@ -765,7 +765,8 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   // if such exception happen, that inst and its exception info
   // will be force writebacked to rob
   val s2_exception_vec = WireInit(s2_in.uop.cf.exceptionVec)
-  s2_exception_vec(loadAccessFault) := s2_in.uop.cf.exceptionVec(loadAccessFault) || s2_pmp.ld
+  s2_exception_vec(loadAccessFault) := s2_in.uop.cf.exceptionVec(loadAccessFault) || s2_pmp.ld ||
+                                       (io.dcache.resp.bits.tag_error && RegNext(io.csrCtrl.cache_error_enable))
   // soft prefetch will not trigger any exception (but ecc error interrupt may be triggered)
   when (s2_prf || s2_in.tlbMiss) {
     s2_exception_vec := 0.U.asTypeOf(s2_exception_vec.cloneType)
@@ -1153,13 +1154,9 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   // FIXME: add 1 cycle delay ?
   io.lsq.uncache.ready := !s3_valid
   io.ldout.bits        := s3_ld_wb_meta
-  io.ldout.bits.data   := Mux(s3_valid, s3_ld_data_frm_cache, s3_ld_data_frm_uncache)
-  io.ldout.valid       := s3_out.valid || (io.lsq.uncache.valid && !s3_valid)
-
-  // s3 load fast replay
-  io.fast_rep_out.valid := s3_valid && s3_fast_rep
-  io.fast_rep_out.bits := s3_in
-  io.fast_rep_out.bits.lateKill := s3_rep_frm_fetch
+  io.ldout.bits.data   := Mux(s3_out.valid, s3_ld_data_frm_cache, s3_ld_data_frm_uncache)
+  io.ldout.valid       := s3_out.valid && !s3_out.bits.uop.robIdx.needFlush(io.redirect) ||
+                         io.lsq.uncache.valid && !io.lsq.uncache.bits.uop.robIdx.needFlush(io.redirect) && !s3_out.valid
 
 
   // fast load to load forward
