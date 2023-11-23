@@ -620,13 +620,18 @@ class RAS(implicit p: Parameters) extends BasePredictor {
 
   // no longer need the top Entry, but TOSR, TOSW, ssp sctr
   // TODO: remove related signals
+
+  val last_stage_meta = Wire(new RASMeta)
+  last_stage_meta.ssp := s3_meta.ssp
+  last_stage_meta.TOSW := s3_meta.TOSW
+
   io.out.last_stage_spec_info.sctr  := s3_meta.sctr
   io.out.last_stage_spec_info.ssp := s3_meta.ssp
   io.out.last_stage_spec_info.TOSW := s3_meta.TOSW
   io.out.last_stage_spec_info.TOSR := s3_meta.TOSR
   io.out.last_stage_spec_info.NOS := s3_meta.NOS
   io.out.last_stage_spec_info.topAddr := s3_top
-  io.out.last_stage_meta := s3_meta.asUInt
+  io.out.last_stage_meta := last_stage_meta.asUInt
 
 
   val redirect = RegNext(io.redirect)
