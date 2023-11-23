@@ -239,6 +239,7 @@ class DataSRAMBank(index: Int)(implicit p: Parameters) extends DCacheModule {
 // -----------------------------------------------------------------
 abstract class AbstractBankedDataArray(implicit p: Parameters) extends DCacheModule
 {
+  val DataEccParam = if(EnableDataEcc) Some(HasDataEccParam) else None
   val ReadlinePortErrorIndex = LoadPipelineWidth
   val io = IO(new DCacheBundle {
     // load pipeline read word req
