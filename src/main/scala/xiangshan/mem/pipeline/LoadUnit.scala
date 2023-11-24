@@ -484,20 +484,27 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   }
 
   // set default
-  s0_uop := DontCare
-  when (s0_super_ld_rep_select)      { fromNormalReplaySource(io.replay.bits)     }
-  .elsewhen (s0_ld_fast_rep_select)  { fromFastReplaySource(io.fast_rep_in.bits)  }
-  .elsewhen (s0_ld_rep_select)       { fromNormalReplaySource(io.replay.bits)     }
-  .elsewhen (s0_hw_prf_select)       { fromPrefetchSource(io.prefetch_req.bits)   }
-  .elsewhen (s0_int_iss_select)      { fromIntIssueSource(io.ldin.bits)           }
-  .elsewhen (s0_vec_iss_select)      { fromVecIssueSource()                       }
-  .otherwise {
-    if (EnableLoadToLoadForward) {
-      fromLoadToLoadSource(io.l2l_fwd_in)
-    } else {
-      fromNullSource()
-    }
-  }
+  val s0_src_selector = Seq(
+    s0_super_ld_rep_valid,
+    s0_ld_fast_rep_valid,
+    s0_ld_rep_valid,
+    s0_high_conf_prf_valid,
+    s0_int_iss_valid,
+    s0_vec_iss_valid,
+    s0_low_conf_prf_valid,
+    (if (EnableLoadToLoadForward) s0_l2l_fwd_valid else true.B)
+  )
+  val s0_src_format = Seq(
+    fromNormalReplaySource(io.replay.bits),
+    fromFastReplaySource(io.fast_rep_in.bits),
+    fromNormalReplaySource(io.replay.bits),
+    fromPrefetchSource(io.prefetch_req.bits),
+    fromIntIssueSource(io.ldin.bits),
+    fromVecIssueSource(),
+    fromPrefetchSource(io.prefetch_req.bits),
+    (if (EnableLoadToLoadForward) fromLoadToLoadSource(io.l2l_fwd_in) else fromNullSource())
+  )
+  s0_sel_src := ParallelPriorityMux(s0_src_selector, s0_src_format)
 
   // address align check
   val s0_addr_aligned = LookupTree(s0_uop.ctrl.fuOpType(1, 0), List(
