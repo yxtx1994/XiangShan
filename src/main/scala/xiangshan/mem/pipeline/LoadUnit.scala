@@ -504,7 +504,7 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   s0_sel_src := ParallelPriorityMux(s0_src_selector, s0_src_format)
 
   // address align check
-  val s0_addr_aligned = LookupTree(s0_sel_src.uop.ctrl.fuOpType(1, 0), List(
+  val s0_addr_aligned = ParallelLookUp(s0_sel_src.uop.ctrl.fuOpType(1, 0), List(
     "b00".U   -> true.B,                   //b
     "b01".U   -> (s0_sel_src.vaddr(0)    === 0.U), //h
     "b10".U   -> (s0_sel_src.vaddr(1, 0) === 0.U), //w
@@ -1118,7 +1118,7 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   // data from load queue refill
   val s3_ld_raw_data_frm_uncache = io.lsq.ld_raw_data
   val s3_merged_data_frm_uncache = s3_ld_raw_data_frm_uncache.mergedData()
-  val s3_picked_data_frm_uncache = LookupTree(s3_ld_raw_data_frm_uncache.addrOffset, List(
+  val s3_picked_data_frm_uncache = ParallelLookUp(s3_ld_raw_data_frm_uncache.addrOffset, List(
     "b000".U -> s3_merged_data_frm_uncache(63,  0),
     "b001".U -> s3_merged_data_frm_uncache(63,  8),
     "b010".U -> s3_merged_data_frm_uncache(63, 16),
@@ -1144,7 +1144,7 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   s3_ld_raw_data_frm_cache.forward_result_valid := RegEnable(s2_fwd_data_valid, false.B, s2_valid)
 
   val s3_merged_data_frm_cache = s3_ld_raw_data_frm_cache.mergedData()
-  val s3_picked_data_frm_cache = LookupTree(s3_ld_raw_data_frm_cache.addrOffset, List(
+  val s3_picked_data_frm_cache = ParallelLookUp(s3_ld_raw_data_frm_cache.addrOffset, List(
     "b0000".U -> s3_merged_data_frm_cache(63,    0),
     "b0001".U -> s3_merged_data_frm_cache(63,    8),
     "b0010".U -> s3_merged_data_frm_cache(63,   16),

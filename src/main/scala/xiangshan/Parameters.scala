@@ -215,7 +215,7 @@ case class XSCoreParameters
   ipmpPortNum: Int = 2 + ICacheParameters().prefetchPipeNum + 1,
   ldtlbParameters: TLBParameters = TLBParameters(
     name = "ldtlb",
-    NWays = 48,
+    NWays = 32,
     outReplace = false,
     partialStaticPMP = true,
     outsideRecvFlush = true,
@@ -223,7 +223,7 @@ case class XSCoreParameters
   ),
   sttlbParameters: TLBParameters = TLBParameters(
     name = "sttlb",
-    NWays = 48,
+    NWays = 32,
     outReplace = false,
     partialStaticPMP = true,
     outsideRecvFlush = true,
@@ -231,7 +231,7 @@ case class XSCoreParameters
   ),
   pftlbParameters: TLBParameters = TLBParameters(
     name = "pftlb",
-    NWays = 48,
+    NWays = 32,
     outReplace = false,
     partialStaticPMP = true,
     outsideRecvFlush = true,
