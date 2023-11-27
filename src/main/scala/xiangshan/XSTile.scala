@@ -73,7 +73,7 @@ class XSTile()(implicit p: Parameters) extends LazyModule
       })
     case None =>
   }
-  
+
   val core_l3_tpmeta_source_port = l2cache match {
     case Some(l2) => l2.tpmeta_source_node
     case None => None
