@@ -282,7 +282,11 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
           source.bits.miss || isFromStride(source.bits.meta_prefetch)
         )
         l1Prefetcher.stride_train(i).bits := source.bits
-        l1Prefetcher.stride_train(i).bits.uop.cf.pc := Mux(loadUnits(i).io.s2_ptr_chasing, io.ooo_to_mem.loadPc(i), RegNext(io.ooo_to_mem.loadPc(i)))
+        l1Prefetcher.stride_train(i).bits.uop.cf.pc := Mux(
+          loadUnits(i).io.s2_ptr_chasing,
+          io.ooo_to_mem.loadPc(i),
+          RegNext(io.ooo_to_mem.loadPc(i))
+        )
       }
       l1Prefetcher
   }
@@ -629,7 +633,11 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
         source.valid && source.bits.isFirstIssue && source.bits.miss
       )
       pf.io.ld_in(i).bits := source.bits
-      pf.io.ld_in(i).bits.uop.cf.pc := Mux(loadUnits(i).io.s2_ptr_chasing, io.ooo_to_mem.loadPc(i), RegNext(io.ooo_to_mem.loadPc(i)))
+      pf.io.ld_in(i).bits.uop.cf.pc := Mux(
+        loadUnits(i).io.s2_ptr_chasing,
+        io.ooo_to_mem.loadPc(i),
+        RegNext(io.ooo_to_mem.loadPc(i))
+      )
     })
     l1PrefetcherOpt.foreach(pf => {
       // stream will train on all load sources
