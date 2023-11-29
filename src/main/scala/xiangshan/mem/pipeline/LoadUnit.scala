@@ -1091,19 +1091,20 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   s3_out.bits.debug.vaddr     := s3_in.vaddr
   s3_out.bits.fflags          := DontCare
 
-  when (s3_force_rep) {
-    s3_out.bits.uop.cf.exceptionVec := 0.U.asTypeOf(s3_in.uop.cf.exceptionVec.cloneType)
-  }
+ val rollback = Wire(ValidIO(new Redirect))
+  rollback.valid := s3_valid && (s3_rep_frm_fetch || s3_flushPipe) && !s3_exception
+  rollback.bits             := DontCare
+  rollback.bits.isRVC       := s3_out.bits.uop.cf.pd.isRVC
+  rollback.bits.robIdx      := s3_out.bits.uop.robIdx
+  rollback.bits.ftqIdx      := s3_out.bits.uop.cf.ftqPtr
+  rollback.bits.ftqOffset   := s3_out.bits.uop.cf.ftqOffset
+  rollback.bits.level       := RedirectLevel.flush
+  rollback.bits.cfiUpdate.target := s3_out.bits.uop.cf.pc
+  rollback.bits.debug_runahead_checkpoint_id := s3_out.bits.uop.debugInfo.runahead_checkpoint_id
 
-  io.rollback.valid := s3_out.valid && !s3_rep_frm_fetch && s3_flushPipe
-  io.rollback.bits             := DontCare
-  io.rollback.bits.isRVC       := s3_out.bits.uop.cf.pd.isRVC
-  io.rollback.bits.robIdx      := s3_out.bits.uop.robIdx
-  io.rollback.bits.ftqIdx      := s3_out.bits.uop.cf.ftqPtr
-  io.rollback.bits.ftqOffset   := s3_out.bits.uop.cf.ftqOffset
-  io.rollback.bits.level       := RedirectLevel.flushAfter
-  io.rollback.bits.cfiUpdate.target := s3_out.bits.uop.cf.pc
-  io.rollback.bits.debug_runahead_checkpoint_id := s3_out.bits.uop.debugInfo.runahead_checkpoint_id
+  val dummy_rollback = RegNext(rollback)
+  io.rollback.valid := dummy_rollback.valid && !dummy_rollback.bits.robIdx.needFlush(RegNext(io.redirect))
+  io.rollback.bits := dummy_rollback.bits
   /* <------- DANGEROUS: Don't change sequence here ! -------> */
 
   io.lsq.ldin.bits.uop := s3_out.bits.uop
@@ -1181,11 +1182,15 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   val s3_ld_data_frm_cache = rdataHelper(s3_ld_raw_data_frm_cache.uop, s3_picked_data_frm_cache)
 
   // FIXME: add 1 cycle delay ?
-  io.lsq.uncache.ready := !s3_out.valid
-  io.ldout.bits        := s3_ld_wb_meta
-  io.ldout.bits.data   := Mux(s3_out.valid, s3_ld_data_frm_cache, s3_ld_data_frm_uncache)
-  io.ldout.valid       := s3_out.valid && !s3_out.bits.uop.robIdx.needFlush(io.redirect) ||
-                         io.lsq.uncache.valid && !io.lsq.uncache.bits.uop.robIdx.needFlush(io.redirect) && !s3_out.valid
+  io.lsq.uncache.ready := !s3_valid
+  val ldout = Wire(ValidIO(new ExuOutput))
+  val dummy_ldout = RegNext(ldout)
+  ldout.bits        := s3_ld_wb_meta
+  ldout.bits.data   := Mux(s3_valid, s3_ld_data_frm_cache, s3_ld_data_frm_uncache)
+  ldout.valid       := s3_out.valid || (io.lsq.uncache.valid && !s3_valid)
+
+  io.ldout.valid := dummy_ldout.valid && !dummy_ldout.bits.uop.robIdx.needFlush(RegNext(io.redirect))
+  io.ldout.bits := dummy_ldout.bits
 
   assert(!io.ldout.valid || !(io.ldout.bits.uop.robIdx.needFlush(io.redirect) || io.ldout.ready), "LoadUnit writeback never stall!")
 
