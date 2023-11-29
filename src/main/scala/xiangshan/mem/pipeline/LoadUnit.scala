@@ -317,7 +317,7 @@ class LoadUnit(implicit p: Parameters) extends XSModule
                                          Mux(s0_sel_src.prf_wr, TlbCmd.write, TlbCmd.read),
                                          TlbCmd.read
                                        )
-  io.tlb.req.bits.vaddr              := Mux(s0_hw_prf_select, io.prefetch_req.bits.paddr, s0_sel_src.vaddr)
+  io.tlb.req.bits.vaddr              := s0_sel_src.vaddr
   io.tlb.req.bits.size               := LSUOpType.size(s0_sel_src.uop.ctrl.fuOpType)
   io.tlb.req.bits.kill               := s0_kill
   io.tlb.req.bits.memidx.is_ld       := true.B
@@ -1083,15 +1083,20 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   s3_out.bits.debug.vaddr     := s3_in.vaddr
   s3_out.bits.fflags          := DontCare
 
-  io.rollback.valid := s3_out.valid && !s3_rep_frm_fetch && s3_flushPipe
-  io.rollback.bits             := DontCare
-  io.rollback.bits.isRVC       := s3_out.bits.uop.cf.pd.isRVC
-  io.rollback.bits.robIdx      := s3_out.bits.uop.robIdx
-  io.rollback.bits.ftqIdx      := s3_out.bits.uop.cf.ftqPtr
-  io.rollback.bits.ftqOffset   := s3_out.bits.uop.cf.ftqOffset
-  io.rollback.bits.level       := RedirectLevel.flushAfter
-  io.rollback.bits.cfiUpdate.target := s3_out.bits.uop.cf.pc
-  io.rollback.bits.debug_runahead_checkpoint_id := s3_out.bits.uop.debugInfo.runahead_checkpoint_id
+  val rollback = Wire(ValidIO(new Redirect))
+  rollback.valid := s3_valid && (s3_rep_frm_fetch || s3_flushPipe) && !s3_exception
+  rollback.bits             := DontCare
+  rollback.bits.isRVC       := s3_out.bits.uop.cf.pd.isRVC
+  rollback.bits.robIdx      := s3_out.bits.uop.robIdx
+  rollback.bits.ftqIdx      := s3_out.bits.uop.cf.ftqPtr
+  rollback.bits.ftqOffset   := s3_out.bits.uop.cf.ftqOffset
+  rollback.bits.level       := RedirectLevel.flush
+  rollback.bits.cfiUpdate.target := s3_out.bits.uop.cf.pc
+  rollback.bits.debug_runahead_checkpoint_id := s3_out.bits.uop.debugInfo.runahead_checkpoint_id
+
+  val dummy_rollback = RegNext(rollback)
+  io.rollback.valid := dummy_rollback.valid && !dummy_rollback.bits.robIdx.needFlush(RegNext(io.redirect))
+  io.rollback.bits := dummy_rollback.bits
   /* <------- DANGEROUS: Don't change sequence here ! -------> */
 
   io.lsq.ldin.bits.uop := s3_out.bits.uop
@@ -1166,9 +1171,15 @@ class LoadUnit(implicit p: Parameters) extends XSModule
 
   // FIXME: add 1 cycle delay ?
   io.lsq.uncache.ready := !s3_valid
-  io.ldout.bits        := s3_ld_wb_meta
-  io.ldout.bits.data   := Mux(s3_valid, s3_ld_data_frm_cache, s3_ld_data_frm_uncache)
-  io.ldout.valid       := s3_out.valid || (io.lsq.uncache.valid && s3_valid)
+  val ldout = Wire(ValidIO(new ExuOutput))
+  val dummy_ldout = RegNext(ldout)
+  ldout.bits        := s3_ld_wb_meta
+  ldout.bits.data   := Mux(s3_valid, s3_ld_data_frm_cache, s3_ld_data_frm_uncache)
+  ldout.valid       := s3_out.valid || (io.lsq.uncache.valid && !s3_valid)
+
+  io.ldout.valid := dummy_ldout.valid && !dummy_ldout.bits.uop.robIdx.needFlush(RegNext(io.redirect))
+  io.ldout.bits := dummy_ldout.bits
+
 
   assert(!io.ldout.valid || !(io.ldout.bits.uop.robIdx.needFlush(io.redirect) || io.ldout.ready), "LoadUnit writeback never stall!")
 
