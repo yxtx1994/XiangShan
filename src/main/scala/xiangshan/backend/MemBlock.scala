@@ -872,7 +872,7 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
     assert(!loadUnits(0).io.ldout.valid)
   }
 
-  for (i <- 0 until exuParameters.StuCnt) when (state === s_atomics(i)) {
+  for (i <- 0 until exuParameters.StuCnt) when (RegNext(state === s_atomics(i))) {
     atomicsUnit.io.feedbackSlow <> io.rsfeedback(atomic_rs(i)).feedbackSlow
 
     assert(!storeUnits(i).io.feedback_slow.valid)
