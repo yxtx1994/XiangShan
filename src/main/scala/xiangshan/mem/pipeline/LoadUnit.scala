@@ -412,7 +412,7 @@ class LoadUnit(implicit p: Parameters) extends XSModule
 
   def fromIntIssueSource(src: ExuInput): FlowSource = {
     val out = WireInit(0.U.asTypeOf(new FlowSource))
-    out.mask          := genVWmask(out.vaddr, src.uop.ctrl.fuOpType(1,0))
+    out.mask          := genVWmask(s0_vaddr, src.uop.ctrl.fuOpType(1,0))
     out.uop           := src.uop
     out.try_l2l       := false.B
     out.has_rob_entry := true.B
@@ -498,12 +498,12 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   s0_sel_src := ParallelPriorityMux(s0_src_selector, s0_src_format)
 
   // select vaddr
-  val s0_int_iss_vaddr  = src.src(0) + SignExt(src.uop.ctrl.imm(11, 0), VAddrBits)
+  val s0_int_iss_vaddr  = io.ldin.bits.src(0) + SignExt(io.ldin.bits.uop.ctrl.imm(11, 0), VAddrBits)
   val s0_vec_iss_vaddr  = WireInit(0.U(VAddrBits.W))
   val s0_rep_vaddr      = io.replay.bits.vaddr
 
   val s0_int_vec_vaddr = Mux(s0_int_iss_valid, s0_int_iss_vaddr, s0_vec_iss_valid)
-  val s0_vaddr = Mux(s0_super_ld_rep_valid || s0_ld_rep_valid, s0_rep_vaddr, s0_int_vec_vaddr)
+  s0_vaddr := Mux(s0_super_ld_rep_valid || s0_ld_rep_valid, s0_rep_vaddr, s0_int_vec_vaddr)
 
   // address align check
   val s0_addr_aligned = LookupTree(s0_sel_src.uop.ctrl.fuOpType(1, 0), List(
@@ -560,7 +560,7 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   io.dcache.replacementUpdated := Mux(s0_ld_rep_select || s0_super_ld_rep_select, io.replay.bits.replacementUpdated, false.B)
 
   XSDebug(io.dcache.req.fire,
-    p"[DCACHE LOAD REQ] pc ${Hexadecimal(s0_sel_src.uop.cf.pc)}, vaddr ${Hexadecimal(s0_sel_src.vaddr)}\n"
+    p"[DCACHE LOAD REQ] pc ${Hexadecimal(s0_sel_src.uop.cf.pc)}, vaddr ${Hexadecimal(s0_vaddr)}\n"
   )
   XSDebug(s0_valid,
     p"S0: pc ${Hexadecimal(s0_out.uop.cf.pc)}, lId ${Hexadecimal(s0_out.uop.lqIdx.asUInt)}, " +
