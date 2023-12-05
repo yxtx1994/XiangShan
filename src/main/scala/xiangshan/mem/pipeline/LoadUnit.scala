@@ -586,10 +586,10 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   .elsewhen (s1_kill) { s1_valid := false.B }
   s1_in   := RegEnable(s0_out, s0_fire)
 
-  val s1_fast_rep_dly_err = RegNext(io.fast_rep_in.bits.delayedLoadError)
-  val s1_fast_rep_kill    = s1_fast_rep_dly_err && s1_in.isFastReplay
-  val s1_l2l_fwd_kill  = RegNext(io.l2l_fwd_in.dly_ld_err) && s1_in.isFastPath
-  val s1_late_kill        = s1_fast_rep_kill || s1_l2l_fwd_kill
+  val s1_fast_rep_dly_kill = RegNext(io.fast_rep_in.bits.lateKill) && s1_in.isFastReplay
+  val s1_fast_rep_dly_err =  RegNext(io.fast_rep_in.bits.delayedLoadError) && s1_in.isFastReplay
+  val s1_l2l_fwd_dly_err  = RegNext(io.l2l_fwd_in.dly_ld_err) && s1_in.isFastPath
+  val s1_dly_err          = s1_fast_rep_dly_err || s1_l2l_fwd_dly_err
   val s1_vaddr_hi         = Wire(UInt())
   val s1_vaddr_lo         = Wire(UInt())
   val s1_vaddr            = Wire(UInt())
@@ -613,6 +613,7 @@ class LoadUnit(implicit p: Parameters) extends XSModule
     s1_out.uop.debugInfo.tlbRespTime := GTimer()
   }
 
+  io.tlb.req_kill   := s1_kill || s1_dly_err
   io.tlb.req_kill   := s1_kill || s1_dly_err
   io.tlb.resp.ready := true.B
 
@@ -774,10 +775,14 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   // if such exception happen, that inst and its exception info
   // will be force writebacked to rob
   val s2_exception_vec = WireInit(s2_in.uop.cf.exceptionVec)
-  s2_exception_vec(loadAccessFault) := s2_in.uop.cf.exceptionVec(loadAccessFault) || s2_pmp.ld ||
+  when (!s2_in.delayedLoadError) {
+    s2_exception_vec(loadAccessFault) := s2_in.uop.cf.exceptionVec(loadAccessFault) || s2_pmp.ld ||
                                        (io.dcache.resp.bits.tag_error && RegNext(io.csrCtrl.cache_error_enable))
-  // soft prefetch will not trigger any exception (but ecc error interrupt may be triggered)
-  when (s2_prf || s2_in.tlbMiss) {
+  }
+
+  // soft prefetch will not trigger any exception (but ecc error interrupt may
+  // be triggered)
+  when (!s2_in.delayedLoadError && (s2_prf || s2_in.tlbMiss)) {
     s2_exception_vec := 0.U.asTypeOf(s2_exception_vec.cloneType)
   }
   val s2_exception = ExceptionNO.selectByFu(s2_exception_vec, lduCfg).asUInt.orR
@@ -1066,6 +1071,7 @@ class LoadUnit(implicit p: Parameters) extends XSModule
     }
   io.s3_dly_ld_err := false.B // s3_dly_ld_err && s3_valid
   io.lsq.ldin.bits.dcacheRequireReplay  := s3_dcache_rep
+  io.fast_rep_out.bits.delayedLoadError := s3_dly_ld_err
 
   val s3_vp_match_fail = RegNext(io.lsq.forward.matchInvalid || io.sbuffer.matchInvalid) && s3_troublem
   val s3_rep_frm_fetch = s3_vp_match_fail
@@ -1250,7 +1256,7 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   XSPerfAccumulate("s1_tlb_miss",                  s1_fire && s1_tlb_miss)
   XSPerfAccumulate("s1_tlb_miss_first_issue",      s1_fire && s1_tlb_miss && s1_in.isFirstIssue)
   XSPerfAccumulate("s1_stall_out",                 s1_valid && !s1_can_go)
-  XSPerfAccumulate("s1_dly_err",                   s1_valid && s1_fast_rep_dly_err)
+  XSPerfAccumulate("s1_dly_err",                   s1_valid && s1_fast_rep_dly_kill)
 
   XSPerfAccumulate("s2_in_valid",                  s2_valid)
   XSPerfAccumulate("s2_in_fire",                   s2_fire)
