@@ -105,6 +105,44 @@ class fetch_to_mem(implicit p: Parameters) extends XSBundle{
   val itlb = Flipped(new TlbPtwIO())
 }
 
+<<<<<<< HEAD
+=======
+// triple buffer applied in i-mmio path (two at MemBlock, one at L2Top)
+class InstrUncacheBuffer()(implicit p: Parameters) extends LazyModule with HasInstrMMIOConst {
+  val bufParam = BufferParams.default
+  val node = new TLBufferNode(bufParam, bufParam, bufParam, bufParam, bufParam)
+  lazy val module = new InstrUncacheBufferImpl
+
+  class InstrUncacheBufferImpl extends LazyModuleImp(this) {
+    (node.in zip node.out) foreach { case ((in, edgeIn), (out, edgeOut)) =>
+      out.a <> bufParam(bufParam(in.a))
+      in.d <> bufParam(bufParam(out.d))
+
+      // only a.valid, a.ready, a.address can change
+      // hoping that the rest would be optimized to keep MemBlock port unchanged after adding buffer
+      out.a.bits.data := 0.U
+      out.a.bits.mask := Fill(mmioBusBytes, 1.U(1.W))
+      out.a.bits.opcode := 4.U // Get
+      out.a.bits.size := log2Ceil(mmioBusBytes).U
+      out.a.bits.source := 0.U
+    }
+  }
+}
+
+// triple buffer applied in L1I$-L2 path (two at MemBlock, one at L2Top)
+class ICacheBuffer()(implicit p: Parameters) extends LazyModule {
+  val node = new TLBufferNode(BufferParams.default, BufferParams.default, BufferParams.default, BufferParams.default, BufferParams.default)
+  lazy val module = new ICacheBufferImpl
+
+  class ICacheBufferImpl extends LazyModuleImp(this) {
+    (node.in zip node.out) foreach { case ((in, edgeIn), (out, edgeOut)) =>
+      out.a <> BufferParams.default(BufferParams.default(in.a))
+      in.d <> BufferParams.default(BufferParams.default(out.d))
+    }
+  }
+}
+
+>>>>>>> 40f174b76 (misc: rewrite code (FrontendBridge))
 // Frontend bus goes through MemBlock
 class FrontendBridge()(implicit p: Parameters) extends LazyModule {
   val icache_node = TLIdentityNode()
