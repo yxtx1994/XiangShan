@@ -151,7 +151,7 @@ class LoadUnit(implicit p: Parameters) extends XSModule
     val s3_dly_ld_err = Output(Bool()) // Note that io.s3_dly_ld_err and io.lsq.s3_dly_ld_err is different
 
     // schedule error query
-    val stld_nuke_query = Flipped(Vec(StorePipelineWidth, Valid(new StoreNukeQueryIO)))
+    val stld_nuke_query = Flipped(Vec(StorePipelineWidth, new StoreNukeQueryIO))
 
     // queue-based replay
     val replay       = Flipped(Decoupled(new LsPipelineBundle))
@@ -808,12 +808,12 @@ class LoadUnit(implicit p: Parameters) extends XSModule
 
   // st-ld violation query
   val s1_nuke = VecInit((0 until StorePipelineWidth).map(w => {
-                       io.stld_nuke_query(w).valid && // query valid
-                       isAfter(s1_in.uop.robIdx, io.stld_nuke_query(w).bits.robIdx) && // older store
-                       // TODO: Fix me when vector instruction
-                       (s1_paddr_dup_lsu(PAddrBits-1, 3) === io.stld_nuke_query(w).bits.paddr(PAddrBits-1, 3)) && // paddr match
-                       (s1_in.mask & io.stld_nuke_query(w).bits.mask).orR // data mask contain
-                      })).asUInt.orR && !s1_tlb_miss
+                       io.stld_nuke_query(w).req.valid && // query valid
+                       isAfter(s1_in.uop.robIdx, io.stld_nuke_query(w).req.bits.robIdx) && // older store
+                        // TODO: Fix me when vector instruction
+                       (s1_paddr_dup_lsu(PAddrBits-1, 3) === io.stld_nuke_query(w).req.bits.paddr(PAddrBits-1, 3)) && // paddr match
+                       (s1_in.mask & io.stld_nuke_query(w).req.bits.mask).orR // data mask contain
+                       })).asUInt.orR && !s1_tlb_miss
 
   s1_out                   := s1_in
   s1_out.vaddr             := s1_vaddr
@@ -991,14 +991,15 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   //  2. Load instruction is younger than requestors(store instructions).
   //  3. Physical address match.
   //  4. Data contains.
-  val s2_nuke          = VecInit((0 until StorePipelineWidth).map(w => {
-                          io.stld_nuke_query(w).valid && // query valid
-                          isAfter(s2_in.uop.robIdx, io.stld_nuke_query(w).bits.robIdx) && // older store
-                          // TODO: Fix me when vector instruction
-                          (s2_in.paddr(PAddrBits-1, 3) === io.stld_nuke_query(w).bits.paddr(PAddrBits-1, 3)) && // paddr match
-                          (s2_in.mask & io.stld_nuke_query(w).bits.mask).orR // data mask contain
-                        })).asUInt.orR && !s2_tlb_miss || s2_in.rep_info.nuke
-
+  val s2_bad_nukes    = VecInit((0 until StorePipelineWidth).map(w => {
+                          io.stld_nuke_query(w).req.valid && // query valid
+                          isAfter(s2_in.uop.robIdx, io.stld_nuke_query(w).req.bits.robIdx) && // older store
+                           // TODO: Fix me when vector instruction
+                          (s2_in.paddr(PAddrBits-1, 3) === io.stld_nuke_query(w).req.bits.paddr(PAddrBits-1, 3)) && // paddr match
+                          (s2_in.mask & io.stld_nuke_query(w).req.bits.mask).orR && // data mask contain
+                          !s2_tlb_miss
+                        }))
+  val s2_nuke          = s2_bad_nukes.asUInt.orR || s2_in.rep_info.nuke
   val s2_cache_handled   = io.dcache.resp.bits.handled
   val s2_cache_tag_error = RegNext(io.csrCtrl.cache_error_enable) &&
                            io.dcache.resp.bits.tag_error
@@ -1135,7 +1136,7 @@ class LoadUnit(implicit p: Parameters) extends XSModule
                     s2_out.rep_info.wpu_fail ||
                     s2_out.rep_info.rar_nack ||
                     s2_out.rep_info.raw_nack ||
-                    s2_out.rep_info.nuke
+                    s2_in.rep_info.nuke
   io.fast_uop.valid := RegNext(
     !io.dcache.s1_disable_fast_wakeup &&
     s1_valid &&
@@ -1199,6 +1200,19 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   val s3_fwd_data_valid = RegEnable(s2_fwd_data_valid, false.B, s2_valid)
   val s3_fwd_frm_d_chan_valid = (s3_fwd_frm_d_chan && s3_fwd_data_valid)
 
+  // s3 nuke check
+  val s3_bad_nukes = Wire(Vec(StorePipelineWidth, Bool()))
+  val s3_bad_nuke_detected = s3_bad_nukes.asUInt.orR || RegNext(s2_bad_nukes.asUInt.orR)
+
+  (0 until StorePipelineWidth).map(w => {
+    s3_bad_nukes(w) := (io.stld_nuke_query(w).req.valid && // query valid
+                          isAfter(s3_in.uop.robIdx, io.stld_nuke_query(w).req.bits.robIdx) && // older store
+                          // TODO: Fix me when vector instruction
+                          (s3_in.paddr(PAddrBits-1, 3) === io.stld_nuke_query(w).req.bits.paddr(PAddrBits-1, 3)) && // paddr match
+                          (s3_in.mask & io.stld_nuke_query(w).req.bits.mask).orR // data mask contain
+                        ) && !s3_in.tlbMiss
+    io.stld_nuke_query(w).nuke := s2_bad_nukes(w) || s3_bad_nukes(w)
+  })
   // s3 load fast replay
   io.fast_rep_out.valid := s3_valid && s3_fast_rep && !s3_in.uop.robIdx.needFlush(io.redirect)
   io.fast_rep_out.bits := s3_in
@@ -1238,7 +1252,11 @@ class LoadUnit(implicit p: Parameters) extends XSModule
                          s3_troublem
 
   val s3_exception = ExceptionNO.selectByFu(s3_in.uop.cf.exceptionVec, lduCfg).asUInt.orR
+<<<<<<< HEAD
   when ((s3_exception || s3_dly_ld_err || s3_rep_frm_fetch) && !s3_force_rep) {
+=======
+   when (s3_exception || s3_dly_ld_err || s3_rep_frm_fetch || s3_bad_nuke_detected) {
+>>>>>>> eced8c02c (fix ldu/stu raw rollback logic)
     io.lsq.ldin.bits.rep_info.cause := 0.U.asTypeOf(s3_rep_info.cause.cloneType)
   } .otherwise {
     io.lsq.ldin.bits.rep_info.cause := VecInit(s3_sel_rep_cause.asBools)
@@ -1249,7 +1267,7 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   s3_out.bits.uop             := s3_in.uop
   s3_out.bits.uop.cf.exceptionVec(loadAccessFault) := s3_dly_ld_err  || s3_in.uop.cf.exceptionVec(loadAccessFault)
   s3_out.bits.uop.ctrl.flushPipe := false.B
-  s3_out.bits.uop.ctrl.replayInst := s3_rep_frm_fetch
+  s3_out.bits.uop.ctrl.replayInst := s3_rep_frm_fetch || s3_bad_nuke_detected
   s3_out.bits.data            := s3_in.data
   s3_out.bits.redirectValid   := false.B
   s3_out.bits.redirect        := DontCare
@@ -1259,8 +1277,13 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   s3_out.bits.debug.vaddr     := s3_in.vaddr
   s3_out.bits.fflags          := DontCare
 
+<<<<<<< HEAD
  val rollback = Wire(ValidIO(new Redirect))
   rollback.valid := s3_valid && (s3_rep_frm_fetch || s3_flushPipe) && !s3_exception
+=======
+  val rollback = Wire(ValidIO(new Redirect))
+  rollback.valid := s3_valid && (s3_rep_frm_fetch || s3_flushPipe || s3_bad_nuke_detected) && !s3_exception
+>>>>>>> eced8c02c (fix ldu/stu raw rollback logic)
   rollback.bits             := DontCare
   rollback.bits.isRVC       := s3_out.bits.uop.cf.pd.isRVC
   rollback.bits.robIdx      := s3_out.bits.uop.robIdx
@@ -1270,9 +1293,7 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   rollback.bits.cfiUpdate.target := s3_out.bits.uop.cf.pc
   rollback.bits.debug_runahead_checkpoint_id := s3_out.bits.uop.debugInfo.runahead_checkpoint_id
 
-  val dummy_rollback = RegNext(rollback)
-  io.rollback.valid := dummy_rollback.valid && !dummy_rollback.bits.robIdx.needFlush(RegNext(io.redirect))
-  io.rollback.bits := dummy_rollback.bits
+  io.rollback := RegNext(rollback)
   /* <------- DANGEROUS: Don't change sequence here ! -------> */
 
   io.lsq.ldin.bits.uop := s3_out.bits.uop
@@ -1351,14 +1372,10 @@ class LoadUnit(implicit p: Parameters) extends XSModule
 
   // FIXME: add 1 cycle delay ?
   io.lsq.uncache.ready := !s3_valid
-  val ldout = Wire(ValidIO(new ExuOutput))
-  val dummy_ldout = RegNext(ldout)
-  ldout.bits        := s3_ld_wb_meta
-  ldout.bits.data   := Mux(s3_valid, s3_ld_data_frm_cache, s3_ld_data_frm_uncache)
-  ldout.valid       := s3_out.valid || (io.lsq.uncache.valid && !s3_valid)
+  io.ldout.bits        := s3_ld_wb_meta
+  io.ldout.bits.data   := Mux(s3_valid, s3_ld_data_frm_cache, s3_ld_data_frm_uncache)
+  io.ldout.valid       := s3_out.valid || (io.lsq.uncache.valid && !s3_valid)
 
-  io.ldout.valid := dummy_ldout.valid && !dummy_ldout.bits.uop.robIdx.needFlush(RegNext(io.redirect))
-  io.ldout.bits := dummy_ldout.bits
 
   assert(!io.ldout.valid || !(io.ldout.bits.uop.robIdx.needFlush(io.redirect) || io.ldout.ready), "LoadUnit writeback never stall!")
 
