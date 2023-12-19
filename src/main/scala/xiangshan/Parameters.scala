@@ -179,11 +179,13 @@ case class XSCoreParameters
   ),
   intPreg: PregParams = IntPregParams(
     numEntries = 224,
+    numBank = 2,
     numRead = None,
     numWrite = None,
   ),
   vfPreg: VfPregParams = VfPregParams(
     numEntries = 192,
+    numBank = 2,
     numRead = None,
     numWrite = None,
   ),

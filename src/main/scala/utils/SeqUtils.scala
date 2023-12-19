@@ -24,6 +24,7 @@ object SeqUtils {
 
   type Seq2[+T] = Seq[Seq[T]]
   type Seq3[+T] = Seq2[Seq[T]]
+  type Seq4[+T] = Seq3[Seq[T]]
   type MixedVec2[T <: Data] = MixedVec[MixedVec[T]]
   type MixedVec3[T <: Data] = MixedVec2[MixedVec[T]]
 

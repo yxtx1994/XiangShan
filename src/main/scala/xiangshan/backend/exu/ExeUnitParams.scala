@@ -227,6 +227,7 @@ case class ExeUnitParams(
     this.wbPortConfigs.map(_.dataCfg).toSet
   }
 
+  // [i]: the i-th port's DataConfig list, after merging all the fu
   def getRfReadDataCfgSet: Seq[Set[DataConfig]] = {
     val fuSrcsCfgSet: Seq[Seq[Set[DataConfig]]] = fuConfigs.map(_.getRfReadDataCfgSet)
     val alignedFuSrcsCfgSet: Seq[Seq[Set[DataConfig]]] = fuSrcsCfgSet.map(x => x ++ Seq.fill(numRegSrc - x.length)(Set[DataConfig]()))

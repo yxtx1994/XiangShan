@@ -94,11 +94,13 @@ class MinimalConfig(n: Int = 1) extends Config(
         ),
         intPreg = IntPregParams(
           numEntries = 64,
+          numBank = 2,
           numRead = None,
           numWrite = None,
         ),
         vfPreg = VfPregParams(
           numEntries = 192,
+          numBank = 2,
           numRead = None,
           numWrite = None,
         ),

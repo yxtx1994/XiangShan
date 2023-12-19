@@ -367,6 +367,8 @@ object Bundles {
     def getIntRfReadBundle: Seq[RfReadPortWithConfig] = rf.flatten.filter(_.readInt).toSeq
     def getVfRfReadBundle: Seq[RfReadPortWithConfig] = rf.flatten.filter(_.readVf).toSeq
 
+    // TODO: getInt/VfReadBundle may have different length with srcType
+    // when has compilate needs. In current need, they are equal.
     def getIntRfReadValidBundle(issueValid: Bool): Seq[ValidIO[RfReadPortWithConfig]] = {
       getIntRfReadBundle.zip(srcType).map {
         case (rfRd: RfReadPortWithConfig, t: UInt) =>

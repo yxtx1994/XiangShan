@@ -5,6 +5,7 @@ import xiangshan.backend.datapath.DataConfig._
 
 abstract class PregParams {
   val numEntries: Int
+  val numBank: Int
   val numRead: Option[Int]
   val numWrite: Option[Int]
   val dataCfg: DataConfig
@@ -14,6 +15,7 @@ abstract class PregParams {
 
 case class IntPregParams(
   numEntries: Int,
+  numBank: Int,
   numRead   : Option[Int],
   numWrite  : Option[Int],
 ) extends PregParams {
@@ -23,6 +25,7 @@ case class IntPregParams(
 
 case class VfPregParams(
   numEntries: Int,
+  numBank: Int,
   numRead   : Option[Int],
   numWrite  : Option[Int],
 ) extends PregParams {
@@ -32,6 +35,7 @@ case class VfPregParams(
 
 case class NoPregParams() extends PregParams {
   val numEntries: Int = 0
+  val numBank   : Int = 0
   val numRead   : Option[Int] = None
   val numWrite  : Option[Int] = None
 

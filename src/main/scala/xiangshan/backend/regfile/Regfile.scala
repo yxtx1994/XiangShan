@@ -102,14 +102,14 @@ object Regfile {
     waddr        : Seq[UInt],
     wdata        : Seq[UInt],
     hasZero      : Boolean,
-    withReset    : Boolean = false,
+    withReset    : Boolean,
     debugReadAddr: Option[Seq[UInt]],
-    debugReadData: Option[Vec[UInt]],
+    debugReadData: Option[Vec[UInt]]
   )(implicit p: Parameters): Unit = {
     val numReadPorts = raddr.length
     val numWritePorts = wen.length
-    require(wen.length == waddr.length)
-    require(wen.length == wdata.length)
+    require(wen.length == waddr.length, s"wen.length ${wen.length} != waddr.length ${waddr.length}")
+    require(wen.length == wdata.length, s"wen.length ${wen.length} != wdata.length ${wdata.length}")
     val dataBits = wdata.map(_.getWidth).min
     require(wdata.map(_.getWidth).min == wdata.map(_.getWidth).max, s"dataBits != $dataBits")
     val addrBits = waddr.map(_.getWidth).min
@@ -154,6 +154,81 @@ object Regfile {
       })
     }
   }
+
+  def apply(
+    name         : String,
+    numEntries   : Int,
+    numBank      : Int,
+    raddr        : Seq[Seq[UInt]],
+    rdata        : Seq[Vec[UInt]],
+    wen          : Seq[Seq[Bool]], // bank, port
+    waddr        : Seq[Seq[UInt]], // bank, port
+    wdata        : Seq[Seq[UInt]], // bank, port
+    hasZero      : Boolean,
+    withReset    : Boolean,
+    debugReadAddr: Option[Seq[UInt]],
+    debugReadData: Option[Vec[UInt]],
+  )(implicit p: Parameters): Unit = {
+    require(raddr.size == numBank, s"raddr.size ${raddr.size} != numBank $numBank")
+    require(wen.size == numBank, s"wen.size ${wen.size} != numBank $numBank")
+    require(waddr.size == numBank, s"waddr.size ${waddr.size} != numBank $numBank")
+    require(wdata.size == numBank, s"wdata.size ${wdata.size} != numBank $numBank")
+    require(wen.head.size == waddr.head.size, s"wen.head.size ${wen.head.size} != waddr.head.size ${waddr.head.size}")
+    require(wen.head.size == wdata.head.size, s"wen.head.size ${wen.head.size} != wdata.head.size ${wdata.head.size}")
+
+    val bankBitsWidth = log2Ceil(numBank)
+    val bankedDebugRAddr = debugReadAddr.map(_.map(x => (x >> bankBitsWidth.U).asUInt))
+    val bankedDebugRData: Seq[Option[Vec[UInt]]] =
+      Seq.fill(numBank)(
+        if (debugReadData.isDefined) {
+          Some(Wire((debugReadData.get.cloneType)))
+        } else { None }
+      )
+
+    // Each bank has an independent regfile with partial entries
+    (0 until numBank).foreach(bankIdx => {
+      val bankedNumEntries = numEntries / numBank
+      require(raddr(bankIdx).head.getWidth == log2Ceil(bankedNumEntries), s"raddr($bankIdx).head.getWidth ${raddr(bankIdx).head.getWidth} != ${log2Ceil(bankedNumEntries)}")
+      require(waddr(bankIdx).head.getWidth == log2Ceil(bankedNumEntries), s"waddr($bankIdx).head.getWidth ${waddr(bankIdx).head.getWidth} != ${log2Ceil(bankedNumEntries)}")
+      if (debugReadAddr.isDefined) {
+        require(debugReadAddr.get.head.getWidth == log2Ceil(numEntries), s"debugReadAddr($bankIdx).head.getWidth ${debugReadAddr.get.head.getWidth} != log2Ceil($numEntries)")
+      }
+
+      apply(
+        name = name + s"_bank${bankIdx}",
+        numEntries = bankedNumEntries,
+        raddr = raddr(bankIdx),
+        rdata = rdata(bankIdx),
+        wen = wen(bankIdx),
+        waddr = waddr(bankIdx),
+        wdata = wdata(bankIdx),
+        hasZero = hasZero && (bankIdx == 0),
+        withReset = withReset,
+        bankedDebugRAddr,
+        bankedDebugRData(bankIdx)
+      )
+    })
+
+    // manually connect debug read data
+    if (debugReadData.isDefined) {
+      val debugData = debugReadData.get
+      val debugAddr = debugReadAddr.get
+      val bankedDebugRfData = bankedDebugRData.map(_.get)
+
+      debugData.zipWithIndex.foreach {
+        case (port, portIdx) =>
+          val bankedOH = (0 until numBank).map{ bankIdx =>
+            if (numBank == 1) true.B
+            else debugAddr(portIdx)(bankBitsWidth-1, 0) === bankIdx.U
+            // NOTE: RegNext inside regfile, so RegNext here. Ugly Code
+          }
+          val bankRfData = bankedDebugRfData.map(_.apply(portIdx))
+
+          assert(PopCount(bankedOH) === 1.U, s"debugReadAddr($portIdx) should be in one bank")
+          port := Mux1H(bankedOH, bankRfData)
+      }
+    }
+  }
 }
 
 object IntRegFile {
@@ -161,17 +236,19 @@ object IntRegFile {
   def apply(
     name         : String,
     numEntries   : Int,
-    raddr        : Seq[UInt],
-    rdata        : Vec[UInt],
-    wen          : Seq[Bool],
-    waddr        : Seq[UInt],
-    wdata        : Seq[UInt],
+    numBank      : Int,
+    raddr        : Seq[Seq[UInt]],
+    rdata        : Seq[Vec[UInt]],
+    wen          : Seq[Seq[Bool]],
+    waddr        : Seq[Seq[UInt]],
+    wdata        : Seq[Seq[UInt]],
     debugReadAddr: Option[Seq[UInt]],
     debugReadData: Option[Vec[UInt]],
     withReset    : Boolean = false,
   )(implicit p: Parameters): Unit = {
+    require(raddr.size == numBank)
     Regfile(
-      name, numEntries, raddr, rdata, wen, waddr, wdata,
+      name, numEntries, numBank, raddr, rdata, wen, waddr, wdata,
       hasZero = true, withReset, debugReadAddr, debugReadData)
   }
 }
@@ -182,38 +259,46 @@ object VfRegFile {
     name         : String,
     numEntries   : Int,
     splitNum     : Int,
-    raddr        : Seq[UInt],
-    rdata        : Vec[UInt],
-    wen          : Seq[Seq[Bool]],
-    waddr        : Seq[UInt],
-    wdata        : Seq[UInt],
+    numBank      : Int,
+    raddr        : Seq[Seq[UInt]], // bank, port
+    rdata        : Seq[Vec[UInt]], // bank, port
+    wen          : Seq[Seq[Seq[Bool]]], // split, bank, port
+    waddr        : Seq[Seq[UInt]], // bank, port
+    wdata        : Seq[Seq[UInt]], // bank, port
     debugReadAddr: Option[Seq[UInt]],
     debugReadData: Option[Vec[UInt]],
     withReset    : Boolean = false,
   )(implicit p: Parameters): Unit = {
     require(splitNum >= 1, "splitNum should be no less than 1")
-    require(splitNum == wen.length, "splitNum should be equal to length of wen vec")
+    require(splitNum == wen.length, s"splitNum $splitNum should be equal to length of wen vec ${wen.length}")
     if (splitNum == 1) {
       Regfile(
-        name, numEntries, raddr, rdata, wen.head, waddr, wdata,
+        name, numEntries, numBank, raddr, rdata, wen.head, waddr, wdata,
         hasZero = false, withReset, debugReadAddr, debugReadData)
     } else {
-      val dataWidth = 64
+      val dataWidth = 64 // TODO: dataWidth = wdataWidth / splitNum
       val numReadPorts = raddr.length
-      require(splitNum > 1 && wdata.head.getWidth == dataWidth * splitNum)
-      val wdataVec = Wire(Vec(splitNum, Vec(wdata.length, UInt(dataWidth.W))))
-      val rdataVec = Wire(Vec(splitNum, Vec(raddr.length, UInt(dataWidth.W))))
+      require(splitNum > 1 && wdata.head.head.getWidth == dataWidth * splitNum)
+      val wdataVec = Wire(Vec(splitNum, Vec(numBank, Vec(wdata.head.length, UInt(dataWidth.W)))))
+      val rdataVec = Wire(Vec(splitNum, Vec(numBank, Vec(raddr.head.length, UInt(dataWidth.W)))))
       val debugRDataVec: Option[Vec[Vec[UInt]]] = debugReadData.map(x => Wire(Vec(splitNum, Vec(x.length, UInt(dataWidth.W)))))
       for (i <- 0 until splitNum) {
-        wdataVec(i) := wdata.map(_ ((i + 1) * dataWidth - 1, i * dataWidth))
+//        wdataVec(i) := wdata.map(_ ((i + 1) * dataWidth - 1, i * dataWidth))
+        wdataVec(i).zip(wdata).map{ case (sp, all) =>
+          sp.zip(all).map{ case (s, a) =>
+            s := a((i + 1) * dataWidth - 1, i * dataWidth) }
+        }
         Regfile(
-          name + s"Part${i}", numEntries, raddr, rdataVec(i), wen(i), waddr, wdataVec(i),
+          name + s"Part${i}", numEntries, numBank, raddr, rdataVec(i), wen(i), waddr, wdataVec(i),
           hasZero = false, withReset, debugReadAddr, debugRDataVec.map(_(i))
         )
       }
-      for (i <- 0 until rdata.length) {
-        rdata(i) := Cat(rdataVec.map(_ (i)).reverse)
+      rdata.indices.map{ bankIdx =>
+        rdata(bankIdx).indices.map { portIdx =>
+          rdata(bankIdx)(portIdx) := Cat(rdataVec(bankIdx).map(_ (portIdx)).reverse)
+        }
       }
+
       if (debugReadData.nonEmpty) {
         for (i <- 0 until debugReadData.get.length) {
           debugReadData.get(i) := Cat(debugRDataVec.get.map(_ (i)).reverse)
