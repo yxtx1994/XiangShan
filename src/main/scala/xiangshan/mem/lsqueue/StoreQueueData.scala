@@ -145,7 +145,7 @@ class SQData8Module(numEntries: Int, numRead: Int, numWrite: Int, numForward: In
   //   }
   // })
   (0 until numWrite).map(i => {
-     val s0_wenVec = Wire(Vec(StoreQueueNWriteBanks, Bool())) 
+     val s0_wenVec = Wire(Vec(StoreQueueNWriteBanks, Bool()))
     for(bank <- 0 until StoreQueueNWriteBanks) {
       s0_wenVec(bank) := io.data.wen(i) && get_bank(io.data.waddr(i)) === bank.U
     }
@@ -174,7 +174,7 @@ class SQData8Module(numEntries: Int, numRead: Int, numWrite: Int, numForward: In
   //   }
   // })
   (0 until numWrite).map(i => {
-    val s0_wenVec = Wire(Vec(StoreQueueNWriteBanks, Bool())) 
+    val s0_wenVec = Wire(Vec(StoreQueueNWriteBanks, Bool()))
     for(bank <- 0 until StoreQueueNWriteBanks) {
       s0_wenVec(bank) := io.mask.wen(i) && get_bank(io.mask.waddr(i)) === bank.U
     }
@@ -250,14 +250,13 @@ class SQData8Module(numEntries: Int, numRead: Int, numWrite: Int, numForward: In
       val needCheck1 = io.needForward(i)(1)(j)
       val needCheck0Reg = needCheck0Vec(j)
       val needCheck1Reg = needCheck1Vec(j)
-      (0 until XLEN / 8).foreach(k => {
-        matchResultVec(j).validFast := needCheck0 && data(j).valid
-        matchResultVec(j).valid := needCheck0Reg && data(j).valid
-        matchResultVec(j).data := data(j).data
-        matchResultVec(numEntries + j).validFast := needCheck1 && data(j).valid
-        matchResultVec(numEntries + j).valid := needCheck1Reg && data(j).valid
-        matchResultVec(numEntries + j).data := data(j).data
-      })
+
+      matchResultVec(j).validFast := needCheck0 && data(j).valid
+      matchResultVec(j).valid := needCheck0Reg && data(j).valid
+      matchResultVec(j).data := data(j).data
+      matchResultVec(numEntries + j).validFast := needCheck1 && data(j).valid
+      matchResultVec(numEntries + j).valid := needCheck1Reg && data(j).valid
+      matchResultVec(numEntries + j).data := data(j).data
     }
 
     val parallelFwdResult = parallelFwd(matchResultVec).asTypeOf(new FwdEntry)
