@@ -1081,8 +1081,12 @@ class LoadUnit(implicit p: Parameters) extends XSModule
       RegNext(io.csrCtrl.ldld_vio_check_enable)
   val s3_flushPipe = s3_ldld_rep_inst
 
+  val s3_full_fwd = RegNext(s2_full_fwd)
   val s3_rep_info = WireInit(s3_in.rep_info)
-  s3_rep_info.dcache_miss   := s3_in.rep_info.dcache_miss && !s3_fwd_frm_d_chan_valid
+  s3_rep_info.dcache_miss   := s3_in.rep_info.dcache_miss && !s3_full_fwd && !s3_fwd_frm_d_chan_valid
+  s3_rep_info.dcache_rep    := s3_in.rep_info.dcache_rep && !s3_full_fwd
+  s3_rep_info.bank_conflict := s3_in.rep_info.bank_conflict && !s3_full_fwd
+  s3_rep_info.wpu_fail      := s3_in.rep_info.wpu_fail && !s3_full_fwd
   val s3_sel_rep_cause = PriorityEncoderOH(s3_rep_info.cause.asUInt)
 
   val s3_exception = ExceptionNO.selectByFu(s3_in.uop.cf.exceptionVec, lduCfg).asUInt.orR
