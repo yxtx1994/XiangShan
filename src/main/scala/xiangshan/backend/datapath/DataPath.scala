@@ -665,15 +665,15 @@ class DataPathImp(override val wrapper: DataPath)(implicit p: Parameters, params
   val vf_regcache_size = 48
   val vf_regcache_tag = RegInit(VecInit(Seq.fill(vf_regcache_size)(0.U(vfSchdParams.pregIdxWidth.W))))
   val vf_regcache_enqPtr = RegInit(0.U(log2Up(vf_regcache_size).W))
-  vf_regcache_enqPtr := vf_regcache_enqPtr + PopCount(vfRfWen.head)
+  vf_regcache_enqPtr := vf_regcache_enqPtr + PopCount(vfRfWen)
   for (i <- vfRfWen.indices) {
-    when (vfRfWen.head(i)) {
-      vf_regcache_tag(vf_regcache_enqPtr + PopCount(vfRfWen.head.take(i))) := vfRfWaddr(i)
+    when (vfRfWen(i)) {
+      vf_regcache_tag(vf_regcache_enqPtr + PopCount(vfRfWen.take(i))) := vfRfWaddr(i)
     }
   }
 
-  XSPerfHistogram(s"IntRegFileRead_hist", PopCount(intRFReadArbiter.io.in.flatten.flatten.map(_.valid)), true.B, 0, 20, 1)
-  XSPerfHistogram(s"VfRegFileRead_hist", PopCount(vfRFReadArbiter.io.in.flatten.flatten.map(_.valid)), true.B, 0, 20, 1)
+  XSPerfHistogram(s"IntRegFileRead_hist", PopCount(intRFReadArbiterSeq.map(_.io.in.flatten.flatten.map(_.valid)).flatten), true.B, 0, 20, 1)
+  XSPerfHistogram(s"VfRegFileRead_hist", PopCount(vfRFReadArbiterSeq.map(_.io.in.flatten.flatten.map(_.valid)).flatten), true.B, 0, 20, 1)
   XSPerfHistogram(s"IntRegFileWrite_hist", PopCount(intRFWriteReq.flatten), true.B, 0, 20, 1)
   XSPerfHistogram(s"VfRegFileWrite_hist", PopCount(vfRFWriteReq.flatten), true.B, 0, 20, 1)
 
@@ -682,11 +682,11 @@ class DataPathImp(override val wrapper: DataPath)(implicit p: Parameters, params
   val int_regcache_part16 = (1 until 17).map(i => int_regcache_tag(int_regcache_enqPtr - i.U))
   val int_regcache_part8 = (1 until 9).map(i => int_regcache_tag(int_regcache_enqPtr - i.U))
 
-  val int_regcache_48_hit_vec = intRFReadArbiter.io.in.flatten.flatten.map(x => x.valid && int_regcache_tag.map(_ === x.bits.addr).reduce(_ || _))
-  val int_regcache_8_hit_vec = intRFReadArbiter.io.in.flatten.flatten.map(x => x.valid && int_regcache_part8.map(_ === x.bits.addr).reduce(_ || _))
-  val int_regcache_16_hit_vec = intRFReadArbiter.io.in.flatten.flatten.map(x => x.valid && int_regcache_part16.map(_ === x.bits.addr).reduce(_ || _))
-  val int_regcache_24_hit_vec = intRFReadArbiter.io.in.flatten.flatten.map(x => x.valid && int_regcache_part24.map(_ === x.bits.addr).reduce(_ || _))
-  val int_regcache_32_hit_vec = intRFReadArbiter.io.in.flatten.flatten.map(x => x.valid && int_regcache_part32.map(_ === x.bits.addr).reduce(_ || _))
+  val int_regcache_48_hit_vec = intRFReadArbiterSeq.map(_.io.in.flatten.flatten.map(x => x.valid && int_regcache_tag.map(_ === x.bits.addr).reduce(_ || _))).flatten
+  val int_regcache_8_hit_vec = intRFReadArbiterSeq.map(_.io.in.flatten.flatten.map(x => x.valid && int_regcache_part8.map(_ === x.bits.addr).reduce(_ || _))).flatten
+  val int_regcache_16_hit_vec = intRFReadArbiterSeq.map(_.io.in.flatten.flatten.map(x => x.valid && int_regcache_part16.map(_ === x.bits.addr).reduce(_ || _))).flatten
+  val int_regcache_24_hit_vec = intRFReadArbiterSeq.map(_.io.in.flatten.flatten.map(x => x.valid && int_regcache_part24.map(_ === x.bits.addr).reduce(_ || _))).flatten
+  val int_regcache_32_hit_vec = intRFReadArbiterSeq.map(_.io.in.flatten.flatten.map(x => x.valid && int_regcache_part32.map(_ === x.bits.addr).reduce(_ || _))).flatten
   XSPerfAccumulate("IntRegCache48Hit", PopCount(int_regcache_48_hit_vec))
   XSPerfAccumulate("IntRegCache8Hit", PopCount(int_regcache_8_hit_vec))
   XSPerfAccumulate("IntRegCache16Hit", PopCount(int_regcache_16_hit_vec))
@@ -694,10 +694,10 @@ class DataPathImp(override val wrapper: DataPath)(implicit p: Parameters, params
   XSPerfAccumulate("IntRegCache32Hit", PopCount(int_regcache_32_hit_vec))
   XSPerfHistogram("IntRegCache48Hit_hist", PopCount(int_regcache_48_hit_vec), true.B, 0, 16, 2)
 
-  XSPerfAccumulate(s"IntRFReadBeforeArb", PopCount(intRFReadArbiter.io.in.flatten.flatten.map(_.valid)))
-  XSPerfAccumulate(s"IntRFReadAfterArb", PopCount(intRFReadArbiter.io.out.map(_.valid)))
-  XSPerfAccumulate(s"VfRFReadBeforeArb", PopCount(vfRFReadArbiter.io.in.flatten.flatten.map(_.valid)))
-  XSPerfAccumulate(s"VfRFReadAfterArb", PopCount(vfRFReadArbiter.io.out.map(_.valid)))
+  XSPerfAccumulate(s"IntRFReadBeforeArb", PopCount(intRFReadArbiterSeq.map(_.io.in.flatten.flatten.map(_.valid)).flatten))
+  XSPerfAccumulate(s"IntRFReadAfterArb", PopCount(intRFReadArbiterSeq.map(_.io.out.map(_.valid)).flatten))
+  XSPerfAccumulate(s"VfRFReadBeforeArb", PopCount(vfRFReadArbiterSeq.map(_.io.in.flatten.flatten.map(_.valid)).flatten))
+  XSPerfAccumulate(s"VfRFReadAfterArb", PopCount(vfRFReadArbiterSeq.map(_.io.out.map(_.valid)).flatten))
   XSPerfAccumulate(s"IntUopBeforeArb", PopCount(fromIntIQ.flatten.map(_.valid)))
   XSPerfAccumulate(s"IntUopAfterArb", PopCount(fromIntIQ.flatten.map(_.fire)))
   XSPerfAccumulate(s"MemUopBeforeArb", PopCount(fromMemIQ.flatten.map(_.valid)))
@@ -705,10 +705,10 @@ class DataPathImp(override val wrapper: DataPath)(implicit p: Parameters, params
   XSPerfAccumulate(s"VfUopBeforeArb", PopCount(fromVfIQ.flatten.map(_.valid)))
   XSPerfAccumulate(s"VfUopAfterArb", PopCount(fromVfIQ.flatten.map(_.fire)))
 
-  XSPerfHistogram(s"IntRFReadBeforeArb_hist", PopCount(intRFReadArbiter.io.in.flatten.flatten.map(_.valid)), true.B, 0, 16, 2)
-  XSPerfHistogram(s"IntRFReadAfterArb_hist", PopCount(intRFReadArbiter.io.out.map(_.valid)), true.B, 0, 16, 2)
-  XSPerfHistogram(s"VfRFReadBeforeArb_hist", PopCount(vfRFReadArbiter.io.in.flatten.flatten.map(_.valid)), true.B, 0, 16, 2)
-  XSPerfHistogram(s"VfRFReadAfterArb_hist", PopCount(vfRFReadArbiter.io.out.map(_.valid)), true.B, 0, 16, 2)
+  XSPerfHistogram(s"IntRFReadBeforeArb_hist", PopCount(intRFReadArbiterSeq.map(_.io.in.flatten.flatten.map(_.valid)).flatten), true.B, 0, 16, 2)
+  XSPerfHistogram(s"IntRFReadAfterArb_hist", PopCount(intRFReadArbiterSeq.map(_.io.out.map(_.valid)).flatten), true.B, 0, 16, 2)
+  XSPerfHistogram(s"VfRFReadBeforeArb_hist", PopCount(vfRFReadArbiterSeq.map(_.io.in.flatten.flatten.map(_.valid)).flatten), true.B, 0, 16, 2)
+  XSPerfHistogram(s"VfRFReadAfterArb_hist", PopCount(vfRFReadArbiterSeq.map(_.io.out.map(_.valid)).flatten), true.B, 0, 16, 2)
   XSPerfHistogram(s"IntUopBeforeArb_hist", PopCount(fromIntIQ.flatten.map(_.valid)), true.B, 0, 8, 2)
   XSPerfHistogram(s"IntUopAfterArb_hist", PopCount(fromIntIQ.flatten.map(_.fire)), true.B, 0, 8, 2)
   XSPerfHistogram(s"MemUopBeforeArb_hist", PopCount(fromMemIQ.flatten.map(_.valid)), true.B, 0, 8, 2)
