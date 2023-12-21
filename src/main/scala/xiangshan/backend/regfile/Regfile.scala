@@ -279,6 +279,7 @@ object VfRegFile {
       val dataWidth = 64 // TODO: dataWidth = wdataWidth / splitNum
       val numReadPorts = raddr.length
       require(splitNum > 1 && wdata.head.head.getWidth == dataWidth * splitNum)
+      // NOTE: split -> numBank -> portVec. May DIFFFERENT with other place
       val wdataVec = Wire(Vec(splitNum, Vec(numBank, Vec(wdata.head.length, UInt(dataWidth.W)))))
       val rdataVec = Wire(Vec(splitNum, Vec(numBank, Vec(raddr.head.length, UInt(dataWidth.W)))))
       val debugRDataVec: Option[Vec[Vec[UInt]]] = debugReadData.map(x => Wire(Vec(splitNum, Vec(x.length, UInt(dataWidth.W)))))
@@ -295,7 +296,7 @@ object VfRegFile {
       }
       rdata.indices.map{ bankIdx =>
         rdata(bankIdx).indices.map { portIdx =>
-          rdata(bankIdx)(portIdx) := Cat(rdataVec(bankIdx).map(_ (portIdx)).reverse)
+          rdata(bankIdx)(portIdx) := Cat(rdataVec.map(_ (bankIdx)).map(_ (portIdx)).reverse)
         }
       }
 
