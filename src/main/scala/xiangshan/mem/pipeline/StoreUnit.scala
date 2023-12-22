@@ -312,7 +312,6 @@ class StoreUnit(implicit p: Parameters) extends XSModule with HasDCacheParameter
   s3_out.data                := DontCare
   s3_out.redirectValid       := false.B
   s3_out.redirect            := DontCare
-  s3_out.uop.ctrl.replayInst := s3_bad_nuke_detected
   s3_out.debug.isMMIO        := s3_in.mmio
   s3_out.debug.paddr         := s3_in.paddr
   s3_out.debug.vaddr         := s3_in.vaddr
@@ -320,7 +319,7 @@ class StoreUnit(implicit p: Parameters) extends XSModule with HasDCacheParameter
   s3_out.fflags              := DontCare
 
   s3_ready := io.stout.ready
-  io.stout.valid := s3_valid
+  io.stout.valid := s3_valid && !s3_bad_nuke_detected
   io.stout.bits := s3_out
 
   assert(!io.stout.valid || !(io.stout.bits.uop.robIdx.needFlush(io.redirect) || io.stout.ready), "StoreUnit writeback never stall!")
