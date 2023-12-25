@@ -106,8 +106,8 @@ class LoadQueueRAW(implicit p: Parameters) extends XSModule
   val canEnqueue = io.query.map(_.req.valid)
   val cancelEnqueue = io.query.map(_.req.bits.uop.robIdx.needFlush(io.redirect))
   val allAddrCheck = io.stIssuePtr === io.stAddrReadySqPtr
-  val hasAddrInvalidStore = io.query.map(_.req.bits.uop.sqIdx).map(sqIdx => {
-    Mux(!allAddrCheck, isBefore(io.stAddrReadySqPtr, sqIdx), false.B)
+  val hasAddrInvalidStore = io.query.map(_.pre_req).map(x => {
+    RegNext(x.valid && Mux(!allAddrCheck, isBefore(io.stAddrReadySqPtr, x.bits.uop.sqIdx), false.B))
   })
   val needEnqueue = canEnqueue.zip(hasAddrInvalidStore).zip(cancelEnqueue).map { case ((v, r), c) => v && r && !c }
   val bypassPAddr = Reg(Vec(LoadPipelineWidth, UInt(PAddrBits.W)))

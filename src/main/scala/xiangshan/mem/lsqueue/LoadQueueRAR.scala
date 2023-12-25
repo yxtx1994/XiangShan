@@ -99,7 +99,7 @@ class LoadQueueRAR(implicit p: Parameters) extends XSModule
   // (e.g. "not completed" means that load instruction get the data or exception).
   val canEnqueue = io.query.map(_.req.valid)
   val cancelEnqueue = io.query.map(_.req.bits.uop.robIdx.needFlush(io.redirect))
-  val hasNotWritebackedLoad = io.query.map(_.req.bits.uop.lqIdx).map(lqIdx => isAfter(lqIdx, io.ldWbPtr))
+  val hasNotWritebackedLoad = io.query.map(_.pre_req).map(x => RegNext(x.valid && isAfter(x.bits.uop.lqIdx, io.ldWbPtr)))
   val needEnqueue = canEnqueue.zip(hasNotWritebackedLoad).zip(cancelEnqueue).map { case ((v, r), c) => v && r && !c }
 
   // Allocate logic
