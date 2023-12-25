@@ -938,21 +938,22 @@ class LoadUnit(implicit p: Parameters) extends XSModule
 
   val s2_tlb_miss      = s2_in.tlbMiss
   val s2_fwd_fail      = io.lsq.forward.dataInvalid || io.vec_forward.dataInvalid
-  val s2_dcache_miss   = io.dcache.resp.bits.miss &&
-                         !s2_fwd_frm_d_chan_or_mshr &&
-                         !s2_full_fwd
 
-  val s2_mq_nack       = io.dcache.s2_mq_nack &&
-                         !s2_fwd_frm_d_chan_or_mshr &&
-                         !s2_full_fwd
+  val s2_dcache_miss_orig = io.dcache.resp.bits.miss &&
+                            !s2_fwd_frm_d_chan_or_mshr
+  val s2_dcache_miss   =  s2_dcache_miss_orig && !s2_full_fwd
 
-  val s2_bank_conflict = io.dcache.s2_bank_conflict &&
-                         !s2_fwd_frm_d_chan_or_mshr &&
-                         !s2_full_fwd
+  val s2_mq_nack_orig  = io.dcache.s2_mq_nack &&
+                         !s2_fwd_frm_d_chan_or_mshr
+  val s2_mq_nack       = s2_mq_nack_orig && !s2_full_fwd
 
-  val s2_wpu_pred_fail = io.dcache.s2_wpu_pred_fail &&
-                        !s2_fwd_frm_d_chan_or_mshr &&
-                        !s2_full_fwd
+  val s2_bank_conflict_orig = io.dcache.s2_bank_conflict &&
+                              !s2_fwd_frm_d_chan_or_mshr
+  val s2_bank_conflict = s2_bank_conflict_orig && !s2_full_fwd
+
+  val s2_wpu_pred_fail_orig = io.dcache.s2_wpu_pred_fail &&
+                              !s2_fwd_frm_d_chan_or_mshr
+  val s2_wpu_pred_fail = s2_wpu_pred_fail_orig && !s2_full_fwd
 
   val s2_rar_nack      = io.lsq.ldld_nuke_query.req.valid &&
                          !io.lsq.ldld_nuke_query.req.ready
@@ -1107,9 +1108,9 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   val s2_need_rep = s2_out.rep_info.mem_amb ||
                     s2_out.rep_info.tlb_miss ||
                     s2_out.rep_info.fwd_fail ||
-                    s2_out.rep_info.dcache_miss ||
-                    s2_out.rep_info.bank_conflict ||
-                    s2_out.rep_info.wpu_fail ||
+                    s2_dcache_miss_orig ||
+                    s2_bank_conflict_orig ||
+                    s2_wpu_pred_fail_orig ||
                     s2_out.rep_info.rar_nack ||
                     s2_out.rep_info.raw_nack ||
                     s2_out.rep_info.nuke
