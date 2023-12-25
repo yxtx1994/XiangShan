@@ -293,6 +293,7 @@ class LoadNukeQueryResp(implicit p: Parameters) extends XSBundle {
 }
 
 class LoadNukeQueryIO(implicit p: Parameters) extends XSBundle {
+  val pre_req = Valid(new LoadNukeQueryReq)
   val req    = Decoupled(new LoadNukeQueryReq)
   val resp   = Flipped(Valid(new LoadNukeQueryResp))
   val revoke = Output(Bool())
