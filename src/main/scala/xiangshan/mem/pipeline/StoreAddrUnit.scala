@@ -72,7 +72,6 @@ class StoreAddrUnit(implicit p: Parameters) extends XSModule with HasDCacheParam
   val s0_pc           = Mux(s0_use_flow_rs, s0_in.uop.cf.pc, 0.U)
   val s0_instr_type   = Mux(s0_use_flow_rs, STORE_SOURCE.U, DCACHE_PREFETCH_SOURCE.U)
   val s0_wlineflag    = Mux(s0_use_flow_rs, s0_in.uop.ctrl.fuOpType === LSUOpType.cbo_zero, false.B)
-  val s0_out          = Wire(new LsPipelineBundle)
   val s0_can_go       = s1_ready
   val s0_fire         = s0_valid && s0_can_go
 
@@ -82,8 +81,8 @@ class StoreAddrUnit(implicit p: Parameters) extends XSModule with HasDCacheParam
   val s0_mask  = Mux(s0_use_flow_rs, genVWmask(s0_saddr, s0_in.uop.ctrl.fuOpType(1,0)), 3.U)
 
   io.st_mask_out.valid       := s0_use_flow_rs
-  io.st_mask_out.bits.mask   := s0_out.mask
-  io.st_mask_out.bits.sqIdx  := s0_out.uop.sqIdx
+  io.st_mask_out.bits.mask   := s0_vaddr
+  io.st_mask_out.bits.sqIdx  := s0_in.uop.sqIdx
 
   io.stin.ready := s1_ready
   io.prefetch_req.ready := s1_ready && io.dcache.req.ready && !s0_iss_valid
@@ -111,6 +110,7 @@ class StoreAddrUnit(implicit p: Parameters) extends XSModule with HasDCacheParam
   val s1_can_go = s2_ready
   val s1_fire   = s1_valid && !s1_kill && s1_can_go
 
+  s1_kill := s1_in.uop.robIdx.needFlush(io.redirect) || s1_in.uop.robIdx.needFlush(RegNext(io.redirect))
   s1_ready := true.B
   assert(!s1_valid || !(s1_kill || s2_ready), "StoreAddrUnit s1 never stall!")
   io.tlb.resp.ready := true.B // TODO: why dtlbResp needs a ready?
@@ -189,8 +189,7 @@ class StoreAddrUnit(implicit p: Parameters) extends XSModule with HasDCacheParam
   val s2_mmio      = s2_mmio_cbo
   val s2_exception = ExceptionNO.selectByFu(s2_out.uop.cf.exceptionVec, staCfg).asUInt.orR
   val s2_amo       = FuType.storeIsAMO(s2_in.uop.ctrl.fuType)
-  s2_kill := s2_in.uop.robIdx.needFlush(io.redirect) ||
-             s2_in.uop.robIdx.needFlush(RegNext(io.redirect)) || s2_tlb_miss || s2_amo
+  s2_kill := s2_in.uop.robIdx.needFlush(io.redirect) || s2_tlb_miss || s2_amo
 
   s2_ready := true.B
   assert(!s2_valid || !(s2_kill || s3_ready), "StoreAddrUnit s2 never stall!")
