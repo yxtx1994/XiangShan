@@ -1165,7 +1165,7 @@ class LoadUnit(implicit p: Parameters) extends XSModule
 
   // data from dcache hit
   val s3_ld_raw_data_frm_cache = Wire(new LoadDataFromDcacheBundle)
-  s3_ld_raw_data_frm_cache.respDcacheData       := io.dcache.resp.bits.data_delayed
+  s3_ld_raw_data_frm_cache.respDcacheData       := RegNext(io.dcache.resp.bits.data_delayed)
   s3_ld_raw_data_frm_cache.forwardMask          := RegEnable(s2_fwd_mask, s2_valid)
   s3_ld_raw_data_frm_cache.forwardData          := RegEnable(s2_fwd_data, s2_valid)
   s3_ld_raw_data_frm_cache.uop                  := RegEnable(s2_out.uop, s2_valid)
