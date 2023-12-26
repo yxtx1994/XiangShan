@@ -372,7 +372,12 @@ class LoadQueueReplay(implicit p: Parameters) extends XSModule
     allocated(i) && !scheduled(i) && cause(i)(LoadReplayCauses.C_DM) && blocking(i) && missMSHRId(i) === io.l2_hint.bits.sourceId && io.l2_hint.valid
   })).asUInt
   // l2 will send 2 beats data in 2 cycles, so if data needed by this load is in first beat, select it this cycle, otherwise next cycle
-  val s0_loadHintSelMask = s0_loadHintWakeMask & VecInit(dataInLastBeatReg.map(!_)).asUInt
+  // when isKeyword = 1, s0_loadHintSelMask need overturn
+    val s0_loadHintSelMask = Mux(
+     io.l2_hint.bits.isKeyword,
+     s0_loadHintWakeMask & dataInLastBeatReg.asUInt,
+     s0_loadHintWakeMask & VecInit(dataInLastBeatReg.map(!_)).asUInt
+     )
   val s0_remLoadHintSelMask = VecInit((0 until LoadPipelineWidth).map(rem => getRemBits(s0_loadHintSelMask)(rem)))
   val s0_remHintSelValidVec = VecInit((0 until LoadPipelineWidth).map(rem => ParallelORR(s0_remLoadHintSelMask(rem))))
   val s0_hintSelValid = ParallelORR(s0_loadHintSelMask)
@@ -631,6 +636,7 @@ class LoadQueueReplay(implicit p: Parameters) extends XSModule
         missMSHRId(enqIndex) := replayInfo.mshr_id
       }
       dataInLastBeatReg(enqIndex) := dataInLastBeat
+      //dataInLastBeatReg(enqIndex) := Mux(io.l2_hint.bits.isKeyword, !dataInLastBeat, dataInLastBeat)
     }
 
     //
@@ -735,6 +741,7 @@ class LoadQueueReplay(implicit p: Parameters) extends XSModule
   XSPerfAccumulate("replay_hint_priority_beat1", io.l2_hint.valid && io.l2_hint.bits.isKeyword)
   XSPerfHistogram("util", validCount, true.B, 0, LoadQueueReplaySize+1, 1, true, true)
   
+
   val perfEvents: Seq[(String, UInt)] = Seq(
     ("enq", enqNumber),
     ("deq", deqNumber),
