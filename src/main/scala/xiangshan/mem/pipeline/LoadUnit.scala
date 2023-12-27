@@ -1106,7 +1106,15 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   } .otherwise {
     io.lsq.ldin.bits.rep_info.cause := VecInit(s3_sel_rep_cause.asBools)
   }
-  val s3_need_rep = s3_rep_info.need_rep
+  val s3_need_rep = (s3_rep_info.mem_amb ||
+                     s3_rep_info.tlb_miss ||
+                     s3_rep_info.fwd_fail ||
+                     s3_rep_info.dcache_miss ||
+                     s3_rep_info.bank_conflict ||
+                     s3_rep_info.wpu_fail ||
+                     s3_rep_info.rar_nack ||
+                     s3_rep_info.raw_nack ||
+                     s3_rep_info.nuke)
   val s3_can_be_writebacked = (s3_exception || s3_dly_ld_err || !s3_need_rep)
 
   // Int load, if hit, will be writebacked at s3
