@@ -942,10 +942,10 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   s2_out.rep_info.mem_amb         := s2_mem_amb && s2_troublem
   s2_out.rep_info.tlb_miss        := s2_tlb_miss && s2_troublem
   s2_out.rep_info.fwd_fail        := s2_fwd_fail && s2_troublem
-  s2_out.rep_info.dcache_rep      := s2_mq_nack && s2_troublem
-  s2_out.rep_info.dcache_miss     := s2_dcache_miss && s2_troublem
-  s2_out.rep_info.bank_conflict   := s2_bank_conflict && s2_troublem
-  s2_out.rep_info.wpu_fail        := s2_wpu_pred_fail && s2_troublem
+  s2_out.rep_info.dcache_rep      := s2_mq_nack && !s2_full_fwd && s2_troublem
+  s2_out.rep_info.dcache_miss     := s2_dcache_miss && !s2_full_fwd && s2_troublem
+  s2_out.rep_info.bank_conflict   := s2_bank_conflict && !s2_full_fwd && s2_troublem
+  s2_out.rep_info.wpu_fail        := s2_wpu_pred_fail && !s2_full_fwd && s2_troublem
   s2_out.rep_info.rar_nack        := s2_rar_nack && s2_troublem
   s2_out.rep_info.raw_nack        := s2_raw_nack && s2_troublem
   s2_out.rep_info.nuke            := s2_nuke && s2_troublem
@@ -1092,12 +1092,8 @@ class LoadUnit(implicit p: Parameters) extends XSModule
       RegNext(io.csrCtrl.ldld_vio_check_enable)
   val s3_flushPipe = s3_ldld_rep_inst
 
-  val s3_full_fwd = RegNext(s2_full_fwd)
   val s3_rep_info = WireInit(s3_in.rep_info)
-  s3_rep_info.dcache_miss   := s3_in.rep_info.dcache_miss && !s3_full_fwd && !s3_fwd_frm_d_chan_valid
-  s3_rep_info.dcache_rep    := s3_in.rep_info.dcache_rep && !s3_full_fwd
-  s3_rep_info.bank_conflict := s3_in.rep_info.bank_conflict && !s3_full_fwd
-  s3_rep_info.wpu_fail      := s3_in.rep_info.wpu_fail && !s3_full_fwd
+  s3_rep_info.dcache_miss   := s3_in.rep_info.dcache_miss && !s3_fwd_frm_d_chan_valid
   val s3_sel_rep_cause = PriorityEncoderOH(s3_rep_info.cause.asUInt)
 
   val s3_exception = ExceptionNO.selectByFu(s3_in.uop.cf.exceptionVec, lduCfg).asUInt.orR
