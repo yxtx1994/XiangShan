@@ -1100,19 +1100,12 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   } .otherwise {
     io.lsq.ldin.bits.rep_info.cause := VecInit(s3_sel_rep_cause.asBools)
   }
-  val s3_need_rep = (s3_rep_info.mem_amb ||
-                     s3_rep_info.tlb_miss ||
-                     s3_rep_info.fwd_fail ||
-                     s3_rep_info.dcache_miss ||
-                     s3_rep_info.bank_conflict ||
-                     s3_rep_info.wpu_fail ||
-                     s3_rep_info.rar_nack ||
-                     s3_rep_info.raw_nack ||
-                     s3_rep_info.nuke)
-  val s3_can_be_writebacked = (s3_exception || s3_dly_ld_err || !s3_need_rep)
+  val s3_wakeup_yet = RegNext(io.fast_uop.valid)
+  val s3_safe_wakeup = !s3_rep_info.dcache_miss || s3_wakeup_yet
+  val s3_safe_writeback = (s3_exception || s3_dly_ld_err || s3_safe_wakeup)
 
   // Int load, if hit, will be writebacked at s3
-  s3_out.valid                := s3_valid && s3_can_be_writebacked && !s3_in.mmio
+  s3_out.valid                := s3_valid && s3_safe_writeback
   s3_out.bits.uop             := s3_in.uop
   s3_out.bits.uop.cf.exceptionVec(loadAccessFault) := s3_dly_ld_err  || s3_in.uop.cf.exceptionVec(loadAccessFault)
   s3_out.bits.uop.ctrl.flushPipe := false.B
