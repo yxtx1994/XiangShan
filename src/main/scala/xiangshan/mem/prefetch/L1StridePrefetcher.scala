@@ -161,13 +161,21 @@ class StrideMetaArray(implicit p: Parameters) extends XSModule with HasStridePre
     width = STRIDE_WIDTH_BLOCKS,
     decr_mode = false.B,
     sink = SINK_L1,
-    source = L1_HW_PREFETCH_STRIDE)
+    source = L1_HW_PREFETCH_STRIDE,
+    // TODO: add stride debug db, not useful for now
+    t_pc = 0xdeadbeefL.U,
+    t_va = 0xdeadbeefL.U
+    )
   val s2_l2_pf_req_bits = (new StreamPrefetchReqBundle).getStreamPrefetchReqBundle(
     vaddr = s2_l2_pf_vaddr,
     width = STRIDE_WIDTH_BLOCKS,
     decr_mode = false.B,
     sink = SINK_L2,
-    source = L1_HW_PREFETCH_STRIDE)
+    source = L1_HW_PREFETCH_STRIDE,
+    // TODO: add stride debug db, not useful for now
+    t_pc = 0xdeadbeefL.U,
+    t_va = 0xdeadbeefL.U
+    )
 
   // s3: send l1 pf out
   val s3_valid = if (LOOK_UP_STREAM) RegNext(s2_valid) && !io.stream_lookup_resp else RegNext(s2_valid)

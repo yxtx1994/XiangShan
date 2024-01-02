@@ -58,28 +58,34 @@ class StreamBitVectorBundle(implicit p: Parameters) extends XSBundle with HasStr
   val cnt = UInt((log2Up(BIT_VEC_WITDH) + 1).W)
   val decr_mode = Bool()
 
+  // debug usage
+  val trigger_full_va = UInt(VAddrBits.W)
+
   def reset(index: Int) = {
     tag := index.U
     bit_vec := 0.U
     active := false.B
     cnt := 0.U
     decr_mode := INIT_DEC_MODE.B
+    trigger_full_va := 0xdeadbeefL.U
   }
 
   def tag_match(new_tag: UInt): Bool = {
     region_hash_tag(tag) === region_hash_tag(new_tag)
   }
 
-  def alloc(alloc_tag: UInt, alloc_bit_vec: UInt, alloc_active: Bool, alloc_decr_mode: Bool) = {
+  def alloc(alloc_tag: UInt, alloc_bit_vec: UInt, alloc_active: Bool, alloc_decr_mode: Bool, alloc_full_vaddr: UInt) = {
     tag := alloc_tag
     bit_vec := alloc_bit_vec
     active := alloc_active
     cnt := 1.U
+    trigger_full_va := alloc_full_vaddr
     if(ENABLE_DECR_MODE) {
       decr_mode := alloc_decr_mode
     }else {
       decr_mode := INIT_DEC_MODE.B
     }
+    
 
     assert(PopCount(alloc_bit_vec) === 1.U, "alloc vector should be one hot")
   }
@@ -108,13 +114,19 @@ class StreamPrefetchReqBundle(implicit p: Parameters) extends XSBundle with HasS
   val bit_vec = UInt(BIT_VEC_WITDH.W)
   val sink = UInt(SINK_BITS.W)
   val source = new L1PrefetchSource()
+  // debug usage
+  val trigger_pc = UInt(VAddrBits.W)
+  val trigger_va = UInt(VAddrBits.W)
 
   // align prefetch vaddr and width to region
-  def getStreamPrefetchReqBundle(vaddr: UInt, width: Int, decr_mode: Bool, sink: UInt, source: UInt): StreamPrefetchReqBundle = {
+  def getStreamPrefetchReqBundle(vaddr: UInt, width: Int, decr_mode: Bool, sink: UInt, source: UInt, t_pc: UInt, t_va: UInt): StreamPrefetchReqBundle = {
     val res = Wire(new StreamPrefetchReqBundle)
     res.region := get_region_tag(vaddr)
     res.sink := sink
     res.source.value := source
+
+    res.trigger_pc := t_pc
+    res.trigger_va := t_va 
 
     val region_bits = get_region_bits(vaddr)
     val region_bit_vec = UIntToOH(region_bits)
@@ -167,6 +179,7 @@ class StreamBitVectorArray(implicit p: Parameters) extends XSModule with HasStre
   // s0: generate region tag, parallel match
   val s0_can_accept = Wire(Bool())
   val s0_valid = io.train_req.fire
+  val s0_pc    = io.train_req.bits.pc
   val s0_vaddr = io.train_req.bits.vaddr
   val s0_region_bits = get_region_bits(s0_vaddr)
   val s0_region_tag = get_region_tag(s0_vaddr)
@@ -187,6 +200,31 @@ class StreamBitVectorArray(implicit p: Parameters) extends XSModule with HasStre
   when(s0_valid) {
     replacement.access(s0_index)
   }
+
+  val stream_pf_train_debug_table = ChiselDB.createTable("StreamTrainTraceTable" + p(XSCoreParamsKey).HartId.toString, new StreamTrainTraceEntry, basicDB = true)
+
+  val spf_log_enable = s0_valid
+  val spf_log_data = Wire(new StreamTrainTraceEntry)
+
+  // WARNING: the type here only indicates trigger by stream, not saying it's sink
+  spf_log_data.Type := MemReqSource.Prefetch2L2Stream.id.U
+  spf_log_data.OldAddr := Mux(
+    !s0_hit,
+    s0_vaddr,
+    array(s0_index).trigger_full_va
+  )
+  spf_log_data.CurAddr := s0_vaddr
+  spf_log_data.Offset := DontCare
+  spf_log_data.Score := DontCare
+  spf_log_data.Miss := io.train_req.bits.miss
+  
+  stream_pf_train_debug_table.log(
+    data = spf_log_data,
+    en = spf_log_enable,
+    site = "StreamTrainTraceTable",
+    clock = clock,
+    reset = reset
+  )
 
   assert(!s0_valid || PopCount(VecInit(s0_region_tag_match_vec)) <= 1.U, "req region should match no more than 1 entry")
   assert(!s0_valid || PopCount(VecInit(s0_region_tag_plus_one_match_vec)) <= 1.U, "req region plus 1 should match no more than 1 entry")
@@ -214,6 +252,8 @@ class StreamBitVectorArray(implicit p: Parameters) extends XSModule with HasStre
   // s1: alloc or update
   val s1_valid = RegNext(s0_valid)
   val s1_index = RegEnable(s0_index, s0_valid)
+  val s1_pc    = RegEnable(s0_pc, s0_valid)
+  val s1_vaddr = RegEnable(s0_vaddr, s0_valid)
   val s1_plus_one_index = RegEnable(s0_plus_one_index, s0_valid)
   val s1_minus_one_index = RegEnable(s0_minus_one_index, s0_valid)
   val s1_hit = RegEnable(s0_hit, s0_valid)
@@ -245,7 +285,9 @@ class StreamBitVectorArray(implicit p: Parameters) extends XSModule with HasStre
       alloc_tag = s1_region_tag,
       alloc_bit_vec = UIntToOH(s1_region_bits),
       alloc_active = s1_plus_one_hit || s1_minus_one_hit,
-      alloc_decr_mode = RegEnable(s0_plus_one_hit, s0_valid))
+      alloc_decr_mode = RegEnable(s0_plus_one_hit, s0_valid),
+      alloc_full_vaddr = RegEnable(s0_vaddr, s0_valid)
+      )
 
   }.elsewhen(s1_update) {
     // update a existing entry
@@ -263,6 +305,8 @@ class StreamBitVectorArray(implicit p: Parameters) extends XSModule with HasStre
   // s2: trigger prefetch if hit active bit vector, compute meta of prefetch req
   val s2_valid = RegNext(s1_valid)
   val s2_index = RegEnable(s1_index, s1_valid)
+  val s2_pc    = RegEnable(s1_pc, s1_valid)
+  val s2_vaddr = RegEnable(s1_vaddr, s1_valid)
   val s2_region_bits = RegEnable(s1_region_bits, s1_valid)
   val s2_region_tag = RegEnable(s1_region_tag, s1_valid)
   val s2_pf_l1_incr_vaddr = RegEnable(s1_pf_l1_incr_vaddr, s1_valid)
@@ -284,19 +328,28 @@ class StreamBitVectorArray(implicit p: Parameters) extends XSModule with HasStre
     width = WIDTH_CACHE_BLOCKS,
     decr_mode = s2_decr_mode,
     sink = SINK_L1,
-    source = L1_HW_PREFETCH_STREAM)
+    source = L1_HW_PREFETCH_STREAM,
+    t_pc = s2_pc,
+    t_va = s2_vaddr
+    )
   val s2_pf_l2_req_bits = (new StreamPrefetchReqBundle).getStreamPrefetchReqBundle(
     vaddr = s2_l2_vaddr,
     width = L2_WIDTH_CACHE_BLOCKS,
     decr_mode = s2_decr_mode,
     sink = SINK_L2,
-    source = L1_HW_PREFETCH_STREAM)
+    source = L1_HW_PREFETCH_STREAM,
+    t_pc = s2_pc,
+    t_va = s2_vaddr
+    )
   val s2_pf_l3_req_bits = (new StreamPrefetchReqBundle).getStreamPrefetchReqBundle(
     vaddr = s2_l3_vaddr,
     width = L3_WIDTH_CACHE_BLOCKS,
     decr_mode = s2_decr_mode,
     sink = SINK_L3,
-    source = L1_HW_PREFETCH_STREAM)
+    source = L1_HW_PREFETCH_STREAM,
+    t_pc = s2_pc,
+    t_va = s2_vaddr
+    )
 
   XSPerfAccumulate("s2_valid", s2_valid)
   XSPerfAccumulate("s2_will_not_send_pf", s2_valid && !s2_will_send_pf)

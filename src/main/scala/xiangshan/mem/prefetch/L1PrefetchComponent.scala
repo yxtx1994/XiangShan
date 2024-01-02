@@ -374,6 +374,41 @@ class MutiLevelPrefetchFilter(implicit p: Parameters) extends XSModule with HasL
     replacement.access(s0_index)
   }
 
+  // stream pf debug db here
+  // Hit:
+  // now seens only pending = (region_bits & ~filter_bits) are the peeding request
+  // if a PfGen comes, new added request can be new_req = PfGen.region_bits & ~(pending)
+  // Alloc:
+  // new_req = PfGen.region_bits
+  val stream_pf_trace_debug_table = ChiselDB.createTable("StreamPFTrace" + p(XSCoreParamsKey).HartId.toString, new StreamPFTraceEntry, basicDB = true)
+  for (i <- 0 until BIT_VEC_WITDH) {
+    val hit_entry = array(s0_index)
+    val new_req = Mux(
+      s0_hit,
+      Mux(
+        hit_entry.sink === SINK_L1 || s0_prefetch_req.sink === SINK_L1,
+        io.prefetch_req.bits.bit_vec & ~(hit_entry.bit_vec),
+        io.prefetch_req.bits.bit_vec & ~((hit_entry.bit_vec & ~hit_entry.sent_vec))
+      ),
+      io.prefetch_req.bits.bit_vec
+    )
+    val log_enable = s0_valid && new_req(i) && (io.prefetch_req.bits.source.value === L1_HW_PREFETCH_STREAM)
+    val log_data = Wire(new StreamPFTraceEntry)
+
+    log_data.TriggerPC := io.prefetch_req.bits.trigger_pc
+    log_data.TriggerVaddr := io.prefetch_req.bits.trigger_va
+    log_data.PFVaddr := Cat(s0_region, i.U(REGION_BITS.W), 0.U(log2Up(dcacheParameters.blockBytes).W))
+    log_data.PFSink := s0_prefetch_req.sink
+
+    stream_pf_trace_debug_table.log(
+      data = log_data,
+      en = log_enable,
+      site = "StreamPFTrace",
+      clock = clock,
+      reset = reset
+    )
+  }
+
   assert(!s0_valid || PopCount(VecInit(s0_match_vec)) <= 1.U, "req region should match no more than 1 entry")
   assert(!(s0_valid && RegNext(s0_valid) && !s0_hit && !RegNext(s0_hit) && replacement.way === RegNext(replacement.way)), "replacement error")
 
