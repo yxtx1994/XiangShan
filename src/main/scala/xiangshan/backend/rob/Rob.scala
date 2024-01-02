@@ -1226,15 +1226,20 @@ class RobImp(outer: Rob)(implicit p: Parameters) extends LazyModuleImp(outer)
     }
 
     // log when committing
-    val load_debug_table = ChiselDB.createTable("LoadDebugTable" + p(XSCoreParamsKey).HartId.toString, new LoadInfoEntry, basicDB = false)
+    val load_debug_table = ChiselDB.createTable("LoadDebugTable" + p(XSCoreParamsKey).HartId.toString, new LoadInfoEntry, basicDB = true)
     for (i <- 0 until CommitWidth) {
       val log_enable = io.commits.commitValid(i) && io.commits.isCommit && (io.commits.info(i).commitType === CommitType.LOAD)
       val commit_index = deqPtrVec(i).value
       val load_debug_data = Wire(new LoadInfoEntry)
 
+      load_debug_data.isLoad := true.B
       load_debug_data.pc := io.commits.info(i).pc
       load_debug_data.vaddr := debug_lsTopdownInfo(commit_index).s1.vaddr_bits
       load_debug_data.paddr := debug_lsTopdownInfo(commit_index).s2.paddr_bits
+      load_debug_data.issued := debug_microOp(commit_index).debugInfo.issueTime
+      load_debug_data.translated := debug_microOp(commit_index).debugInfo.tlbRespTime
+      load_debug_data.commited := timer
+      load_debug_data.writeback := debug_microOp(commit_index).debugInfo.writebackTime
       load_debug_data.cacheMiss := debug_lsTopdownInfo(commit_index).s2.first_real_miss
       load_debug_data.tlbQueryLatency := tlbLatency(i)
       load_debug_data.exeLatency := executeLatency(i)
