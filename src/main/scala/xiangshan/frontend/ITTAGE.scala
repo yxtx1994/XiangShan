@@ -217,17 +217,44 @@ class ITTageTable
        singlePort = true, useBitmask = true
     )))
 
+  val table_banks_diff = Seq.fill(nBanks)(Module(
+    new SRAMTemplate(Bool(),
+      set = SRAM_SIZE,
+      way = bankFoldWidth * ittageEntrySize,
+      shouldReset = true,
+      holdRead = true,
+      singlePort = true
+    )
+  ))
+
 
   for (b <- 0 until nBanks) {
     table_banks(b).io.r.req.valid := io.req.fire && s0_bank_req_1h(b)
     table_banks(b).io.r.req.bits.setIdx := get_bank_idx(s0_idx)
+    table_banks_diff(b).io.r.req.valid := io.req.fire && s0_bank_req_1h(b)
+    table_banks_diff(b).io.r.req.bits.setIdx := get_bank_idx(s0_idx) >> (log2Ceil(bankFoldWidth))
   }
 
   us.io.raddr(0) := s0_idx
 
   val table_banks_r = table_banks.map(_.io.r.resp.data(0))
+  val table_banks_r_diff =
+    if (bankFoldWidth > 1) {
+      table_banks_diff.map(
+        _.io.r.resp.data.asTypeOf(Vec(bankFoldWidth, new ITTageEntry))
+        (get_bank_idx(s1_idx)(log2Ceil(bankFoldWidth) - 1, 0))
+      )
+    } else {
+      table_banks_diff.map(
+        _.io.r.resp.data.asTypeOf(new ITTageEntry)
+      )
+    }
 
   val resp_selected = Mux1H(s1_bank_req_1h, table_banks_r)
+  val resp_selected_diff = Mux1H(s1_bank_req_1h, table_banks_r_diff)
+  dontTouch(resp_selected)
+  dontTouch(resp_selected_diff)
+  XSError(resp_selected.asUInt =/= resp_selected_diff.asUInt && RegNext(io.req.fire), p"ITTageTable read response differs: $resp_selected $resp_selected_diff \n")
   val s1_req_rhit = validArray(s1_idx) && resp_selected.tag === s1_tag
   val resp_invalid_by_write = Wire(Bool())
 
@@ -251,6 +278,24 @@ class ITTageTable
 
   val allocBitmask = VecInit.fill(ittageEntrySize)(1.U).asUInt
   val nonAllocBitmask = VecInit.tabulate(ittageEntrySize)(_.U < ITTageCtrBits.U).asUInt
+
+  val allocWayMask_diff =
+    if (bankFoldWidth > 1) {
+      VecInit.tabulate(bankFoldWidth * ittageEntrySize)(
+        i => (i / ittageEntrySize).U === update_idx_in_bank(log2Ceil(bankFoldWidth) - 1, 0)
+      ).asUInt
+    } else {
+      VecInit.fill(ittageEntrySize)(true.B).asUInt
+    }
+  val nonAllocWayMask_diff =
+    if (bankFoldWidth > 1) {
+      VecInit.tabulate(bankFoldWidth * ittageEntrySize)(
+        i => (i / ittageEntrySize).U === update_idx_in_bank(log2Ceil(bankFoldWidth) - 1, 0) &&
+          ((i % ittageEntrySize).U < ITTageCtrBits.U)
+      ).asUInt
+    } else {
+      VecInit.tabulate(ittageEntrySize)(_.U < ITTageCtrBits.U).asUInt
+    }
 
 
   val bank_conflict = (0 until nBanks).map(b => table_banks(b).io.w.req.valid && s0_bank_req_1h(b)).reduce(_||_)
@@ -284,6 +329,17 @@ class ITTageTable
       bitmask = update_bitmask
     )
   }
+  val update_waymask = Mux(io.update.alloc || ctr_null(old_ctr), allocWayMask_diff, nonAllocWayMask_diff)
+
+  for (b <- 0 until nBanks) {
+    table_banks_diff(b).io.w.apply(
+      valid = io.update.valid && update_req_bank_1h(b),
+      data = VecInit(Seq.fill(bankFoldWidth)(update_wdata.asTypeOf(Vec(ittageEntrySize, Bool()))).flatten),
+      setIdx = (update_idx_in_bank >> log2Ceil(bankFoldWidth)).asUInt,
+      waymask = update_waymask
+    )
+  }
+
   val newValidArray = VecInit(validArray.asBools)
   when (io.update.valid) {
     newValidArray(update_idx) := true.B
