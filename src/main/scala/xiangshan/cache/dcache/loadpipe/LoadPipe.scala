@@ -26,6 +26,7 @@ import xiangshan.{XSCoreParamsKey, L1CacheErrorInfo}
 import xiangshan.cache.wpu._
 import xiangshan.mem.HasL1PrefetchSourceParameter
 import xiangshan.mem.prefetch._
+import xiangshan.mem.LqPtr
 
 class LoadPfDbBundle(implicit p: Parameters) extends DCacheBundle {
   val paddr = UInt(PAddrBits.W)
@@ -276,7 +277,7 @@ class LoadPipe(id: Int)(implicit p: Parameters) extends DCacheModule with HasPer
   XSPerfAccumulate("load_using_replacement", io.replace_way.set.valid && s1_need_replacement)
 
   // data read
-  io.banked_data_read.valid := s1_fire && !s1_nack
+  io.banked_data_read.valid := s1_fire && !s1_nack && !io.lsu.s1_kill
   io.banked_data_read.bits.addr := s1_vaddr
   io.banked_data_read.bits.way_en := s1_pred_tag_match_way_dup_dc
   io.banked_data_read.bits.bankMask := s1_bank_oh
@@ -394,7 +395,7 @@ class LoadPipe(id: Int)(implicit p: Parameters) extends DCacheModule with HasPer
   io.miss_req.bits.replace_pf := s2_repl_prefetch
   io.miss_req.bits.cancel := io.lsu.s2_kill || s2_tag_error
   io.miss_req.bits.pc := io.lsu.s2_pc
-
+  io.miss_req.bits.lqIdx := io.lsu.req.bits.lqIdx
   // send back response
   val resp = Wire(ValidIO(new DCacheWordResp))
   resp.valid := s2_valid
