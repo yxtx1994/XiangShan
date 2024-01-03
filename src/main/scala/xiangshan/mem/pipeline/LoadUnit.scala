@@ -977,8 +977,6 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   val s2_can_wakeup = !(s2_dcache_miss_orig ||
                         s2_bank_conflict_orig ||
                         s2_wpu_pred_fail_orig ||
-                        s2_out.rep_info.rar_nack ||
-                        s2_out.rep_info.raw_nack ||
                         s2_in.rep_info.nuke)
   io.fast_uop.valid := RegNext(
     !io.dcache.s1_disable_fast_wakeup &&
@@ -1113,6 +1111,7 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   s3_out.bits.data            := s3_in.data
   s3_out.bits.redirectValid   := false.B
   s3_out.bits.redirect        := DontCare
+  s3_out.bits.corrupt         := s3_rep_info.rar_nack || s3_rep_info.raw_nack
   s3_out.bits.debug.isMMIO    := s3_in.mmio
   s3_out.bits.debug.isPerfCnt := false.B
   s3_out.bits.debug.paddr     := s3_in.paddr

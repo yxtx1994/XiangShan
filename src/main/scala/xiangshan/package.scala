@@ -135,7 +135,9 @@ package object xiangshan {
     def isFused(commitType: UInt): Bool = commitType(2)
     def isLoadStore(commitType: UInt): Bool = !isFused(commitType) && commitType(1)
     def lsInstIsStore(commitType: UInt): Bool = commitType(0)
+    def lsInstIsLoad(commitType: UInt): Bool = !commitType(0)
     def isStore(commitType: UInt): Bool = isLoadStore(commitType) && lsInstIsStore(commitType)
+    def isLoad(commitType: UInt): Bool = isLoadStore(commitType) && lsInstIsLoad(commitType)
     def isBranch(commitType: UInt): Bool = commitType(0) && !commitType(1) && !isFused(commitType)
   }
 

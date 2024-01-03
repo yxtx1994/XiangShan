@@ -353,6 +353,7 @@ class ExuOutput(implicit p: Parameters) extends XSBundleWithMicroOp {
   val redirectValid = Bool()
   val redirect = new Redirect
   val debug = new DebugBundle
+  val corrupt = Bool()
 }
 
 class ExternalInterruptIO(implicit p: Parameters) extends XSBundle {

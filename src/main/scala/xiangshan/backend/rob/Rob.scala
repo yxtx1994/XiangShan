@@ -644,7 +644,8 @@ class RobImp(outer: Rob)(implicit p: Parameters) extends LazyModuleImp(outer)
     * Writeback (from execution units)
     */
   for (wb <- exuWriteback) {
-    when (wb.valid) {
+    val canWriteback = wb.valid && (!CommitType.isLoad(wb.bits.uop.ctrl.commitType) || !wb.bits.corrupt)
+    when (canWriteback) {
       val wbIdx = wb.bits.uop.robIdx.value
       debug_exuData(wbIdx) := wb.bits.data
       debug_exuDebug(wbIdx) := wb.bits.debug
@@ -957,7 +958,8 @@ class RobImp(outer: Rob)(implicit p: Parameters) extends LazyModuleImp(outer)
   }
   // writeback logic set numWbPorts writebacked to true
   for ((wb, cfgs) <- exuWriteback.zip(wbExuConfigs(exeWbSel))) {
-    when (wb.valid) {
+    val canWriteback = wb.valid && (!CommitType.isLoad(wb.bits.uop.ctrl.commitType) || !wb.bits.corrupt)
+    when (canWriteback) {
       val wbIdx = wb.bits.uop.robIdx.value
       val wbHasException = ExceptionNO.selectByExu(wb.bits.uop.cf.exceptionVec, cfgs).asUInt.orR
       val wbHasTriggerHit = wb.bits.uop.cf.trigger.getHitBackend
