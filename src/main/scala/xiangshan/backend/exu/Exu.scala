@@ -167,6 +167,7 @@ abstract class Exu(cfg: ExuConfig)(implicit p: Parameters) extends XSModule {
     if (needArbiter) {
       if(in.size == 1){
         in.head.ready := out.ready
+        out.bits := DontCare
         out.bits.data := in.head.bits.data
         out.bits.uop := in.head.bits.uop
         out.valid := in.head.valid
@@ -184,6 +185,7 @@ abstract class Exu(cfg: ExuConfig)(implicit p: Parameters) extends XSModule {
     } else {
       in.foreach(_.ready := out.ready)
       val sel = Mux1H(in.map(x => x.valid -> x))
+      out.bits := DontCare
       out.bits.data := sel.bits.data
       out.bits.uop := sel.bits.uop
       out.valid := sel.valid
