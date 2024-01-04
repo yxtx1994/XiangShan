@@ -228,7 +228,7 @@ trait HasDCacheParameters extends HasL1CacheParameters with HasL1PrefetchSourceP
     require(data.getWidth >= (bank+1)*DCacheSRAMRowBytes)
     data(DCacheSRAMRowBytes * (bank + 1) - 1, DCacheSRAMRowBytes * bank)
   }
-  
+
   def get_alias(vaddr: UInt): UInt ={
     require(blockOffBits + idxBits > pgIdxBits)
     if(blockOffBits + idxBits > pgIdxBits){
@@ -581,6 +581,7 @@ class DCacheLoadIO(implicit p: Parameters) extends DCacheWordIO
   val s1_paddr_dup_lsu = Output(UInt(PAddrBits.W)) // lsu side paddr
   val s1_paddr_dup_dcache = Output(UInt(PAddrBits.W)) // dcache side paddr
   val s1_disable_fast_wakeup = Input(Bool())
+  val s1_dcache_miss_fast = Input(Bool())
   // cycle 2: hit signal
   val s2_hit = Input(Bool()) // hit signal for lsu,
   val s2_first_hit = Input(Bool())
