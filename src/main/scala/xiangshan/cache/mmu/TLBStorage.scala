@@ -124,13 +124,13 @@ class TLBFA(
     resp.bits.hit := Cat(hitVecReg).orR
     if (nWays == 1) {
       for (d <- 0 until nDups) {
-        resp.bits.ppn(d) := ppn_reg(0) // RegEnable(entries(0).genPPN(saveLevel, req.valid)(vpn), req.fire)
-        resp.bits.perm(d) := perm_reg(0) // RegEnable(entries(0).perm, req.fire)
+        resp.bits.ppn(d) := ppn_reg(0)
+        resp.bits.perm(d) := perm_reg(0)
       }
     } else {
       for (d <- 0 until nDups) {
-        resp.bits.ppn(d) := ParallelMux(hitVecReg zip ppn_reg) // RegEnable(ParallelMux(hitVec zip entries.map(_.genPPN(saveLevel, req.valid)(vpn))), req.fire)
-        resp.bits.perm(d) := ParallelMux(hitVecReg zip perm_reg) // RegEnable(ParallelMux(hitVec zip entries.map(_.perm)), req.fire)
+        resp.bits.ppn(d) := ParallelMux(hitVecReg zip ppn_reg)
+        resp.bits.perm(d) := ParallelMux(hitVecReg zip perm_reg)
       }
     }
 

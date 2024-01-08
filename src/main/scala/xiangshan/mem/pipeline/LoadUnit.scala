@@ -513,10 +513,24 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   // select vaddr
   val s0_int_iss_vaddr  = io.ldin.bits.src(0) + io.ld_sign_ext_imm
   val s0_vec_iss_vaddr  = WireInit(0.U(VAddrBits.W))
+  val s0_fast_rep_vaddr = io.fast_rep_in.bits.vaddr
   val s0_rep_vaddr      = io.replay.bits.vaddr
 
-  val s0_int_vec_vaddr = Mux(s0_int_iss_valid, s0_int_iss_vaddr, s0_vec_iss_valid)
-  s0_vaddr := Mux(s0_super_ld_rep_valid || s0_ld_rep_valid, s0_rep_vaddr, s0_int_vec_vaddr)
+  val s0_sel_fast_rep_vaddr = s0_ld_fast_rep_select
+  val s0_sel_rep_vaddr = s0_super_ld_rep_select || (s0_ld_rep_select && !s0_sel_fast_rep_vaddr)
+  val s0_sel_int_vaddr = s0_int_iss_valid &&
+                         !s0_super_ld_rep_valid &&
+                         !s0_ld_fast_rep_valid &&
+                         !s0_ld_rep_valid
+  val s0_sel_vec_vaddr = s0_vec_iss_valid &&
+                         !s0_super_ld_rep_valid &&
+                         !s0_ld_fast_rep_valid &&
+                         !s0_ld_rep_valid &&
+                         !s0_int_iss_valid
+  s0_vaddr := (Fill(VAddrBits, s0_sel_rep_vaddr     ) & s0_rep_vaddr     ) |
+              (Fill(VAddrBits, s0_sel_fast_rep_vaddr) & s0_fast_rep_vaddr) |
+              (Fill(VAddrBits, s0_sel_int_vaddr     ) & s0_int_iss_vaddr ) |
+              (Fill(VAddrBits, s0_sel_vec_vaddr     ) & s0_vec_iss_vaddr )
 
   // address align check
   val s0_addr_aligned = LookupTree(s0_sel_src.uop.ctrl.fuOpType(1, 0), List(
