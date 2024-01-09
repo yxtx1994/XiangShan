@@ -22,8 +22,9 @@ SIM_TOP = SimTop
 FPGATOP = top.TopMain
 SIMTOP  = top.SimTop
 
-TOP_V = $(BUILD_DIR)/$(TOP).v
-SIM_TOP_V = $(BUILD_DIR)/$(SIM_TOP).v
+RTL_DIR = $(BUILD_DIR)/rtl
+TOP_V = $(RTL_DIR)/$(TOP).v
+SIM_TOP_V = $(RTL_DIR)/$(SIM_TOP).v
 
 SCALA_FILE = $(shell find ./src/main/scala -name '*.scala')
 TEST_FILE = $(shell find ./src/test/scala -name '*.scala')
@@ -62,7 +63,7 @@ MFC_ARGS = --dump-fir $(FIRTOOL_ARGS) \
            --firtool-opt "-O=release --disable-annotation-unknown --lowering-options=explicitBitcast,disallowLocalVariables,disallowPortDeclSharing"
 RELEASE_ARGS += $(MFC_ARGS)
 DEBUG_ARGS += $(MFC_ARGS)
-PLDM_ARGS += $(MFC_ARGS)
+RELEASE_WITH_ASSERT_ARGS += $(MFC_ARGS)
 else
 CHISEL_VERSION = chisel3
 FPGA_MEM_ARGS = --infer-rw --repl-seq-mem -c:$(FPGATOP):-o:$(@D)/$(@F).conf --gen-mem-verilog full
@@ -97,11 +98,11 @@ endif
 # emu for the release version
 RELEASE_ARGS += --disable-all --remove-assert --fpga-platform
 DEBUG_ARGS   += --enable-difftest
-PLDM_ARGS += --disable-all --fpga-platform
+RELEASE_WITH_ASSERT_ARGS += --disable-all --fpga-platform --enable-difftest
 ifeq ($(RELEASE),1)
 override SIM_ARGS += $(RELEASE_ARGS)
-else ifeq ($(PLDM),1)
-override SIM_ARGS += $(PLDM_ARGS)
+else ifeq ($(RELEASE_WITH_ASSERT),1)
+override SIM_ARGS += $(RELEASE_WITH_ASSERT_ARGS)
 else
 override SIM_ARGS += $(DEBUG_ARGS)
 endif
@@ -111,6 +112,11 @@ TIME_CMD = time -a -o $(TIMELOG)
 
 SED_CMD = sed -i -e 's/_\(aw\|ar\|w\|r\|b\)_\(\|bits_\)/_\1/g'
 
+ifeq ($(RELEASE_WITH_ASSERT),1)
+SED_IFNDEF = `ifndef SYNTHESIS	// src/main/scala/device/RocketDebugWrapper.scala
+SED_ENDIF  = `endif // not def SYNTHESIS
+endif
+
 .DEFAULT_GOAL = verilog
 
 help:
@@ -119,11 +125,11 @@ help:
 $(TOP_V): $(SCALA_FILE)
 	mkdir -p $(@D)
 	$(TIME_CMD) mill -i xiangshan[$(CHISEL_VERSION)].runMain $(FPGATOP)   \
-		-td $(@D) --config $(CONFIG) $(FPGA_MEM_ARGS)                    \
+		-td $(RTL_DIR) --config $(CONFIG) $(FPGA_MEM_ARGS)                    \
 		--num-cores $(NUM_CORES) $(RELEASE_ARGS)
 ifeq ($(MFC),1)
-	$(SPLIT_VERILOG) $(BUILD_DIR) $(TOP).v
-	$(MEM_GEN_SEP) "$(MEM_GEN)" "$(TOP_V).conf" "$(BUILD_DIR)"
+	$(SPLIT_VERILOG) $(RTL_DIR) $(TOP).v
+	$(MEM_GEN_SEP) "$(MEM_GEN)" "$(TOP_V).conf" "$(RTL_DIR)"
 endif
 	$(SED_CMD) $@
 	@git log -n 1 >> .__head__
@@ -141,11 +147,11 @@ $(SIM_TOP_V): $(SCALA_FILE) $(TEST_FILE)
 	@echo "\n[mill] Generating Verilog files..." > $(TIMELOG)
 	@date -R | tee -a $(TIMELOG)
 	$(TIME_CMD) mill -i xiangshan[$(CHISEL_VERSION)].test.runMain $(SIMTOP)    \
-		-td $(@D) --config $(CONFIG) $(SIM_MEM_ARGS)                          \
+		-td $(RTL_DIR) --config $(CONFIG) $(SIM_MEM_ARGS)                          \
 		--num-cores $(NUM_CORES) $(SIM_ARGS)
 ifeq ($(MFC),1)
-	$(SPLIT_VERILOG) $(BUILD_DIR) $(SIM_TOP).v
-	$(MEM_GEN_SEP) "$(MEM_GEN)" "$(SIM_TOP_V).conf" "$(BUILD_DIR)"
+	$(SPLIT_VERILOG) $(RTL_DIR) $(SIM_TOP).v
+	$(MEM_GEN_SEP) "$(MEM_GEN)" "$(SIM_TOP_V).conf" "$(RTL_DIR)"
 endif
 	$(SED_CMD) $@
 	@git log -n 1 >> .__head__
@@ -155,9 +161,9 @@ endif
 	@cat .__head__ .__diff__ $@ > .__out__
 	@mv .__out__ $@
 	@rm .__head__ .__diff__
-ifeq ($(PLDM),1)
+ifeq ($(RELEASE_WITH_ASSERT),1)
 	sed -i -e 's/$$fatal/$$finish/g' $(SIM_TOP_V)
-	sed -i -e 's|`ifndef SYNTHESIS	// src/main/scala/device/RocketDebugWrapper.scala:141:11|`ifdef SYNTHESIS	// src/main/scala/device/RocketDebugWrapper.scala:141:11|g' $(SIM_TOP_V)
+	sed -i -e '/sed/! { \|$(SED_IFNDEF)|, \|$(SED_ENDIF)| { \|$(SED_IFNDEF)|d; \|$(SED_ENDIF)|d; } }' $(SIM_TOP_V)
 else
 	sed -i -e 's/$$fatal/xs_assert(`__LINE__)/g' $(SIM_TOP_V)
 endif
@@ -194,6 +200,16 @@ emu-run: emu
 # vcs simulation
 simv:
 	$(MAKE) -C ./difftest simv SIM_TOP=SimTop DESIGN_DIR=$(NOOP_HOME) NUM_CORES=$(NUM_CORES)
+
+# palladium simulation
+pldm-build: sim-verilog
+	$(MAKE) -C ./difftest pldm-build SIM_TOP=SimTop DESIGN_DIR=$(NOOP_HOME) NUM_CORES=$(NUM_CORES) RELEASE_WITH_ASSERT=$(RELEASE_WITH_ASSERT) PLDM_EXTRA_MACRO="$(PLDM_EXTRA_MACRO)"
+
+pldm-run:
+	$(MAKE) -C ./difftest pldm-run SIM_TOP=SimTop DESIGN_DIR=$(NOOP_HOME) NUM_CORES=$(NUM_CORES) RELEASE_WITH_ASSERT=$(RELEASE_WITH_ASSERT) PLDM_EXTRA_ARGS="$(PLDM_EXTRA_ARGS)"
+
+pldm-debug:
+	$(MAKE) -C ./difftest pldm-debug SIM_TOP=SimTop DESIGN_DIR=$(NOOP_HOME) NUM_CORES=$(NUM_CORES) RELEASE_WITH_ASSERT=$(RELEASE_WITH_ASSERT) PLDM_EXTRA_ARGS="$(PLDM_EXTRA_ARGS)"
 
 include Makefile.test
 
