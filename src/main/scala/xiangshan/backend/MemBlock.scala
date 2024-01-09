@@ -343,7 +343,10 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
   val stExeWbReqs = storeUnits.head.io.stout +: VecInit(atomicWriteback +: storeUnits.drop(2).map(_.io.stout))
   io.mem_to_ooo.writeback <> loadUnits.map(_.io.ldout) ++ stExeWbReqs ++ VecInit(stdExeUnits.map(_.io.out))
   io.mem_to_ooo.otherFastWakeup := DontCare
-  io.mem_to_ooo.otherFastWakeup.take(2).zip(loadUnits.map(_.io.fast_uop)).foreach{case(a,b)=> a := b}
+  io.mem_to_ooo.otherFastWakeup.take(2).zip(loadUnits.map(_.io.fast_uop)).foreach{case(a,b)=> {
+    a.valid := b.valid
+    a.bits := RegNext(b.bits)
+  }}
   val stOut = io.mem_to_ooo.writeback.drop(exuParameters.LduCnt).dropRight(exuParameters.StuCnt)
 
   // prefetch to l1 req
