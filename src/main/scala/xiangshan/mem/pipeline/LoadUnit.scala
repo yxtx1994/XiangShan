@@ -516,8 +516,7 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   val s0_fast_rep_vaddr = io.fast_rep_in.bits.vaddr
   val s0_rep_vaddr      = io.replay.bits.vaddr
 
-  val s0_sel_fast_rep_vaddr = s0_ld_fast_rep_select
-  val s0_sel_rep_vaddr = s0_super_ld_rep_select || (s0_ld_rep_select && !s0_sel_fast_rep_vaddr)
+  val s0_sel_rep_vaddr = s0_super_ld_rep_valid || s0_ld_rep_valid
   val s0_sel_int_vaddr = s0_int_iss_valid &&
                          !s0_super_ld_rep_valid &&
                          !s0_ld_fast_rep_valid &&
@@ -528,7 +527,6 @@ class LoadUnit(implicit p: Parameters) extends XSModule
                          !s0_ld_rep_valid &&
                          !s0_int_iss_valid
   s0_vaddr := (Fill(VAddrBits, s0_sel_rep_vaddr     ) & s0_rep_vaddr     ) |
-              (Fill(VAddrBits, s0_sel_fast_rep_vaddr) & s0_fast_rep_vaddr) |
               (Fill(VAddrBits, s0_sel_int_vaddr     ) & s0_int_iss_vaddr ) |
               (Fill(VAddrBits, s0_sel_vec_vaddr     ) & s0_vec_iss_vaddr )
 
@@ -614,6 +612,7 @@ class LoadUnit(implicit p: Parameters) extends XSModule
 
   val s1_fast_rep_dly_kill = RegNext(io.fast_rep_in.bits.lateKill) && s1_in.isFastReplay
   val s1_fast_rep_dly_err =  RegNext(io.fast_rep_in.bits.delayedLoadError) && s1_in.isFastReplay
+  val s1_fast_rep_vaddr   = RegNext(io.fast_rep_in.bits.vaddr)
   val s1_l2l_fwd_dly_err  = RegNext(io.l2l_fwd_in.dly_ld_err) && s1_in.isFastPath
   val s1_dly_err          = s1_fast_rep_dly_err || s1_l2l_fwd_dly_err
   val s1_vaddr_hi         = Wire(UInt())
@@ -632,8 +631,8 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   val s1_sw_prf           = s1_prf && !s1_hw_prf
   val s1_tlb_memidx       = io.tlb.resp.bits.memidx
 
-  s1_vaddr_hi         := s1_in.vaddr(VAddrBits - 1, 6)
-  s1_vaddr_lo         := s1_in.vaddr(5, 0)
+  s1_vaddr_hi         := Mux(s1_in.isFastReplay, s1_fast_rep_vaddr(VAddrBits - 1, 6), s1_in.vaddr(VAddrBits - 1, 6))
+  s1_vaddr_lo         := Mux(s1_in.isFastReplay, s1_fast_rep_vaddr(5, 0), s1_in.vaddr(5, 0))
   s1_vaddr            := Cat(s1_vaddr_hi, s1_vaddr_lo)
   s1_paddr_dup_lsu    := Mux(s1_in.isFastReplay, s1_in.paddr, io.tlb.resp.bits.paddr(0))
   s1_paddr_dup_dcache := Mux(s1_in.isFastReplay, s1_in.paddr, io.tlb.resp.bits.paddr(1))
@@ -1016,7 +1015,7 @@ class LoadUnit(implicit p: Parameters) extends XSModule
     !io.lsq.forward.addrInvalidFast &&
     !(s1_nuke && !s1_sw_prf)
   ) && (s2_valid && s2_can_wakeup && !s2_mmio)
-  io.fast_uop.bits := RegNext(s1_out.uop)
+  io.fast_uop.bits := s1_out.uop
 
   //
   io.s2_ptr_chasing                    := RegEnable(s1_try_ptr_chasing && !s1_cancel_ptr_chasing, false.B, s1_fire)
