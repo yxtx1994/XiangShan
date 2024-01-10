@@ -511,25 +511,18 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   s0_sel_src := ParallelPriorityMux(s0_src_selector, s0_src_format)
 
   // select vaddr
-  val s0_int_iss_vaddr  = io.ldin.bits.src(0) + io.ld_sign_ext_imm
+  val s0_imm12 = io.ld_sign_ext_imm(11, 0)
+  val s0_saddr_lo = io.ldin.bits.src(0)(11,0) + Cat(0.U(1.W), s0_imm12(11, 0))
+  val s0_saddr_hi = Mux(s0_saddr_lo(12),
+    Mux(s0_imm12(11), io.ldin.bits.src(0)(VAddrBits-1, 12), io.ldin.bits.src(0)(VAddrBits-1, 12)+1.U),
+    Mux(s0_imm12(11), io.ldin.bits.src(0)(VAddrBits-1, 12)+SignExt(1.U, VAddrBits-12), io.ldin.bits.src(0)(VAddrBits-1, 12)),
+  )
+  val s0_int_iss_vaddr  = Cat(s0_saddr_hi, s0_saddr_lo(11,0)) // io.ldin.bits.src(0) + io.ld_sign_ext_imm
   val s0_vec_iss_vaddr  = WireInit(0.U(VAddrBits.W))
-  val s0_fast_rep_vaddr = io.fast_rep_in.bits.vaddr
   val s0_rep_vaddr      = io.replay.bits.vaddr
 
-  val s0_sel_rep_vaddr = s0_super_ld_rep_valid || s0_ld_rep_valid
-  val s0_sel_int_vaddr = s0_int_iss_valid &&
-                         !s0_super_ld_rep_valid &&
-                         !s0_ld_fast_rep_valid &&
-                         !s0_ld_rep_valid
-  val s0_sel_vec_vaddr = s0_vec_iss_valid &&
-                         !s0_super_ld_rep_valid &&
-                         !s0_ld_fast_rep_valid &&
-                         !s0_ld_rep_valid &&
-                         !s0_int_iss_valid
-  s0_vaddr := (Fill(VAddrBits, s0_sel_rep_vaddr     ) & s0_rep_vaddr     ) |
-              (Fill(VAddrBits, s0_sel_int_vaddr     ) & s0_int_iss_vaddr ) |
-              (Fill(VAddrBits, s0_sel_vec_vaddr     ) & s0_vec_iss_vaddr )
-
+  val s0_int_vec_vaddr = Mux(s0_int_iss_valid, s0_int_iss_vaddr, s0_vec_iss_vaddr)
+  s0_vaddr := Mux(s0_super_ld_rep_valid || s0_ld_rep_valid, s0_rep_vaddr, s0_int_vec_vaddr)
   // address align check
   val s0_addr_aligned = LookupTree(s0_sel_src.uop.ctrl.fuOpType(1, 0), List(
     "b00".U   -> true.B,                   //b
@@ -611,7 +604,7 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   s1_in   := RegEnable(s0_out, s0_fire)
 
   val s1_fast_rep_dly_kill = RegNext(io.fast_rep_in.bits.lateKill) && s1_in.isFastReplay
-  val s1_fast_rep_dly_err =  RegNext(io.fast_rep_in.bits.delayedLoadError) && s1_in.isFastReplay
+  val s1_fast_rep_dly_err = RegNext(io.fast_rep_in.bits.delayedLoadError) && s1_in.isFastReplay
   val s1_fast_rep_vaddr   = RegNext(io.fast_rep_in.bits.vaddr)
   val s1_l2l_fwd_dly_err  = RegNext(io.l2l_fwd_in.dly_ld_err) && s1_in.isFastPath
   val s1_dly_err          = s1_fast_rep_dly_err || s1_l2l_fwd_dly_err
@@ -1015,7 +1008,7 @@ class LoadUnit(implicit p: Parameters) extends XSModule
     !io.lsq.forward.addrInvalidFast &&
     !(s1_nuke && !s1_sw_prf)
   ) && (s2_valid && s2_can_wakeup && !s2_mmio)
-  io.fast_uop.bits := s1_out.uop
+  io.fast_uop.bits := RegNext(s1_in.uop)
 
   //
   io.s2_ptr_chasing                    := RegEnable(s1_try_ptr_chasing && !s1_cancel_ptr_chasing, false.B, s1_fire)
@@ -1128,8 +1121,17 @@ class LoadUnit(implicit p: Parameters) extends XSModule
     io.lsq.ldin.bits.rep_info.cause := VecInit(s3_sel_rep_cause.asBools)
   }
   val s3_wakeup_yet = RegNext(io.fast_uop.valid)
-  val s3_safe_wakeup = !s3_rep_info.dcache_miss || s3_wakeup_yet
-  val s3_safe_writeback = (s3_exception || s3_dly_ld_err || s3_safe_wakeup)
+  val s3_real_dcache_miss = RegNext(!(s2_out.rep_info.mem_amb ||
+                                      s2_out.rep_info.tlb_miss ||
+                                      s2_out.rep_info.fwd_fail ||
+                                      s2_out.rep_info.bank_conflict ||
+                                      s2_out.rep_info.wpu_fail ||
+                                      s2_out.rep_info.rar_nack ||
+                                      s2_out.rep_info.raw_nack ||
+                                      s2_out.rep_info.nuke)) && s3_in.rep_info.dcache_miss
+  val s3_safe_wakeup = s3_wakeup_yet || (s3_real_dcache_miss && !s3_fwd_frm_d_chan_valid)
+  val s3_excp_writeback = s3_exception || s3_dly_ld_err
+  val s3_safe_writeback = (s3_excp_writeback || s3_safe_wakeup)
 
   // Int load, if hit, will be writebacked at s3
   s3_out.valid                := s3_valid && s3_safe_writeback
