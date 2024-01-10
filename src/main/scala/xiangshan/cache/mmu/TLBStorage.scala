@@ -128,17 +128,9 @@ class TLBFA(
         resp.bits.perm(d) := perm_reg(0)
       }
     } else {
-      var ppn_sel = Fill(ppn_reg(0).getWidth, hitVecReg(0)) & ppn_reg(0).asUInt
-      var perm_sel = Fill(perm_reg(0).getWidth, hitVecReg(0)) & perm_reg(0).asUInt
-
-      for (i <- 1 until nWays) {
-        ppn_sel = ppn_sel | (Fill(ppn_reg(i).getWidth, hitVecReg(i)) & ppn_reg(i).asUInt)
-        perm_sel = perm_sel | (Fill(perm_reg(i).getWidth, hitVec(i)) & perm_reg(i).asUInt)
-      }
-
       for (d <- 0 until nDups) {
-        resp.bits.ppn(d) := ppn_sel.asTypeOf(ppn_reg(0).cloneType)
-        resp.bits.perm(d) := perm_sel.asTypeOf(perm_reg(0).cloneType)
+        resp.bits.ppn(d) := ParallelMux(hitVecReg zip ppn_reg)
+        resp.bits.perm(d) := ParallelMux(hitVecReg zip perm_reg)
       }
     }
 
