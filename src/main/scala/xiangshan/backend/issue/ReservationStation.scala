@@ -716,6 +716,12 @@ class ReservationStation(params: RSParams)(implicit p: Parameters) extends XSMod
     for (j <- 0 until params.numSrc) {
       s1_out(i).bits.src(j) := dataSelect.io.deqData(i)(j)
     }
+    if (params.isLoad) {
+      val lookahead_ofs = s1_out(i).bits.src(0)(13, 0) + s1_out(i).bits.uop.ctrl.imm(13, 0)
+      s1_out(i).bits.lookahead_ofs := lookahead_ofs(13, 6)
+    } else {
+      s1_out(i).bits.lookahead_ofs := DontCare
+    }
   }
 
   /**

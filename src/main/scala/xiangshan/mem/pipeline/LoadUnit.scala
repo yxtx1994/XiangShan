@@ -194,6 +194,7 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   val s0_fire          = s0_valid && s0_can_go
   val s0_out           = Wire(new LqWriteBundle)
   val s0_vpn           = Wire(UInt((VAddrBits-12).W))
+  val s0_dc_idx        = Wire(UInt(8.W))
   val s0_vaddr         = Wire(UInt(VAddrBits.W))
 
   // flow source bundle
@@ -234,7 +235,7 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   val s0_int_iss_valid       = io.ldin.valid // int flow first issue or software prefetch
   val s0_vec_iss_valid       = WireInit(false.B) // TODO
   val s0_l2l_fwd_valid       = io.l2l_fwd_in.valid
-  val s0_low_conf_prf_valid  = io.prefetch_req.valid && io.prefetch_req.bits.confidence === 0.U
+  val s0_low_conf_prf_valid  = WireInit(false.B) // io.prefetch_req.valid && io.prefetch_req.bits.confidence === 0.U
   dontTouch(s0_super_ld_rep_valid)
   dontTouch(s0_ld_fast_rep_valid)
   dontTouch(s0_ld_rep_valid)
@@ -322,7 +323,7 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   s0_kill := s0_ptr_chasing_canceled
 
   // prefetch related ctrl signal
-  io.canAcceptLowConfPrefetch  := s0_low_conf_prf_ready
+  io.canAcceptLowConfPrefetch  := false.B // s0_low_conf_prf_ready
   io.canAcceptHighConfPrefetch := s0_high_conf_prf_ready
 
   // query DTLB
@@ -496,7 +497,6 @@ class LoadUnit(implicit p: Parameters) extends XSModule
     s0_high_conf_prf_valid,
     s0_int_iss_valid,
     s0_vec_iss_valid,
-    s0_low_conf_prf_valid,
     (if (EnableLoadToLoadForward) s0_l2l_fwd_valid else true.B)
   )
   val s0_src_format = Seq(
@@ -506,33 +506,58 @@ class LoadUnit(implicit p: Parameters) extends XSModule
     fromPrefetchSource(io.prefetch_req.bits),
     fromIntIssueSource(io.ldin.bits),
     fromVecIssueSource(),
-    fromPrefetchSource(io.prefetch_req.bits),
     (if (EnableLoadToLoadForward) fromLoadToLoadSource(io.l2l_fwd_in) else fromNullSource())
   )
   s0_sel_src := ParallelPriorityMux(s0_src_selector, s0_src_format)
 
   // select vaddr
-  val s0_sel_rep_vaddr = s0_super_ld_rep_valid || s0_ld_rep_valid
-  val s0_sel_int_iss_vaddr = s0_int_iss_valid && !s0_sel_rep_vaddr
-  val s0_sel_vec_iss_vaddr = s0_vec_iss_valid && !(s0_sel_rep_vaddr || s0_int_iss_valid)
+  val s0_int_iss_vaddr = io.ldin.bits.src(0) + io.ld_sign_ext_imm
+  val s0_vec_iss_vaddr = WireInit(0.U(VAddrBits.W))
+  val s0_prf_vaddr = io.prefetch_req.bits.getVaddr()
+  val s0_rep_vaddr = io.replay.bits.vaddr
 
-  val s0_int_iss_vaddr  = io.ldin.bits.src(0) + io.ld_sign_ext_imm
-  val s0_vec_iss_vaddr  = WireInit(0.U(VAddrBits.W))
-  val s0_rep_vaddr      = io.replay.bits.vaddr
+  val s0_vaddr_selector = Seq(
+    s0_super_ld_rep_valid || s0_ld_rep_valid,
+    s0_high_conf_prf_valid,
+    s0_int_iss_valid,
+    s0_vec_iss_valid
+  )
+  val s0_vaddr_format = Seq(
+    s0_rep_vaddr,
+    s0_prf_vaddr,
+    s0_int_iss_vaddr,
+    s0_vec_iss_vaddr
+  )
+  s0_vaddr := ParallelPriorityMux(s0_vaddr_selector, s0_vaddr_format)
 
-  val s0_int_vec_vaddr = Mux(s0_int_iss_valid, s0_int_iss_vaddr, s0_vec_iss_vaddr)
-  s0_vaddr := Mux(s0_super_ld_rep_valid || s0_ld_rep_valid, s0_rep_vaddr, s0_int_vec_vaddr)
+  // select dcache index
+  val s0_int_iss_dc_idx = io.ldin.bits.lookahead_ofs
+  val s0_vec_iss_dc_idx = WireInit(0.U(8.W))
+  val s0_prf_dc_idx = s0_prf_vaddr(13, 6)
+  val s0_rep_dc_idx = s0_rep_vaddr(13, 6)
+  val s0_dc_idx_format = Seq(
+    s0_rep_dc_idx,
+    s0_prf_dc_idx,
+    s0_int_iss_dc_idx,
+    s0_vec_iss_dc_idx
+  )
+  s0_dc_idx := ParallelPriorityMux(s0_vaddr_selector, s0_dc_idx_format)
 
   // select vpn
   val s0_int_iss_vpn = s0_int_iss_vaddr(VAddrBits-1, 12)
   val s0_vec_iss_vpn = s0_vec_iss_vaddr(VAddrBits-1, 12)
   val s0_rep_vpn     = s0_rep_vaddr(VAddrBits-1, 12)
 
+  val s0_sel_rep_vpn = s0_super_ld_rep_valid || s0_ld_rep_valid
+  val s0_sel_int_iss_vpn = s0_int_iss_valid && !s0_sel_rep_vpn
+  val s0_sel_vec_iss_vpn = s0_vec_iss_valid && !(s0_sel_rep_vpn || s0_int_iss_valid)
+
   s0_vpn := Mux1H(Seq(
-      s0_sel_rep_vaddr -> s0_rep_vpn,
-      s0_sel_int_iss_vaddr -> s0_sel_int_iss_vaddr,
-      s0_sel_vec_iss_vaddr -> s0_sel_vec_iss_vaddr
+      s0_sel_int_iss_vpn -> s0_int_iss_vpn,
+      s0_sel_vec_iss_vpn-> s0_vec_iss_vpn,
+      s0_sel_rep_vpn -> s0_rep_vpn,
     ))
+
   // address align check
   val s0_addr_aligned = LookupTree(s0_sel_src.uop.ctrl.fuOpType(1, 0), List(
     "b00".U   -> true.B,                   //b
