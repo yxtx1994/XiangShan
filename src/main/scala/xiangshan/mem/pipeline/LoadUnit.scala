@@ -511,13 +511,7 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   s0_sel_src := ParallelPriorityMux(s0_src_selector, s0_src_format)
 
   // select vaddr
-  val s0_imm12 = io.ld_sign_ext_imm(11, 0)
-  val s0_saddr_lo = io.ldin.bits.src(0)(11,0) + Cat(0.U(1.W), s0_imm12(11, 0))
-  val s0_saddr_hi = Mux(s0_saddr_lo(12),
-    Mux(s0_imm12(11), io.ldin.bits.src(0)(VAddrBits-1, 12), io.ldin.bits.src(0)(VAddrBits-1, 12)+1.U),
-    Mux(s0_imm12(11), io.ldin.bits.src(0)(VAddrBits-1, 12)+SignExt(1.U, VAddrBits-12), io.ldin.bits.src(0)(VAddrBits-1, 12)),
-  )
-  val s0_int_iss_vaddr  = Cat(s0_saddr_hi, s0_saddr_lo(11,0)) // io.ldin.bits.src(0) + io.ld_sign_ext_imm
+  val s0_int_iss_vaddr  = io.ldin.bits.src(0) + io.ld_sign_ext_imm
   val s0_vec_iss_vaddr  = WireInit(0.U(VAddrBits.W))
   val s0_rep_vaddr      = io.replay.bits.vaddr
 
