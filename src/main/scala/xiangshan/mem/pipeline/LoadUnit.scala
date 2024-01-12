@@ -193,6 +193,7 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   val s0_can_go        = s1_ready
   val s0_fire          = s0_valid && s0_can_go
   val s0_out           = Wire(new LqWriteBundle)
+  val s0_vpn           = Wire(UInt((VAddrBits-12).W))
   val s0_vaddr         = Wire(UInt(VAddrBits.W))
 
   // flow source bundle
@@ -330,7 +331,7 @@ class LoadUnit(implicit p: Parameters) extends XSModule
                                          Mux(s0_sel_src.prf_wr, TlbCmd.write, TlbCmd.read),
                                          TlbCmd.read
                                        )
-  io.tlb.req.bits.vaddr              := s0_vaddr
+  io.tlb.req.bits.vaddr              := Cat(s0_vpn, 0.U(12.W))
   io.tlb.req.bits.size               := LSUOpType.size(s0_sel_src.uop.ctrl.fuOpType)
   io.tlb.req.bits.kill               := s0_kill
   io.tlb.req.bits.memidx.is_ld       := true.B
@@ -511,12 +512,27 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   s0_sel_src := ParallelPriorityMux(s0_src_selector, s0_src_format)
 
   // select vaddr
+  val s0_sel_rep_vaddr = s0_super_ld_rep_valid || s0_ld_rep_valid
+  val s0_sel_int_iss_vaddr = s0_int_iss_valid && !s0_sel_rep_vaddr
+  val s0_sel_vec_iss_vaddr = s0_vec_iss_valid && !(s0_sel_rep_vaddr || s0_int_iss_valid)
+
   val s0_int_iss_vaddr  = io.ldin.bits.src(0) + io.ld_sign_ext_imm
   val s0_vec_iss_vaddr  = WireInit(0.U(VAddrBits.W))
   val s0_rep_vaddr      = io.replay.bits.vaddr
 
   val s0_int_vec_vaddr = Mux(s0_int_iss_valid, s0_int_iss_vaddr, s0_vec_iss_vaddr)
   s0_vaddr := Mux(s0_super_ld_rep_valid || s0_ld_rep_valid, s0_rep_vaddr, s0_int_vec_vaddr)
+
+  // select vpn
+  val s0_int_iss_vpn = s0_int_iss_vaddr(VAddrBits-1, 12)
+  val s0_vec_iss_vpn = s0_vec_iss_vaddr(VAddrBits-1, 12)
+  val s0_rep_vpn     = s0_rep_vaddr(VAddrBits-1, 12)
+
+  s0_vpn := Mux1H(Seq(
+      s0_sel_rep_vaddr -> s0_rep_vpn,
+      s0_sel_int_iss_vaddr -> s0_sel_int_iss_vaddr,
+      s0_sel_vec_iss_vaddr -> s0_sel_vec_iss_vaddr
+    ))
   // address align check
   val s0_addr_aligned = LookupTree(s0_sel_src.uop.ctrl.fuOpType(1, 0), List(
     "b00".U   -> true.B,                   //b
@@ -927,7 +943,6 @@ class LoadUnit(implicit p: Parameters) extends XSModule
     s2_fwd_mask(i) := io.lsq.forward.forwardMask(i) || io.sbuffer.forwardMask(i)
     s2_fwd_data(i) := Mux(io.lsq.forward.forwardMask(i), io.lsq.forward.forwardData(i), io.sbuffer.forwardData(i))
   }
-
   XSDebug(s2_fire, "[FWD LOAD RESP] pc %x fwd %x(%b) + %x(%b)\n",
     s2_in.uop.cf.pc,
     io.lsq.forward.forwardData.asUInt, io.lsq.forward.forwardMask.asUInt,
@@ -1054,11 +1069,6 @@ class LoadUnit(implicit p: Parameters) extends XSModule
 
   s3_ready := true.B
   assert(!s2_valid || !(s3_kill || io.ldout.ready), "LoadUnit s2 never stall!")
-  // forwrad last beat
-  val (s3_fwd_frm_d_chan, s3_fwd_data_frm_d_chan) = io.tl_d_channel.forward(s2_valid && s2_out.forward_tlDchannel, s2_out.mshrid, s2_out.paddr)
-  val s3_fwd_data_valid = RegEnable(s2_fwd_data_valid, false.B, s2_valid)
-  val s3_fwd_frm_d_chan_valid = (s3_fwd_frm_d_chan && s3_fwd_data_valid)
-
   // s3 nuke check
   val s3_bad_nukes = Wire(Vec(StorePipelineWidth, Bool()))
   val s3_bad_nuke_detected = s3_bad_nukes.asUInt.orR || RegNext(s2_bad_nukes.asUInt.orR)
@@ -1079,7 +1089,6 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   val s3_fast_rep_canceled = io.replay.valid && io.replay.bits.forward_tlDchannel
   io.lsq.ldin.valid := s3_valid && (!s3_fast_rep || s3_fast_rep_canceled) && !s3_in.feedbacked
   io.lsq.ldin.bits := s3_in
-  io.lsq.ldin.bits.miss := s3_in.miss && !s3_fwd_frm_d_chan_valid
 
   /* <------- DANGEROUS: Don't change sequence here ! -------> */
   io.lsq.ldin.bits.data_wen_dup := s3_ld_valid_dup.asBools
@@ -1105,7 +1114,6 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   val s3_flushPipe = s3_ldld_rep_inst
 
   val s3_rep_info = WireInit(s3_in.rep_info)
-  s3_rep_info.dcache_miss   := s3_in.rep_info.dcache_miss && !s3_fwd_frm_d_chan_valid
   val s3_sel_rep_cause = PriorityEncoderOH(s3_rep_info.cause.asUInt)
 
   val s3_exception = RegNext(ExceptionNO.selectByFu(s2_out.uop.cf.exceptionVec, lduCfg).asUInt.orR)
@@ -1115,15 +1123,7 @@ class LoadUnit(implicit p: Parameters) extends XSModule
     io.lsq.ldin.bits.rep_info.cause := VecInit(s3_sel_rep_cause.asBools)
   }
   val s3_wakeup_yet = RegNext(io.fast_uop.valid)
-  val s3_real_dcache_miss = RegNext(!(s2_out.rep_info.mem_amb ||
-                                      s2_out.rep_info.tlb_miss ||
-                                      s2_out.rep_info.fwd_fail ||
-                                      s2_out.rep_info.bank_conflict ||
-                                      s2_out.rep_info.wpu_fail ||
-                                      s2_out.rep_info.rar_nack ||
-                                      s2_out.rep_info.raw_nack ||
-                                      s2_out.rep_info.nuke)) && s3_in.rep_info.dcache_miss
-  val s3_safe_wakeup = s3_wakeup_yet || (s3_real_dcache_miss && !s3_fwd_frm_d_chan_valid)
+  val s3_safe_wakeup = s3_wakeup_yet
   val s3_excp_writeback = s3_exception || s3_dly_ld_err
   val s3_safe_writeback = (s3_excp_writeback || s3_safe_wakeup)
 
@@ -1201,8 +1201,8 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   s3_ld_raw_data_frm_cache.forwardData          := RegEnable(s2_fwd_data, s2_valid)
   s3_ld_raw_data_frm_cache.uop                  := RegEnable(s2_out.uop, s2_valid)
   s3_ld_raw_data_frm_cache.addrOffset           := RegEnable(s2_out.paddr(3, 0), s2_valid)
-  s3_ld_raw_data_frm_cache.forward_D            := RegEnable(s2_fwd_frm_d_chan, false.B, s2_valid) || s3_fwd_frm_d_chan_valid
-  s3_ld_raw_data_frm_cache.forwardData_D        := Mux(s3_fwd_frm_d_chan_valid, s3_fwd_data_frm_d_chan, RegEnable(s2_fwd_data_frm_d_chan, s2_valid))
+  s3_ld_raw_data_frm_cache.forward_D            := RegEnable(s2_fwd_frm_d_chan, false.B, s2_valid)
+  s3_ld_raw_data_frm_cache.forwardData_D        := RegEnable(s2_fwd_data_frm_d_chan, s2_valid)
   s3_ld_raw_data_frm_cache.forward_mshr         := RegEnable(s2_fwd_frm_mshr, false.B, s2_valid)
   s3_ld_raw_data_frm_cache.forwardData_mshr     := RegEnable(s2_fwd_data_frm_mshr, s2_valid)
   s3_ld_raw_data_frm_cache.forward_result_valid := RegEnable(s2_fwd_data_valid, false.B, s2_valid)
@@ -1310,8 +1310,6 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   XSPerfAccumulate("s2_forward_req",               s2_fire && s2_in.forward_tlDchannel)
   XSPerfAccumulate("s2_successfully_forward_channel_D", s2_fire && s2_fwd_frm_d_chan && s2_fwd_data_valid)
   XSPerfAccumulate("s2_successfully_forward_mshr",      s2_fire && s2_fwd_frm_mshr && s2_fwd_data_valid)
-
-  XSPerfAccumulate("s3_fwd_frm_d_chan",            s3_valid && s3_fwd_frm_d_chan_valid)
 
   XSPerfAccumulate("load_to_load_forward",                      s1_try_ptr_chasing && !s1_ptr_chasing_canceled)
   XSPerfAccumulate("load_to_load_forward_try",                  s1_try_ptr_chasing)
