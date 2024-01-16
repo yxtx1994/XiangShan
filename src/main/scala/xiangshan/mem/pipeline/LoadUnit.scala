@@ -194,7 +194,6 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   val s0_fire          = s0_valid && s0_can_go
   val s0_out           = Wire(new LqWriteBundle)
   val s0_vpn           = Wire(UInt((VAddrBits-12).W))
-  val s0_dc_idx        = Wire(UInt(8.W))
   val s0_vaddr         = Wire(UInt(VAddrBits.W))
 
   // flow source bundle
@@ -531,17 +530,17 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   s0_vaddr := ParallelPriorityMux(s0_vaddr_selector, s0_vaddr_format)
 
   // select dcache index
-  val s0_int_iss_dc_idx = io.ldin.bits.lookahead_ofs
-  val s0_vec_iss_dc_idx = WireInit(0.U(8.W))
-  val s0_prf_dc_idx = s0_prf_vaddr(13, 6)
-  val s0_rep_dc_idx = s0_rep_vaddr(13, 6)
-  val s0_dc_idx_format = Seq(
-    s0_rep_dc_idx,
-    s0_prf_dc_idx,
-    s0_int_iss_dc_idx,
-    s0_vec_iss_dc_idx
-  )
-  s0_dc_idx := ParallelPriorityMux(s0_vaddr_selector, s0_dc_idx_format)
+  // val s0_int_iss_dc_idx = io.ldin.bits.lookahead_ofs
+  // val s0_vec_iss_dc_idx = WireInit(0.U(8.W))
+  // val s0_prf_dc_idx = s0_prf_vaddr(13, 6)
+  // val s0_rep_dc_idx = s0_rep_vaddr(13, 6)
+  // val s0_dc_idx_format = Seq(
+  //   s0_rep_dc_idx,
+  //   s0_prf_dc_idx,
+  //   s0_int_iss_dc_idx,
+  //   s0_vec_iss_dc_idx
+  // )
+  // s0_dc_idx := ParallelPriorityMux(s0_vaddr_selector, s0_dc_idx_format)
 
   // select vpn
   val s0_int_iss_vpn = s0_int_iss_vaddr(VAddrBits-1, 12)
@@ -917,7 +916,11 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   val s2_cache_tag_error = RegNext(io.csrCtrl.cache_error_enable) &&
                            io.dcache.resp.bits.tag_error
 
-  val s2_troublem        = !s2_weak_exception &&
+  val s2_weak_troublem = !s2_exception &&
+                           !s2_mmio &&
+                           !s2_prf &&
+                           !s2_in.delayedLoadError
+  val s2_troublem = !s2_weak_exception &&
                            !s2_mmio &&
                            !s2_prf &&
                            !s2_in.delayedLoadError
@@ -945,14 +948,14 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   val s2_data_fwded = s2_dcache_miss && (s2_full_fwd || s2_cache_tag_error)
 
   // ld-ld violation require
-  io.lsq.ldld_nuke_query.req.valid           := s2_valid && s2_troublem
+  io.lsq.ldld_nuke_query.req.valid           := s2_valid && s2_weak_troublem
   io.lsq.ldld_nuke_query.req.bits.uop        := s2_in.uop
   io.lsq.ldld_nuke_query.req.bits.mask       := s2_in.mask
   io.lsq.ldld_nuke_query.req.bits.paddr      := s2_in.paddr
   io.lsq.ldld_nuke_query.req.bits.data_valid := Mux(s2_full_fwd || s2_fwd_data_valid, true.B, !s2_dcache_miss)
 
   // st-ld violation require
-  io.lsq.stld_nuke_query.req.valid           := s2_valid && s2_troublem
+  io.lsq.stld_nuke_query.req.valid           := s2_valid && s2_weak_troublem
   io.lsq.stld_nuke_query.req.bits.uop        := s2_in.uop
   io.lsq.stld_nuke_query.req.bits.mask       := s2_in.mask
   io.lsq.stld_nuke_query.req.bits.paddr      := s2_in.paddr
@@ -1141,15 +1144,15 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   val s3_rep_info = WireInit(s3_in.rep_info)
   val s3_sel_rep_cause = PriorityEncoderOH(s3_rep_info.cause.asUInt)
 
-  val s3_exception = RegNext(ExceptionNO.selectByFu(s2_out.uop.cf.exceptionVec, lduCfg).asUInt.orR)
-   when (s3_exception || s3_dly_ld_err || s3_rep_frm_fetch || s3_bad_nuke_detected) {
+  val s3_exception = RegNext(s2_exception)
+   when (s3_dly_ld_err || s3_rep_frm_fetch || s3_bad_nuke_detected) {
     io.lsq.ldin.bits.rep_info.cause := 0.U.asTypeOf(s3_rep_info.cause.cloneType)
   } .otherwise {
     io.lsq.ldin.bits.rep_info.cause := VecInit(s3_sel_rep_cause.asBools)
   }
   val s3_wakeup_yet = RegNext(io.fast_uop.valid)
   val s3_safe_wakeup = s3_wakeup_yet
-  val s3_excp_writeback = s3_exception || s3_dly_ld_err
+  val s3_excp_writeback = s3_dly_ld_err
   val s3_safe_writeback = (s3_excp_writeback || s3_safe_wakeup)
 
   // Int load, if hit, will be writebacked at s3

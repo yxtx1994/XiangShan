@@ -345,7 +345,7 @@ class DebugBundle(implicit p: Parameters) extends XSBundle {
 
 class ExuInput(implicit p: Parameters) extends XSBundleWithMicroOp {
   val src = Vec(3, UInt(XLEN.W))
-  val lookahead_ofs= UInt(8.W)
+  // val lookahead_ofs= UInt(8.W)
 }
 
 class ExuOutput(implicit p: Parameters) extends XSBundleWithMicroOp {
