@@ -37,7 +37,7 @@ import coupledL2._
 
 class BaseConfig(n: Int) extends Config((site, here, up) => {
   case XLen => 64
-  case DebugOptionsKey => DebugOptions()
+  case DebugOptionsKey => DebugOptions(AlwaysBasicDiff=false, AlwaysBasicDB=false)
   case SoCParamsKey => SoCParameters()
   case PMParameKey => PMParameters()
   case XSTileKey => Seq.tabulate(n){ i => XSCoreParameters(HartId = i) }
@@ -283,7 +283,7 @@ class WithNKBL3(n: Int, ways: Int = 8, inclusive: Boolean = true, banks: Int = 1
           numCores = tiles.size
         )),
         reqField = Seq(utility.ReqSourceField()),
-        sramClkDivBy2 = true,
+        sramClkDivBy2 = false,
         sramDepthDiv = 4,
         tagECC = Some("secded"),
         dataECC = Some("secded"),
@@ -344,7 +344,7 @@ class FuzzConfig(dummy: Int = 0) extends Config(
 )
 
 class DefaultConfig(n: Int = 1) extends Config(
-  new WithNKBL3(16 * 1024, inclusive = false, banks = 4, ways = 16)
+  new WithNKBL3(3 * 1024, inclusive = false, banks = 1, ways = 6)
     ++ new WithNKBL2(2 * 512, inclusive = true, banks = 4)
     ++ new WithNKBL1D(64, ways = 4)
     ++ new BaseConfig(n)
