@@ -166,6 +166,11 @@ class VecStoreExuOutput(implicit p: Parameters) extends MemExuOutput with HasVLS
   val fieldIdx = UInt(fieldBits.W)
   val segmentIdx = UInt(elemIdxBits.W)
   val vaddr = UInt(VAddrBits.W)
+  // pack
+  val isPackage         = Bool()
+  val packageNum        = UInt(log2Up(VLENB).W)
+  val originAlignedType = UInt(alignTypeBits.W)
+  val alignedType       = UInt(alignTypeBits.W)
 }
 
 class VecUopBundle(implicit p: Parameters) extends VLSUBundleWithMicroOp {

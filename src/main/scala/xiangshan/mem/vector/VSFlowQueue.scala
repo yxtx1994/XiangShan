@@ -68,7 +68,7 @@ object VSFQFeedbackType {
 
 object GenNextSegmentFieldIdx extends VLSUConstants {
   def apply(fieldIdx: UInt, segmentIdx: UInt, nfields: UInt, offset: UInt): (UInt, UInt) = {
-    assert(offset <= 2.U, "not support offset > 2 in GenNextSegmentFieldIdx")
+    // assert(offset <= 2.U, "not support offset > 2 in GenNextSegmentFieldIdx")
     val newFieldIdx = Wire(UInt(fieldBits.W))
     val newSegmentIdx = Wire(UInt(elemIdxBits.W))
     
@@ -110,19 +110,19 @@ class VSFQFeedback (implicit p: Parameters) extends XSBundle {
   val exceptionVec = ExceptionVec()
 }
 
-class VecStorePipeBundle(implicit p: Parameters) extends MemExuInput(isVector = true) {
+class VecStorePipeBundle(implicit p: Parameters) extends MemExuInput(isVector = true) with HasVLSUParameters {
   val vaddr               = UInt(VAddrBits.W)
   val mask                = UInt((VLEN/8).W)
   val uop_unit_stride_fof = Bool()
-  val alignedType         = UInt(2.W) // ! MAGIC NUM: VLSUConstants.alignTypeBits
+  val alignedType         = UInt(alignTypeBits.W)
   val activative          = Bool()
   val flowPtr             = new VsFlowPtr
   val isLastElem          = Bool()
   
-  // pack
-  // val isPackage         = Bool()
-  // val packageNum        = UInt(log2Up(VLENB).W)
-  // val originAlignedType = UInt(alignTypeBits.W)
+  // package
+  val isPackage         = Bool()
+  val packageNum        = UInt(log2Up(VLENB).W)
+  val originAlignedType = UInt(alignTypeBits.W)
 }
 
 class VsFlowBundle(implicit p: Parameters) extends VecFlowBundle {
@@ -164,9 +164,9 @@ class VecStoreFlowEntry (implicit p: Parameters) extends VecFlowBundle {
     pipeBundle.activative           := this.activative
     pipeBundle.flowPtr              := thisPtr
     pipeBundle.isLastElem           := this.isLastElem
-    // pipeBundle.isPackage            := DontCare
-    // pipeBundle.packageNum           := DontCare
-    // pipeBundle.originAlignedType    := DontCare
+    pipeBundle.isPackage            := this.isPackage
+    pipeBundle.packageNum           := this.packageNum
+    pipeBundle.originAlignedType    := this.originAlignedType
     pipeBundle
   }
 
@@ -385,6 +385,11 @@ class VsFlowQueue(implicit p: Parameters) extends VLSUModule with HasCircularQue
         x.nSegments := thisFlowIn.nSegments
         x.fieldIdx := thisFlowIn.fieldIdx
         x.segmentIdx := thisFlowIn.segmentIdx
+        //package
+        x.isPackage := thisFlowIn.isPackage
+        x.packageNum := thisFlowIn.packageNum
+        x.originAlignedType := thisFlowIn.originAlignedType
+        x.alignedType       := thisFlowIn.alignedType
       }
 
       // ? Is there a more elegant way?
@@ -501,13 +506,14 @@ class VsFlowQueue(implicit p: Parameters) extends VLSUModule with HasCircularQue
   val allowWriteback = io.flowWriteback.map(_.ready)
   val doWriteback = Wire(Vec(VecStorePipelineWidth, Bool()))
   val writebackCount = PopCount(doWriteback)
+  val packageDequeue = io.flowWriteback.map(_.bits.isPackage).reduce(_ | _) // FIXME: more elegant
 
   for (i <- 0 until VecStorePipelineWidth) {
     val thisPtr = writebackPtr(i).value
     if (i == 0) {
       canWriteback(i) := flowFinished(thisPtr) && writebackPtr(i) < issuePtr(0)
     } else {
-      canWriteback(i) := flowFinished(thisPtr) && writebackPtr(i) < issuePtr(0) && canWriteback(i - 1)
+      canWriteback(i) := flowFinished(thisPtr) && writebackPtr(i) < issuePtr(0) && canWriteback(i - 1) && !packageDequeue // if port 0 is package, port 1 can't writeback
     }
     io.flowWriteback(i).valid := canWriteback(i)
   }
@@ -542,6 +548,11 @@ class VsFlowQueue(implicit p: Parameters) extends VLSUModule with HasCircularQue
   for (i <- 0 until VecStorePipelineWidth) {
     val thisPtr = writebackPtr(i).value
     val thisEntry = flowQueueEntries(thisPtr)
+    //package
+    val isPackage         = thisEntry.isPackage
+    val packageNum        = thisEntry.packageNum
+    val originAlignedType = thisEntry.originAlignedType
+    val alignedType       = thisEntry.alignedType
     io.flowWriteback(i).bits match { case x =>
       // From XSBundleWithMicroOp
       x.uop           := thisEntry.uop
@@ -557,6 +568,11 @@ class VsFlowQueue(implicit p: Parameters) extends VLSUModule with HasCircularQue
       x.segmentIdx := thisEntry.segmentIdx
       x.fieldIdx := thisEntry.fieldIdx
       x.vaddr := thisEntry.vaddr
+      //unit-strdide package 
+      x.isPackage         := isPackage
+      x.packageNum        := packageNum
+      x.originAlignedType := originAlignedType
+      x.alignedType       := alignedType
     }
   }
 
@@ -578,7 +594,14 @@ class VsFlowQueue(implicit p: Parameters) extends VLSUModule with HasCircularQue
   val allowEnsbuffer = io.sbuffer.map(_.ready)
   val doEnsbuffer = Wire(Vec(EnsbufferWidth, Bool()))
   val doRetire = Wire(Vec(EnsbufferWidth, Bool()))
-  val retireCount = PopCount(doRetire)
+  // unit-stride package handle
+  val retireCount = (retirePtr zip doRetire).map{
+    case (ptr, valid) => {
+      Mux(valid, flowQueueEntries(ptr.value).packageNum, 0.U(log2Up(VLENB).W))
+    }
+  }.fold(0.U(log2Up(VLENB).W))(_ + _) // retire original flow num
+  val retirePtrOffset = PopCount(doRetire) // retirePtr offset only use in unit-stride package
+  val packCounter = RegInit(0.U(log2Ceil(VLEN).W))
 
   val nfields = RegInit(0.U(fieldBits.W))
   val nSegments = RegInit(0.U(elemIdxBits.W))
@@ -687,13 +710,20 @@ class VsFlowQueue(implicit p: Parameters) extends VLSUModule with HasCircularQue
   io.uncache.resp.ready := uncacheState === us_resp
 
   // update retirePtr
+  val isPackageVec = (retirePtr zip doRetire).map{
+    case (ptr, valid) => {
+      flowQueueEntries(ptr.value).isPackage && valid
+    }
+  }
+  val isPackage = isPackageVec.reduce(_ || _) //only use in unit-stride package element
+  packCounter := packCounter + retireCount - retirePtrOffset //TODO
   for (i <- 0 until EnsbufferWidth) {
     val (newFieldIdx, newSegmentIdx) = 
       GenNextSegmentFieldIdx(curFieldIdx(i), curSegmentIdx(i), nfields, retireCount)
-    val nextOffset = GenFieldSegmentOffset(newFieldIdx, newSegmentIdx, nSegments)
+    val nextOffset = Mux(isPackage, (retirePtrOffset + i.U), GenFieldSegmentOffset(newFieldIdx, newSegmentIdx, nSegments))
     curFieldIdx(i) := newFieldIdx
     curSegmentIdx(i) := newSegmentIdx
-    retirePtr(i) := retireFirstPtr + nextOffset
+    retirePtr(i) := retireFirstPtr + nextOffset - packCounter
   }
 
   // Update ensbuffer state
@@ -704,6 +734,7 @@ class VsFlowQueue(implicit p: Parameters) extends VLSUModule with HasCircularQue
       ensbufferState := sDoing
       nfields := thisEntry.nfields
       nSegments := thisEntry.nSegments
+      packCounter := 0.U
       for (i <- 0 until EnsbufferWidth) {
         val (initFieldIdx, initSegmentIdx) = 
           GenNextSegmentFieldIdx(0.U, 0.U, thisEntry.nfields, i.U)
