@@ -113,7 +113,7 @@ class StoreUnit(implicit p: Parameters) extends XSModule with HasDCacheParameter
   val s0_saddr = Cat(saddr_hi, saddr_lo(11,0))
   val s0_vaddr = Mux(
     s0_use_flow_rs,
-    s0_saddr, 
+    s0_saddr,
     Mux(
       s0_use_flow_vec,
       s0_vecstin.vaddr,
@@ -444,7 +444,7 @@ class StoreUnit(implicit p: Parameters) extends XSModule with HasDCacheParameter
   val sx_last_in    = sx_in.takeRight(1).head
   sx_last_ready := !sx_last_valid || sx_last_in.uop.robIdx.needFlush(io.redirect) || io.stout.ready
 
-  io.stout.valid := sx_last_valid && !sx_last_in.uop.robIdx.needFlush(io.redirect) && isStore(sx_last_in.uop.fuType)
+  io.stout.valid := sx_last_valid
   io.stout.bits := sx_last_in
 
   XSError(io.stout.valid && !io.stout.bits.uop.robIdx.needFlush(io.redirect) && !io.stout.ready, "StoreUnit writeback never stall!")
