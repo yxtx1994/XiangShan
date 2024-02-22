@@ -203,7 +203,7 @@ trait PMAMethod extends PMAConst {
     addPMA(0x20000000L, a = 1, x = true, r = true)
     addPMA(0x10000000L, a = 1, x = true, r = true)
     addPMA(0)
-    while (cfg_list.length < 16) {
+    while (cfg_list.length < NumPMA) {
       addPMA(0)
     }
 

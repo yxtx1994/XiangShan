@@ -132,7 +132,7 @@ trait HaveAXI4MemPort {
   this: BaseSoC =>
   val device = new MemoryDevice
   val addrMask = (1L << PAddrBits) - 1L
-  val memRange = AddressSet(0x00000000L, addrMask).subtract(AddressSet(0x0L, 0x7fffffffL))
+  val memRange = AddressSet(0x00000000L, addrMask).subtract(AddressSet(0x0L, 0x7ffffffffL)).flatMap(_.subtract(AddressSet(0x800000000L, 0x3ffffffffL)))
   val memAXI4SlaveNode = AXI4SlaveNode(Seq(
     AXI4SlavePortParameters(
       slaves = Seq(
@@ -193,11 +193,11 @@ trait HaveAXI4PeripheralPort { this: BaseSoC =>
     resources = uartDevice.reg
   )
   val peripheralRange = AddressSet(
-    0x0, 0x7fffffff
+    0x0, 0x7ffffffffL
   ).subtract(onChipPeripheralRange).flatMap(x => x.subtract(uartRange))
   val peripheralNode = AXI4SlaveNode(Seq(AXI4SlavePortParameters(
     Seq(AXI4SlaveParameters(
-      address = peripheralRange,
+      address = peripheralRange :+ AddressSet(0x800000000L, 0x3ffffffffL),
       regionType = RegionType.UNCACHED,
       supportsRead = TransferSizes(1, 8),
       supportsWrite = TransferSizes(1, 8),
