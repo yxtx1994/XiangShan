@@ -412,13 +412,10 @@ class MissEntry(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheModule {
     req := miss_req_pipe_reg_bits.toMissReqWoStoreData()
     req_primary_fire := miss_req_pipe_reg_bits.toMissReqWoStoreData()
     req.addr := get_block_addr(miss_req_pipe_reg_bits.addr)
-<<<<<<< HEAD
 
-=======
     //only  load miss need keyword
     // isKeyword := Mux(miss_req_pipe_reg_bits.isFromLoad, miss_req_pipe_reg_bits.vaddr(5).asBool,false.B) 
     isKeyword := io.miss_req_pipe_reg.isKeyword()
->>>>>>> f4a21e908 ( MissQueue: delete keyword-first update logic when acquire from missentry)
     s_acquire := io.acquire_fired_by_pipe_reg
     s_grantack := false.B
 
@@ -464,9 +461,7 @@ class MissEntry(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheModule {
     assert(!(miss_req_pipe_reg_bits.isFromAMO || req.isFromAMO))
     // use the most uptodate meta
     req.req_coh := miss_req_pipe_reg_bits.req_coh
-<<<<<<< HEAD
 
-=======
     
     // isKeyword := Mux(
     //   before_req_sent_can_merge(req), 
@@ -476,7 +471,6 @@ class MissEntry(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheModule {
       before_req_sent_can_merge(req), 
       io.miss_req_pipe_reg.isKeyword(),
       isKeyword)
->>>>>>> f4a21e908 ( MissQueue: delete keyword-first update logic when acquire from missentry)
     assert(!miss_req_pipe_reg_bits.isFromPrefetch, "can not merge a prefetch req, late prefetch should always be ignored!")
 
     when (miss_req_pipe_reg_bits.isFromStore) {
@@ -598,8 +592,6 @@ class MissEntry(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheModule {
     )
   }
 
-<<<<<<< HEAD
-=======
   // def before_req_sent_merge_iskeyword(new_req: MissReqWoStoreData): Bool = {
   //   val need_check_isKeyword = acquire_not_sent && req.isFromLoad && new_req.isFromLoad && should_merge(new_req)
   //   val use_new_req_isKeyword = isAfter(req.lqIdx, new_req.lqIdx)
@@ -614,7 +606,6 @@ class MissEntry(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheModule {
   //     )
   // }
 
->>>>>>> f4a21e908 ( MissQueue: delete keyword-first update logic when acquire from missentry)
   // store can be merged before io.mem_acquire.fire
   // store can not be merged the cycle that io.mem_acquire.fire
   // load can be merged before io.mem_grant.fire
