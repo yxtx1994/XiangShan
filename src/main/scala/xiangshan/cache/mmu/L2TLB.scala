@@ -54,6 +54,7 @@ class L2TLBImp(outer: L2TLB)(implicit p: Parameters) extends PtwModule(outer) wi
     val ptwAddr = Output(UInt(64.W))
     val ptwData = Output(Vec(4, UInt(64.W)))
   })
+  dontTouch(io.ptwBus)
 
   /* Ptw processes multiple requests
    * Divide Ptw procedure into two stages: cache access ; mem access if cache miss
@@ -216,7 +217,8 @@ class L2TLBImp(outer: L2TLB)(implicit p: Parameters) extends PtwModule(outer) wi
   val mem_arb = Module(new Arbiter(new L2TlbMemReqBundle(), 2))
   mem_arb.io.in(0) <> ptw.io.mem.req
   mem_arb.io.in(1) <> llptw_mem.req
-  mem_arb.io.out.ready := mem.a.ready && !flush
+//  mem_arb.io.out.ready := mem.a.ready && !flush
+  mem_arb.io.out.ready := io.ptwBus.a.ready && !flush
 
   // assert, should not send mem access at same addr for twice.
   val last_resp_vpn = RegEnable(cache.io.refill.bits.req_info_dup(0).vpn, cache.io.refill.valid)
@@ -250,22 +252,37 @@ class L2TLBImp(outer: L2TLB)(implicit p: Parameters) extends PtwModule(outer) wi
     toAddress  = blockBytes_align(mem_arb.io.out.bits.addr),
     lgSize     = log2Up(l2tlbParams.blockBytes).U
   )._2
-  mem.a.bits := memRead
-  mem.a.valid := mem_arb.io.out.valid && !flush
-  mem.a.bits.user.lift(ReqSourceKey).foreach(_ := MemReqSource.PTW.id.U)
-  mem.d.ready := true.B
+  //coreRequest directBus
+  io.ptwBus.a.bits := memRead
+  io.ptwBus.a.valid := mem_arb.io.out.valid && !flush//io.out.valid && !flush
+  io.ptwBus.a.bits.user.lift(ReqSourceKey).foreach(_ := MemReqSource.PTW.id.U)
+  io.ptwBus.d.ready := true.B
+
+  //  mem.a.bits := memRead
+//  mem.a.valid := mem_arb.io.out.valid && !flush
+//  mem.a.bits.user.lift(ReqSourceKey).foreach(_ := MemReqSource.PTW.id.U)
+//  mem.d.ready := true.B
+
   // mem -> data buffer
   val refill_data = Reg(Vec(blockBits / l1BusDataWidth, UInt(l1BusDataWidth.W)))
-  val refill_helper = edge.firstlastHelper(mem.d.bits, mem.d.fire)
+//  val refill_helper = edge.firstlastHelper(mem.d.bits, mem.d.fire)
+  val refill_helper = edge.firstlastHelper(io.ptwBus.d.bits, io.ptwBus.d.valid & io.ptwBus.d.ready)
   val mem_resp_done = refill_helper._3
-  val mem_resp_from_mq = from_missqueue(mem.d.bits.source)
+  val mem_resp_from_mq = from_missqueue(io.ptwBus.d.bits.source)
+  when (io.ptwBus.d.valid) {
+    assert(io.ptwBus.d.bits.source <= l2tlbParams.llptwsize.U)
+    refill_data(refill_helper._4) := io.ptwBus.d.bits.data
+  }
+/*  val mem_resp_from_mq = from_missqueue(mem.d.bits.source)
   when (mem.d.valid) {
     assert(mem.d.bits.source <= l2tlbParams.llptwsize.U)
     refill_data(refill_helper._4) := mem.d.bits.data
-  }
+  }*/
+
   // refill_data_tmp is the wire fork of refill_data, but one cycle earlier
   val refill_data_tmp = WireInit(refill_data)
-  refill_data_tmp(refill_helper._4) := mem.d.bits.data
+//  refill_data_tmp(refill_helper._4) := mem.d.bits.data
+  refill_data_tmp(refill_helper._4) := io.ptwBus.d.bits.data
 
   // save only one pte for each id
   // (miss queue may can't resp to tlb with low latency, it should have highest priority, but diffcult to design cache)
@@ -285,34 +302,41 @@ class L2TLBImp(outer: L2TLB)(implicit p: Parameters) extends PtwModule(outer) wi
 
   // mem -> miss queue
   llptw_mem.resp.valid := mem_resp_done && mem_resp_from_mq
-  llptw_mem.resp.bits.id := DataHoldBypass(mem.d.bits.source, mem.d.valid)
+//  llptw_mem.resp.bits.id := DataHoldBypass(mem.d.bits.source, mem.d.valid)
+  llptw_mem.resp.bits.id := DataHoldBypass(io.ptwBus.d.bits.source, io.ptwBus.d.valid)
   // mem -> ptw
-  ptw.io.mem.req.ready := mem.a.ready
+//  ptw.io.mem.req.ready := mem.a.ready
+  ptw.io.mem.req.ready := io.ptwBus.a.ready
   ptw.io.mem.resp.valid := mem_resp_done && !mem_resp_from_mq
   ptw.io.mem.resp.bits := resp_pte.last
   // mem -> cache
   val refill_from_mq = mem_resp_from_mq
   val refill_level = Mux(refill_from_mq, 2.U, RegEnable(ptw.io.refill.level, 0.U, ptw.io.mem.req.fire))
-  val refill_valid = mem_resp_done && !flush && !flush_latch(mem.d.bits.source)
+  val refill_valid = mem_resp_done && !flush && !flush_latch(io.ptwBus.d.bits.source)
+//  val refill_valid = mem_resp_done && !flush && !flush_latch(mem.d.bits.source)
 
   cache.io.refill.valid := RegNext(refill_valid, false.B)
   cache.io.refill.bits.ptes := refill_data.asUInt
   cache.io.refill.bits.req_info_dup.map(_ := RegEnable(Mux(refill_from_mq, llptw_mem.refill, ptw.io.refill.req_info), refill_valid))
   cache.io.refill.bits.level_dup.map(_ := RegEnable(refill_level, refill_valid))
   cache.io.refill.bits.levelOH(refill_level, refill_valid)
-  cache.io.refill.bits.sel_pte_dup.map(_ := RegNext(sel_data(refill_data_tmp.asUInt, req_addr_low(mem.d.bits.source))))
+  cache.io.refill.bits.sel_pte_dup.map(_ := RegNext(sel_data(refill_data_tmp.asUInt, req_addr_low(io.ptwBus.d.bits.source))))
+//  cache.io.refill.bits.sel_pte_dup.map(_ := RegNext(sel_data(refill_data_tmp.asUInt, req_addr_low(mem.d.bits.source))))
 
   if (env.EnableDifftest) {
     val difftest_ptw_addr = RegInit(VecInit(Seq.fill(MemReqWidth)(0.U(PAddrBits.W))))
-    when (mem.a.valid) {
-      difftest_ptw_addr(mem.a.bits.source) := mem.a.bits.address
+    when (io.ptwBus.a.valid) {
+      difftest_ptw_addr(io.ptwBus.a.bits.source) := io.ptwBus.a.bits.address
+//    when (mem.a.valid) {
+//      difftest_ptw_addr(mem.a.bits.source) := mem.a.bits.address
     }
 
     val difftest = DifftestModule(new DiffRefillEvent, dontCare = true)
     difftest.coreid := io.hartId
     difftest.index := 2.U
     difftest.valid := cache.io.refill.valid
-    difftest.addr := difftest_ptw_addr(RegNext(mem.d.bits.source))
+    difftest.addr := difftest_ptw_addr(RegNext(io.ptwBus.d.bits.source))
+//    difftest.addr := difftest_ptw_addr(RegNext(mem.d.bits.source))
     difftest.data := refill_data.asTypeOf(difftest.data)
     difftest.idtfr := DontCare
   }
@@ -375,8 +399,10 @@ class L2TLBImp(outer: L2TLB)(implicit p: Parameters) extends PtwModule(outer) wi
   // mem -> control signal
   // waiting_resp and sfence_latch will be reset when mem_resp_done
   when (mem_resp_done) {
-    waiting_resp(mem.d.bits.source) := false.B
-    flush_latch(mem.d.bits.source) := false.B
+    waiting_resp(io.ptwBus.d.bits.source) := false.B
+    flush_latch(io.ptwBus.d.bits.source) := false.B
+//    waiting_resp(mem.d.bits.source) := false.B
+//    flush_latch(mem.d.bits.source) := false.B
   }
 
   def block_decoupled[T <: Data](source: DecoupledIO[T], sink: DecoupledIO[T], block_signal: Bool) = {
@@ -477,7 +503,8 @@ class L2TLBImp(outer: L2TLB)(implicit p: Parameters) extends PtwModule(outer) wi
     XSPerfAccumulate(s"mem_req_util${i}", PopCount(waiting_resp) === i.U)
   }
   XSPerfAccumulate("mem_cycle", PopCount(waiting_resp) =/= 0.U)
-  XSPerfAccumulate("mem_count", mem.a.fire)
+  XSPerfAccumulate("mem_count", io.ptwBus.a.valid & io.ptwBus.a.ready)
+//  XSPerfAccumulate("mem_count", mem.a.fire)
   for (i <- 0 until PtwWidth) {
     XSPerfAccumulate(s"llptw_ppn_af${i}", mergeArb(i).in(outArbMqPort).valid && mergeArb(i).in(outArbMqPort).bits.entry(OHToUInt(mergeArb(i).in(outArbMqPort).bits.pteidx)).af && !llptw_out.bits.af)
     XSPerfAccumulate(s"access_fault${i}", io.tlb(i).resp.fire && io.tlb(i).resp.bits.af)

@@ -67,6 +67,60 @@ case class DCacheParameters
   def dataCode: Code = Code.fromString(dataECC)
 }
 
+trait HasTlBundleParameters extends HasXSParameter {
+  val cacheParamsTl = dcacheParameters
+  val cfgTl = cacheParamsTl
+
+  //new l1d interface
+  val reqFields: Seq[BundleFieldBase] = Seq(
+    PrefetchField(),
+    ReqSourceField(),
+    VaddrField(VAddrBits - 6/*blockOffBits*/),
+  ) ++ cacheParamsTl.aliasBitsOpt.map(AliasField)
+  val echoFields: Seq[BundleFieldBase] = Seq(
+    IsKeywordField()
+  )
+  //Icache
+  val reqFieldsL1i: Seq[BundleFieldBase] = Seq(
+    PrefetchField(),
+    ReqSourceField()
+  ) ++ cacheParamsTl.aliasBitsOpt.map(AliasField)
+
+  val l1dTlBundleParameters = TLBundleParameters(
+    addressBits = 36,
+    dataBits    = 256/*blockBytes/2 * 8*/,
+    sourceBits  = 7, // sourceId = IdRange(0, nEntries + 1),
+    sinkBits    = 8,
+    sizeBits    = 3,
+    requestFields = reqFields,
+    echoFields = echoFields,
+    responseFields = Nil,
+    hasBCE = true)
+
+  val l1iTlBundleParameters = TLBundleParameters(
+    addressBits = 36,
+    dataBits    = 256/*blockBytes/2 * 8*/,
+    //IdRange(0, cacheParams.nMissEntries + cacheParams.nPrefetchEntries) =4
+    sourceBits  = 7,
+    sinkBits    = 8,
+    sizeBits    = 3,
+    requestFields = reqFieldsL1i,
+    echoFields = Nil,
+    responseFields = Nil,
+    hasBCE = false)
+
+  val ptwTlBundleParameters = TLBundleParameters(
+    addressBits = 36,
+    dataBits    = 256/*blockBytes/2 * 8*/,
+    sourceBits  = 7,  //MemReqWidth = l2tlbParams.llptwsize + 1 = 6+1 = 3
+    sinkBits    = 8,
+    sizeBits    = 3,
+    requestFields = Seq(ReqSourceField()),
+    echoFields = Nil,
+    responseFields = Nil,
+    hasBCE = false)
+}
+
 //           Physical Address
 // --------------------------------------
 // |   Physical Tag |  PIndex  | Offset |
@@ -751,7 +805,8 @@ class DCacheTopDownIO(implicit p: Parameters) extends DCacheBundle {
   val robHeadOtherReplay = Input(Bool())
 }
 
-class DCacheIO(implicit p: Parameters) extends DCacheBundle {
+class DCacheIO(implicit p: Parameters) extends DCacheBundle with HasDCacheParameters with HasTlBundleParameters{
+  val l1dBus = new TLBundle(l1dTlBundleParameters)
   val hartId = Input(UInt(8.W))
   val l2_pf_store_only = Input(Bool())
   val lsu = new DCacheToLsuIO
@@ -799,6 +854,7 @@ class DCache()(implicit p: Parameters) extends LazyModule with HasDCacheParamete
 class DCacheImp(outer: DCache) extends LazyModuleImp(outer) with HasDCacheParameters with HasPerfEvents with HasL1PrefetchSourceParameter {
 
   val io = IO(new DCacheIO)
+  dontTouch(io.l1dBus)
 
   val (bus, edge) = outer.clientNode.out.head
   require(bus.d.bits.data.getWidth == l1BusDataWidth, "DCache: tilelink width does not match")
@@ -1028,20 +1084,25 @@ class DCacheImp(outer: DCache) extends LazyModuleImp(outer) with HasDCacheParame
 
     ldu(i).io.bank_conflict_slow := bankedDataArray.io.bank_conflict_slow(i)
   })
- val isKeyword = bus.d.bits.echo.lift(IsKeywordKey).getOrElse(false.B)
+// val isKeyword = bus.d.bits.echo.lift(IsKeywordKey).getOrElse(false.B)
+ val isKeyword = io.l1dBus.d.bits.echo.lift(IsKeywordKey).getOrElse(false.B)
+
   (0 until LoadPipelineWidth).map(i => {
-    val (_, _, done, _) = edge.count(bus.d)
-    when(bus.d.bits.opcode === TLMessages.GrantData) {
-      io.lsu.forward_D(i).apply(bus.d.valid, bus.d.bits.data, bus.d.bits.source, isKeyword ^ done)
+    val (_, _, done, _) = edge.count(io.l1dBus.d)
+    when(io.l1dBus.d.bits.opcode === TLMessages.GrantData) {
+      io.lsu.forward_D(i).apply(io.l1dBus.d.valid, io.l1dBus.d.bits.data, io.l1dBus.d.bits.source, isKeyword ^ done)
+//      io.lsu.forward_D(i).apply(bus.d.valid, bus.d.bits.data, bus.d.bits.source, isKeyword ^ done)
    //   io.lsu.forward_D(i).apply(bus.d.valid, bus.d.bits.data, bus.d.bits.source,done)
     }.otherwise {
       io.lsu.forward_D(i).dontCare()
     }
   })
   // tl D channel wakeup
-  val (_, _, done, _) = edge.count(bus.d)
-  when (bus.d.bits.opcode === TLMessages.GrantData || bus.d.bits.opcode === TLMessages.Grant) {
-    io.lsu.tl_d_channel.apply(bus.d.valid, bus.d.bits.data, bus.d.bits.source, done)
+  val (_, _, done, _) = edge.count(io.l1dBus.d)
+  when (io.l1dBus.d.bits.opcode === TLMessages.GrantData || io.l1dBus.d.bits.opcode === TLMessages.Grant) {
+    io.lsu.tl_d_channel.apply(io.l1dBus.d.valid, io.l1dBus.d.bits.data, io.l1dBus.d.bits.source, done)
+//  when (bus.d.bits.opcode === TLMessages.GrantData || bus.d.bits.opcode === TLMessages.Grant) {
+//    io.lsu.tl_d_channel.apply(bus.d.valid, bus.d.bits.data, bus.d.bits.source, done)
   } .otherwise {
     io.lsu.tl_d_channel.dontCare()
   }
@@ -1205,16 +1266,23 @@ class DCacheImp(outer: DCache) extends LazyModuleImp(outer) with HasDCacheParame
   io.lsu.lsq <> missQueue.io.refill_to_ldq
 
   // tilelink stuff
-  bus.a <> missQueue.io.mem_acquire
-  bus.e <> missQueue.io.mem_finish
-  missQueue.io.probe_addr := bus.b.bits.address
+//  bus.a <> missQueue.io.mem_acquire
+//  bus.e <> missQueue.io.mem_finish
+//  missQueue.io.probe_addr := bus.b.bits.address
+
+  // tilelink direct i/f with L2
+  io.l1dBus.a <> missQueue.io.mem_acquire
+  io.l1dBus.e <> missQueue.io.mem_finish
+  missQueue.io.probe_addr := io.l1dBus.b.bits.address
+  io.l1dBus.b.ready := true.B
 
   missQueue.io.main_pipe_resp := RegNext(mainPipe.io.atomic_resp)
 
   //----------------------------------------
   // probe
   // probeQueue.io.mem_probe <> bus.b
-  block_decoupled(bus.b, probeQueue.io.mem_probe, missQueue.io.probe_block)
+//  block_decoupled(bus.b, probeQueue.io.mem_probe, missQueue.io.probe_block)
+  block_decoupled(io.l1dBus.b, probeQueue.io.mem_probe, missQueue.io.probe_block)
   probeQueue.io.lrsc_locked_block <> mainPipe.io.lrsc_locked_block
   probeQueue.io.update_resv_set <> mainPipe.io.update_resv_set
 
@@ -1302,7 +1370,7 @@ class DCacheImp(outer: DCache) extends LazyModuleImp(outer) with HasDCacheParame
   // add a queue between MainPipe and WritebackUnit to reduce MainPipe stalls due to WritebackUnit busy
 
   wb.io.req <> mainPipe.io.wb
-  bus.c     <> wb.io.mem_release
+  io.l1dBus.c <> wb.io.mem_release
   wb.io.release_wakeup := refillPipe.io.release_wakeup
   wb.io.release_update := mainPipe.io.release_update
   wb.io.probe_ttob_check_req <> mainPipe.io.probe_ttob_check_req
@@ -1324,13 +1392,18 @@ class DCacheImp(outer: DCache) extends LazyModuleImp(outer) with HasDCacheParame
   wb.io.mem_grant.bits  := DontCare
 
   // in L1DCache, we ony expect Grant[Data] and ReleaseAck
-  bus.d.ready := false.B
-  when (bus.d.bits.opcode === TLMessages.Grant || bus.d.bits.opcode === TLMessages.GrantData) {
-    missQueue.io.mem_grant <> bus.d
-  } .elsewhen (bus.d.bits.opcode === TLMessages.ReleaseAck) {
-    wb.io.mem_grant <> bus.d
+  io.l1dBus.d.ready := false.B
+//  when (bus.d.bits.opcode === TLMessages.Grant || bus.d.bits.opcode === TLMessages.GrantData) {
+  when (io.l1dBus.d.bits.opcode === TLMessages.Grant || io.l1dBus.d.bits.opcode === TLMessages.GrantData) {
+    missQueue.io.mem_grant <> io.l1dBus.d
+//    missQueue.io.mem_grant <> bus.d
+//  } .elsewhen (bus.d.bits.opcode === TLMessages.ReleaseAck) {
+  } .elsewhen (io.l1dBus.d.bits.opcode === TLMessages.ReleaseAck) {
+    wb.io.mem_grant <> io.l1dBus.d
+//    wb.io.mem_grant <> bus.d
   } .otherwise {
-    assert (!bus.d.fire)
+//    assert (!bus.d.fire)
+    assert (!(io.l1dBus.d.valid & io.l1dBus.d.ready))
   }
 
   //----------------------------------------
@@ -1406,7 +1479,7 @@ class DCacheImp(outer: DCache) extends LazyModuleImp(outer) with HasDCacheParame
   //----------------------------------------
   // assertions
   // dcache should only deal with DRAM addresses
-  when (bus.a.fire) {
+/*  when (bus.a.fire) {
     assert(bus.a.bits.address >= 0x80000000L.U)
   }
   when (bus.b.fire) {
@@ -1415,7 +1488,16 @@ class DCacheImp(outer: DCache) extends LazyModuleImp(outer) with HasDCacheParame
   when (bus.c.fire) {
     assert(bus.c.bits.address >= 0x80000000L.U)
   }
-
+ */
+ when (io.l1dBus.a.valid & io.l1dBus.a.ready) {
+    assert(io.l1dBus.a.bits.address >= 0x80000000L.U)
+  }
+ when (io.l1dBus.b.valid & io.l1dBus.b.ready) {
+    assert(io.l1dBus.b.bits.address >= 0x80000000L.U)
+  }
+ when (io.l1dBus.c.valid & io.l1dBus.c.ready) {
+    assert(io.l1dBus.c.bits.address >= 0x80000000L.U)
+  }
   //----------------------------------------
   // utility functions
   def block_decoupled[T <: Data](source: DecoupledIO[T], sink: DecoupledIO[T], block_signal: Bool) = {
@@ -1507,6 +1589,7 @@ class DCacheWrapper()(implicit p: Parameters) extends LazyModule with HasXSParam
 
   class DCacheWrapperImp(wrapper: LazyModule) extends LazyModuleImp(wrapper) with HasPerfEvents {
     val io = IO(new DCacheIO)
+    dontTouch(io.l1dBus)
     val perfEvents = if (!useDcache) {
       // a fake dcache which uses dpi-c to access memory, only for debug usage!
       val fake_dcache = Module(new FakeDCache())

@@ -480,8 +480,9 @@ class ICacheDataArray(implicit p: Parameters) extends ICacheArray
 }
 
 
-class ICacheIO(implicit p: Parameters) extends ICacheBundle
-{
+class ICacheIO(implicit p: Parameters) extends ICacheBundle with HasTlBundleParameters
+ {
+  val l1iBus      = new TLBundle(l1iTlBundleParameters)
   val hartId = Input(UInt(8.W))
   val prefetch    = Flipped(new FtqPrefechBundle)
   val stop        = Input(Bool())
@@ -518,6 +519,7 @@ class ICache()(implicit p: Parameters) extends LazyModule with HasICacheParamete
 
 class ICacheImp(outer: ICache) extends LazyModuleImp(outer) with HasICacheParameters with HasPerfEvents {
   val io = IO(new ICacheIO)
+  dontTouch(io.l1iBus)
 
   println("ICache:")
   println("  ICacheSets: "          + cacheParams.nSets)
@@ -613,13 +615,20 @@ class ICacheImp(outer: ICache) extends LazyModuleImp(outer) with HasICacheParame
   missUnit.io.fdip_acquire <> fdipPrefetch.io.mem_acquire
   missUnit.io.fdip_grant   <> fdipPrefetch.io.mem_grant
 
-  bus.b.ready := false.B
-  bus.c.valid := false.B
-  bus.c.bits  := DontCare
-  bus.e.valid := false.B
-  bus.e.bits  := DontCare
+//  bus.b.ready := false.B
+//  bus.c.valid := false.B
+//  bus.c.bits  := DontCare
+//  bus.e.valid := false.B
+//  bus.e.bits  := DontCare
 
-  bus.a <> missUnit.io.mem_acquire
+  io.l1iBus.b.ready := false.B
+  io.l1iBus.c.valid := false.B
+  io.l1iBus.c.bits  := DontCare
+  io.l1iBus.e.valid := false.B
+  io.l1iBus.e.bits  := DontCare
+
+//  bus.a <> missUnit.io.mem_acquire
+  io.l1iBus.a <> missUnit.io.mem_acquire
 
   // connect bus d
   missUnit.io.mem_grant.valid := false.B
@@ -631,8 +640,10 @@ class ICacheImp(outer: ICache) extends LazyModuleImp(outer) with HasICacheParame
 
 
   mainPipe.io.fetch.req <> io.fetch.req
-  bus.d.ready := false.B
-  missUnit.io.mem_grant <> bus.d
+  io.l1iBus.d.ready := false.B
+  missUnit.io.mem_grant <> io.l1iBus.d
+//  bus.d.ready := false.B
+//  missUnit.io.mem_grant <> bus.d
 
   // fencei connect
   metaArray.io.fencei := io.fencei

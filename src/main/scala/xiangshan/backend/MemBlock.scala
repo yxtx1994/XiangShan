@@ -24,6 +24,7 @@ import freechips.rocketchip.diplomacy.{BundleBridgeSource, LazyModule, LazyModul
 import freechips.rocketchip.interrupts.{IntSinkNode, IntSinkPortSimple}
 import freechips.rocketchip.tile.HasFPUParameters
 import freechips.rocketchip.tilelink._
+import freechips.rocketchip.util.{BundleFieldBase, UIntToOH1}
 import coupledL2.PrefetchRecv
 import utils._
 import utility._
@@ -191,6 +192,7 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
   with HasPerfEvents
   with HasL1PrefetchSourceParameter
   with HasCircularQueuePtrHelper
+  with HasTlBundleParameters
 {
 
   val io = IO(new Bundle {
@@ -239,7 +241,12 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
     val outer_l2_pf_enable = Output(Bool())
     // val inner_hc_perfEvents = Output(Vec(numPCntHc * coreParams.L2NBanks, new PerfEvent))
     // val outer_hc_perfEvents = Input(Vec(numPCntHc * coreParams.L2NBanks, new PerfEvent))
+        //l1-l2 coreRuest i/f
+    val l1dBus = new TLBundle(l1dTlBundleParameters)
+    val ptwBus = new TLBundle(ptwTlBundleParameters)
   })
+  dontTouch(io.l1dBus)
+  dontTouch(io.ptwBus)
 
   // reset signals of frontend & backend are generated in memblock
   val reset_io_frontend = IO(Output(Reset()))
@@ -264,6 +271,11 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
 
   private val dcache = outer.dcache.module
   val uncache = outer.uncache.module
+
+  //l1-l2 coreRuest i/f
+  private val ptwl2 = outer.ptw.module
+  io.l1dBus <> dcache.io.l1dBus
+  io.ptwBus <> ptwl2.io.ptwBus
 
   val delayedDcacheRefill = RegNext(dcache.io.lsu.lsq)
 

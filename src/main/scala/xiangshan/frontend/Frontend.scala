@@ -25,6 +25,9 @@ import xiangshan._
 import xiangshan.backend.fu.{PFEvent, PMP, PMPChecker,PMPReqBundle}
 import xiangshan.cache.mmu._
 import xiangshan.frontend.icache._
+import freechips.rocketchip.tilelink._
+import xiangshan.cache.{HasTlBundleParameters}
+import xiangshan.cache._
 
 
 class Frontend()(implicit p: Parameters) extends LazyModule with HasXSParameter {
@@ -38,8 +41,9 @@ class Frontend()(implicit p: Parameters) extends LazyModule with HasXSParameter 
 
 
 class FrontendImp (outer: Frontend) extends LazyModuleImp(outer)
-  with HasXSParameter
-  with HasPerfEvents
+    with HasXSParameter
+    with HasPerfEvents
+    with HasTlBundleParameters
 {
   val io = IO(new Bundle() {
     val hartId = Input(UInt(8.W))
@@ -62,6 +66,8 @@ class FrontendImp (outer: Frontend) extends LazyModuleImp(outer)
     val debugTopDown = new Bundle {
       val robHeadVaddr = Flipped(Valid(UInt(VAddrBits.W)))
     }
+    //l1-l2 CoreReuest i/f
+    val l1iBus = TLBundle(l1iTlBundleParameters)
   })
 
   //decouped-frontend modules
@@ -84,6 +90,9 @@ class FrontendImp (outer: Frontend) extends LazyModuleImp(outer)
   val tlbCsr = DelayN(io.tlbCsr, 2)
   val csrCtrl = DelayN(io.csrCtrl, 2)
   val sfence = RegNext(RegNext(io.sfence))
+
+  //l1-l2 CoreReuest i/f
+  io.l1iBus <> icache.io.l1iBus
 
   // trigger
   ifu.io.frontendTrigger := csrCtrl.frontend_trigger
