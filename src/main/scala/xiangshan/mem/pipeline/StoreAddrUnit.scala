@@ -245,6 +245,22 @@ class StoreAddrUnit(implicit p: Parameters) extends XSModule with HasDCacheParam
     // printf("Store idx = %d\n", s2_tlb_memidx.idx)
     s2_out.uop.debugInfo.tlbRespTime := GTimer()
   }
+  // RegNext prefetch train for better timing
+  // ** Now, prefetch train is valid at store s3 **
+  val prefetch_train_valid = WireInit(false.B)
+  prefetch_train_valid := s2_valid && io.dcache.resp.fire && !s2_out.mmio && !s2_in.tlbMiss && !s2_in.isHWPrefetch
+  if (EnableStorePrefetchSMS) {
+    io.prefetch_train.valid := GatedValidRegNext(prefetch_train_valid)
+    io.prefetch_train.bits.fromLsPipelineBundle(s2_in, latch = true, enable = prefetch_train_valid)
+  } else {
+    io.prefetch_train.valid := false.B
+    io.prefetch_train.bits.fromLsPipelineBundle(s2_in, latch = true, enable = false.B)
+  }
+  // override miss bit
+  io.prefetch_train.bits.miss := RegEnable(io.dcache.resp.bits.miss, prefetch_train_valid)
+  // TODO: add prefetch and access bit
+  io.prefetch_train.bits.meta_prefetch := false.B
+  io.prefetch_train.bits.meta_access := false.B
 
   // Pipeline
   // --------------------------------------------------------------------------------
