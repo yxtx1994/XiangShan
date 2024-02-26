@@ -309,20 +309,6 @@ class StoreAddrUnit(implicit p: Parameters) extends XSModule with HasDCacheParam
   io.stld_nuke_query.req.bits.paddr  := s3_in.paddr
   io.stld_nuke_query.req.bits.mask   := s3_in.mask
 
-  // RegNext prefetch train for better timing
-  // ** Now, prefetch train is valid at store s4 **
-  io.prefetch_train.bits.fromLsPipelineBundle(s3_in, latch = true)
-  // override miss bit
-  io.prefetch_train.bits.miss := RegNext(io.dcache.resp.bits.miss)
-  // TODO: add prefetch and access bit
-  io.prefetch_train.bits.meta_prefetch := false.B
-  io.prefetch_train.bits.meta_access := false.B
-  if(EnableStorePrefetchSMS) {
-    io.prefetch_train.valid := RegNext(s3_valid && io.dcache.resp.fire && !s3_out.mmio && !s3_in.tlbMiss && !s3_in.isHWPrefetch)
-  }else {
-    io.prefetch_train.valid := false.B
-  }
-
   // Pipeline
   // --------------------------------------------------------------------------------
   // stage 4
