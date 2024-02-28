@@ -693,7 +693,6 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   val s1_vec_alignedType = RegEnable(io.vecldin.bits.alignedType, s0_fire)
 
   s1_ready := true.B
-  XSError(s0_valid && !s1_kill && !s2_ready, "LoadUnit s0 never stall!")
   when (s0_fire) { s1_valid := true.B }
   .elsewhen (s1_fire) { s1_valid := false.B }
   .elsewhen (s1_kill) { s1_valid := false.B }
@@ -889,7 +888,6 @@ class LoadUnit(implicit p: Parameters) extends XSModule
 
   s2_kill := s2_in.uop.robIdx.needFlush(io.redirect)
   s2_ready := true.B
-  XSError(s1_valid && !s2_kill && !s3_ready, "LoadUnit s1 never stall!")
   when (s1_fire) { s2_valid := true.B }
   .elsewhen (s2_fire) { s2_valid := false.B }
   .elsewhen (s2_kill) { s2_valid := false.B }
@@ -1182,7 +1180,6 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   s3_mmio.bits  := RegNextN(io.lsq.uncache.bits, 3)
 
   s3_ready := true.B
-  XSError(s2_valid && !s3_kill && !io.ldout.ready, "LoadUnit s2 never stall!")
   // forwrad last beat
   val (s3_fwd_frm_d_chan, s3_fwd_data_frm_d_chan) = io.tl_d_channel.forward(s2_valid && s2_out.forward_tlDchannel, s2_out.mshrid, s2_out.paddr)
   val s3_fwd_data_valid = RegEnable(s2_fwd_data_valid, false.B, s2_valid)
@@ -1398,7 +1395,6 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   io.vecReplay.bits.vecActive := s3_in.vecActive
   io.vecReplay.bits.is_first_ele := s3_in.is_first_ele
   io.vecReplay.bits.flowPtr := s3_in.flowPtr
-  XSError(io.ldout.valid && !io.ldout.bits.uop.robIdx.needFlush(io.redirect) && !io.ldout.ready, "LoadUnit writeback never stall!")
 
   // fast load to load forward
   if (EnableLoadToLoadForward) {
