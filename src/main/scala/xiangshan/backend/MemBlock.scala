@@ -387,14 +387,14 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
   hybridUnits.zipWithIndex.map(x => x._1.suggestName("HybridUnit_"+x._2))
   val atomicsUnit = Module(new AtomicsUnit)
 
-  val ldaWritebackOverride  = Mux(atomicsUnit.io.out.valid, atomicsUnit.io.out.bits, loadUnits.head.io.ldout.bits)
+  val ldaWritebackOverride  = Mux(atomicsUnit.io.out.valid, atomicsUnit.io.out.bits, loadUnits(1).io.ldout.bits)
   val ldaOut = Wire(Decoupled(new MemExuOutput))
-  ldaOut.valid := atomicsUnit.io.out.valid || loadUnits.head.io.ldout.valid
+  ldaOut.valid := atomicsUnit.io.out.valid || loadUnits(1).io.ldout.valid
   ldaOut.bits  := ldaWritebackOverride
   atomicsUnit.io.out.ready := ldaOut.ready
-  loadUnits.head.io.ldout.ready := ldaOut.ready
+  loadUnits(1).io.ldout.ready := ldaOut.ready
 
-  val ldaExeWbReqs = ldaOut +: loadUnits.tail.map(_.io.ldout)
+  val ldaExeWbReqs = VecInit(Seq(loadUnits.head.io.ldout, ldaOut)) ++ loadUnits.drop(2).map(_.io.ldout)
   io.mem_to_ooo.writebackLda <> ldaExeWbReqs
   io.mem_to_ooo.writebackSta <> storeUnits.map(_.io.stout)
   io.mem_to_ooo.writebackStd <> stdExeUnits.map(_.io.out)
