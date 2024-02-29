@@ -316,8 +316,8 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
 
   println("Enable 3-load and 3-store: " + Enable3Load3Store)
   val loadUnits = Seq.fill(LduCnt)(Module(new LoadUnit))
-  val storeUnits = Seq.fill(StaCnt)(Module(new StoreUnit))
-  val stdExeUnits = Seq.fill(StdCnt)(Module(new MemExeUnit(backendParams.memSchdParams.get.issueBlockParams.find(_.StdCnt != 0).get.exuBlockParams.head)))
+  val storeUnits = Seq.fill(StaCnt)(Module(new StoreAddrUnit))
+  val stdExeUnits = Seq.fill(StdCnt)(Module(new StoreDataUnit))
   val hybridUnits = Seq.fill(HyuCnt)(Module(new HybridUnit)) // Todo: replace it with HybridUnit
   val stData = stdExeUnits.map(_.io.out)
   val exeUnits = loadUnits ++ storeUnits
@@ -1014,7 +1014,7 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
 
   // StoreUnit
   for (i <- 0 until StdCnt) {
-    stdExeUnits(i).io.flush <> redirect
+    stdExeUnits(i).io.redirect <> redirect
     stdExeUnits(i).io.in.valid := io.ooo_to_mem.issueStd(i).valid
     io.ooo_to_mem.issueStd(i).ready := stdExeUnits(i).io.in.ready
     stdExeUnits(i).io.in.bits := io.ooo_to_mem.issueStd(i).bits
