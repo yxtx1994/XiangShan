@@ -294,17 +294,24 @@ class OthersEntryVecMemAddr()(implicit p: Parameters, params: IssueBlockParams) 
   val vecMemStatus = entryReg.status.vecMem.get
   val vecMemStatusNext = entryRegNext.status.vecMem.get
   val fromLsq = io.fromLsq.get
+  val isLqHead = RegInit(false.B)
+  val isLqHeadNext = entryRegNext.status.vecMem.get.lqIdx <= fromLsq.lqDeqPtr
 
   when(io.enq.valid && io.transSel) {
     vecMemStatusNext.sqIdx := io.enq.bits.status.vecMem.get.sqIdx
     vecMemStatusNext.lqIdx := io.enq.bits.status.vecMem.get.lqIdx
+    isLqHead := false.B
   }.otherwise {
     vecMemStatusNext := vecMemStatus
+    isLqHead := isLqHead
+  }
+  when(isLqHeadNext){
+    isLqHead := true.B
   }
 
   val isLsqHead = {
     // if (params.isVecLdAddrIQ)
-      entryRegNext.status.vecMem.get.lqIdx <= fromLsq.lqDeqPtr &&
+      (isLqHead || isLqHeadNext) &&
     // else
       entryRegNext.status.vecMem.get.sqIdx <= fromLsq.sqDeqPtr
   }
