@@ -1048,7 +1048,7 @@ class LoadUnit(implicit p: Parameters) extends XSModule
 
   io.ldCancel.ld1Cancel.valid := s2_valid && s2_out.isFirstIssue && ( // issued from IQ
     s2_out.rep_info.need_rep || s2_mmio                               // exe fail or is mmio
-  )
+  ) && !s2_isvec // not vector
   io.ldCancel.ld1Cancel.bits := s2_out.deqPortIdx
 
   // fast wakeup
@@ -1225,7 +1225,7 @@ class LoadUnit(implicit p: Parameters) extends XSModule
 
   io.ldCancel.ld2Cancel.valid := s3_valid && s3_in.isFirstIssue && ( // issued from IQ
     io.lsq.ldin.bits.rep_info.need_rep || s3_in.mmio                 // exe fail or is mmio
-  )
+  ) && !s3_isvec
   io.ldCancel.ld2Cancel.bits := s3_in.deqPortIdx
 
   val s3_ld_wb_meta = Mux(s3_valid, s3_out.bits, io.lsq.uncache.bits)

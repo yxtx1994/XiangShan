@@ -1094,7 +1094,7 @@ class HybridUnit(implicit p: Parameters) extends XSModule
 
   io.ldu_io.ldCancel.ld1Cancel.valid := s2_valid && s2_ld_flow && s2_out.isFirstIssue && (// issued from IQ
     s2_out.rep_info.need_rep || s2_ld_mmio                                                // exe fail or is mmio
-  )
+  ) && !s2_isvec
   io.ldu_io.ldCancel.ld1Cancel.bits := s2_out.deqPortIdx
 
   // fast wakeup
@@ -1274,7 +1274,7 @@ class HybridUnit(implicit p: Parameters) extends XSModule
 
   io.ldu_io.ldCancel.ld2Cancel.valid := s3_valid && s3_ld_flow && s3_in.isFirstIssue && ( // issued from IQ and is load
     io.ldu_io.lsq.ldin.bits.rep_info.need_rep || s3_in.mmio                            // exe fail or is mmio
-  )
+  ) && s3_isvec
   io.ldu_io.ldCancel.ld2Cancel.bits := s3_in.deqPortIdx
 
   // data from dcache hit
