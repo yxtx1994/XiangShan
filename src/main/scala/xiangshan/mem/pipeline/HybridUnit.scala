@@ -1268,7 +1268,7 @@ class HybridUnit(implicit p: Parameters) extends XSModule
 
   io.ldu_io.ldCancel.ld2Cancel := s3_valid && s3_ld_flow && (                          // is load
     io.ldu_io.lsq.ldin.bits.rep_info.need_rep || s3_in.mmio                            // exe fail or is mmio
-  )
+  ) && s3_isvec
 
   // data from dcache hit
   val s3_ld_raw_data_frm_cache = Wire(new LoadDataFromDcacheBundle)
