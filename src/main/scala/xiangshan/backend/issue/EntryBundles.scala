@@ -365,8 +365,13 @@ object EntryBundles extends HasCircularQueuePtrHelper {
     val vecMemStatusUpdate                             = entryUpdate.status.vecMem.get
     vecMemStatusUpdate                                := vecMemStatus
 
+    val isLqHead = RegInit(false.B)
+    val enqValid = commonIn.enq.fire
+    val isLqHeadNext = Mux(enqValid, false.B, entryReg.status.vecMem.get.lqIdx <= fromLsq.lqDeqPtr)
+    isLqHead := isLqHeadNext
+
     val isLsqHead = {
-      entryReg.status.vecMem.get.lqIdx <= fromLsq.lqDeqPtr &&
+      (isLqHead || isLqHeadNext) &&
       entryReg.status.vecMem.get.sqIdx <= fromLsq.sqDeqPtr
     }
 
