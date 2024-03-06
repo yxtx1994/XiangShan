@@ -150,6 +150,9 @@ class LoadQueue(implicit p: Parameters) extends XSModule
 
     val vecWriteback = Flipped(ValidIO(new MemExuOutput(isVector = true)))
     val lqDeqPtr = Output(new LqPtr)
+    //for vector load fast issue 
+    val lqIssuePtr = Output(new LqPtr)
+    val vecIssued = Flipped(ValidIO(new MemExuOutput(isVector = true)))
     val vecMMIOReplay = Vec(VecLoadPipelineWidth, DecoupledIO(new LsPipelineBundle()))
 
     val trigger = Vec(LoadPipelineWidth, new LqTriggerIO)
@@ -202,6 +205,9 @@ class LoadQueue(implicit p: Parameters) extends XSModule
   virtualLoadQueue.io.lqEmpty       <> io.lqEmpty
   virtualLoadQueue.io.vecWriteback  <> io.vecWriteback
   virtualLoadQueue.io.ldWbPtr       <> io.lqDeqPtr
+  // for vector load fast issue
+  virtualLoadQueue.io.lqIssuePtr    <> io.lqIssuePtr
+  virtualLoadQueue.io.vecIssued     <> io.vecIssued
 
   /**
    * Load queue exception buffer

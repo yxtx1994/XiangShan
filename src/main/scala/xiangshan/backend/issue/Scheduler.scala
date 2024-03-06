@@ -99,6 +99,7 @@ class SchedulerIO()(implicit params: SchdBlockParams, p: Parameters) extends XSB
     val lcommit = Input(UInt(log2Up(CommitWidth + 1).W))
     val scommit = Input(UInt(log2Ceil(EnsbufferWidth + 1).W)) // connected to `memBlock.io.sqDeq` instead of ROB
     val wakeup = Vec(params.LdExuCnt, Flipped(Valid(new DynInst)))
+    val lqIssuePtr = Input(new LqPtr)
     val lqDeqPtr = Input(new LqPtr)
     val sqDeqPtr = Input(new SqPtr)
     // from lsq
@@ -418,6 +419,7 @@ class SchedulerMemImp(override val wrapper: Scheduler)(implicit params: SchdBloc
     case imp: IssueQueueVecMemImp =>
       imp.io.memIO.get.sqDeqPtr.foreach(_ := io.fromMem.get.sqDeqPtr)
       imp.io.memIO.get.lqDeqPtr.foreach(_ := io.fromMem.get.lqDeqPtr)
+      imp.io.memIO.get.lqIssuePtr.foreach(_ := io.fromMem.get.lqIssuePtr)
       // not used
       imp.io.memIO.get.feedbackIO := 0.U.asTypeOf(imp.io.memIO.get.feedbackIO)
       // maybe not used

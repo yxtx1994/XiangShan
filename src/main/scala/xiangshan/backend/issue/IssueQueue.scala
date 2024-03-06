@@ -894,6 +894,7 @@ class IssueQueueMemBundle(implicit p: Parameters, params: IssueBlockParams) exte
   // vector
   val sqDeqPtr = OptionWrapper(params.isVecMemIQ, Input(new SqPtr))
   val lqDeqPtr = OptionWrapper(params.isVecMemIQ, Input(new LqPtr))
+  val lqIssuePtr = OptionWrapper(params.isVecMemIQ, Input(new LqPtr))
 }
 
 class IssueQueueMemIO(implicit p: Parameters, params: IssueBlockParams) extends IssueQueueIO {

@@ -50,6 +50,9 @@ class VirtualLoadQueue(implicit p: Parameters) extends XSModule
     val lqCancelCnt = Output(UInt(log2Up(VirtualLoadQueueSize+1).W))
     // vector load writeback
     val vecWriteback = Flipped(ValidIO(new MemExuOutput(isVector = true)))
+    val vecIssued   = Flipped(ValidIO(new MemExuOutput(isVector = true))) // for vector load fast issue
+    // to issue queue, only use in vector load fast issue
+    val lqIssuePtr     = Output(new LqPtr)
   })
 
   println("VirtualLoadQueue: size: " + VirtualLoadQueueSize)
@@ -76,6 +79,10 @@ class VirtualLoadQueue(implicit p: Parameters) extends XSModule
   val enqPtr = enqPtrExt(0).value
   val deqPtr = Wire(new LqPtr)
   val deqPtrNext = Wire(new LqPtr)
+  // only for vector load fast issue
+  val vecIssued = RegInit(VecInit(List.fill(VirtualLoadQueueSize)(false.B))) // whether vector load issued
+  val issuePtr = Wire(new LqPtr)
+  val issuePtrNext = Wire(new LqPtr)
 
   /**
    * update pointer
@@ -133,10 +140,24 @@ class VirtualLoadQueue(implicit p: Parameters) extends XSModule
   deqPtrNext := deqPtr + lastCommitCount
   deqPtr := RegEnable(deqPtrNext, 0.U.asTypeOf(new LqPtr), deqPtrUpdateEna)
 
+  // update issuePtr
+  val issueLookup = (allocated(issuePtr.value) && datavalid(issuePtr.value) && addrvalid(issuePtr.value) && issuePtr =/= enqPtrExt(0) && !needCancel(issuePtr.value)) ||
+                    (vecIssued(issuePtr.value) && !needCancel(issuePtr.value) && allocated(issuePtr.value) && issuePtr =/= enqPtrExt(0))
+  val lastIssueCount = RegNext(PopCount(issueLookup))
+
+  val issuePtrUpdateEna = lastIssueCount =/= 0.U
+  when(isBefore(enqPtrExtNextVec(0), issuePtr)){
+    issuePtrNext := enqPtrExtNextVec(0)
+  } .otherwise{
+    issuePtrNext := issuePtr + lastIssueCount
+  }
+  issuePtr := RegEnable(issuePtrNext, 0.U.asTypeOf(new LqPtr), issuePtrUpdateEna)
+
   io.lqDeq := RegNext(lastCommitCount)
   io.lqCancelCnt := redirectCancelCount
   io.ldWbPtr := deqPtr
   io.lqEmpty := RegNext(validCount === 0.U)
+  io.lqIssuePtr := issuePtr
 
   /**
    * Enqueue at dispatch
@@ -156,6 +177,8 @@ class VirtualLoadQueue(implicit p: Parameters) extends XSModule
       // init
       addrvalid(index) := false.B
       datavalid(index) := false.B
+      //for vector load fast issue
+      vecIssued(index) := false.B
 
       debug_mmio(index) := false.B
       debug_paddr(index) := 0.U
@@ -254,6 +277,13 @@ class VirtualLoadQueue(implicit p: Parameters) extends XSModule
     val vecWbIndex = io.vecWriteback.bits.uop.lqIdx.value
     addrvalid(vecWbIndex) := true.B
     datavalid(vecWbIndex) := true.B
+  }
+  // for vector load fast issue
+  XSError(io.vecIssued.valid && !allocated(io.vecIssued.bits.uop.lqIdx.value),
+    "issue lqIdx should be allocated at dispatch stage")
+  when(io.vecIssued.valid){
+    val vecIssueIndex = io.vecIssued.bits.uop.lqIdx.value
+    vecIssued(vecIssueIndex) := true.B
   }
 
   //  perf counter

@@ -58,6 +58,8 @@ class VlUopQueueIOBundle(implicit p: Parameters) extends VLSUBundle {
   // val uopFeedback = Output(Vec(VecLoadPipelineWidth, Bool()))
   // writeback uop results
   val uopWriteback = DecoupledIO(new MemExuOutput(isVector = true))
+  //for vector fast issue
+  val lastUopIssued =  ValidIO(new MemExuOutput(isVector = true))
 }
 
 /**
@@ -620,6 +622,12 @@ class VlUopQueue(implicit p: Parameters) extends VLSUModule
   io.uopWriteback.bits.vdIdx.foreach(_ := vdIdx)
   io.uopWriteback.bits.vdIdxInField.foreach(_ := vdIdxInField)
   io.uopWriteback.bits.debug := DontCare
+
+  val uopIssuedNext = io.loadRegIn.fire && !flushEnq && io.loadRegIn.bits.uop.vpu.lastUop
+  val uopIssued = RegNext(uopIssuedNext, init = false.B)
+  io.lastUopIssued.valid := uopIssued
+  io.lastUopIssued.bits := DontCare
+  io.lastUopIssued.bits.uop  := RegEnable(io.loadRegIn.bits.uop, uopIssuedNext)
 
   assert(!(issueValid && !io.flowIssue(0).valid && io.flowIssue(1).valid), "flow issue port 0 should have higher priority")
 

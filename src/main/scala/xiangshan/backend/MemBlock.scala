@@ -114,6 +114,7 @@ class mem_to_ooo(implicit p: Parameters) extends MemBlockBundle {
   // used by VLSU issue queue, the vector store would wait all store before it, and the vector load would wait all load
   val sqDeqPtr = Output(new SqPtr)
   val lqDeqPtr = Output(new LqPtr)
+  val lqIssuePtr = Output(new LqPtr)
   val stIn = Vec(StAddrCnt, ValidIO(new MemExuInput))
   val stIssuePtr = Output(new SqPtr())
 
@@ -1250,6 +1251,9 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
   lsq.io.vecWriteback.valid := vlWrapper.io.uopWriteback.fire &&
     vlWrapper.io.uopWriteback.bits.uop.vpu.lastUop
   lsq.io.vecWriteback.bits := vlWrapper.io.uopWriteback.bits
+  // for vector fast issue
+  lsq.io.vecIssued <> vlWrapper.io.lastUopIssued
+  io.mem_to_ooo.lqIssuePtr <> lsq.io.lqIssuePtr
 
   // vector
   vlWrapper.io.redirect <> redirect

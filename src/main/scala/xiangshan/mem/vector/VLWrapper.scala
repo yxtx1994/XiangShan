@@ -41,6 +41,8 @@ class VectorLoadWrapperIOBundle(implicit p: Parameters) extends VLSUBundle {
 
   // writeback uop results
   val uopWriteback = DecoupledIO(new MemExuOutput(isVector = true))
+  // for vector load fast issue
+  val lastUopIssued = ValidIO(new MemExuOutput(isVector = true))
 }
 
 class VectorLoadWrapper(implicit p: Parameters) extends VLSUModule {
@@ -62,5 +64,6 @@ class VectorLoadWrapper(implicit p: Parameters) extends VLSUModule {
 
   io.uopWriteback <> uopQueue.io.uopWriteback
   io.pipeIssue <> flowQueue.io.pipeIssue
+  io.lastUopIssued <> uopQueue.io.lastUopIssued
 
 }
