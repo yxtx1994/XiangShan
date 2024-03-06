@@ -1345,9 +1345,10 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   }
 
   // data from ftq_pc_mem has 1 cycle delay
-  io.toPrefetch.req.valid := RegNext(entry_fetch_status(nextPrefetchPtr.value) === f_to_send)
+  val toSendPrefetch = WireInit(entry_fetch_status(nextPrefetchPtr.value) === f_to_send)
+  io.toPrefetch.req.valid := RegNext(toSendPrefetch)
   ftq_pc_mem.io.other_raddrs(0) := nextPrefetchPtr.value
-  io.toPrefetch.req.bits.target := RegNext(ftq_pc_mem.io.other_rdatas(0).startAddr)
+  io.toPrefetch.req.bits.target := RegEnable(ftq_pc_mem.io.other_rdatas(0).startAddr, toSendPrefetch)
 
   // record position relationship between ifuPtr, pfPtr and bpuPtr
   val isWritePrefetchPtrTable = WireInit(Constantin.createRecord("isWritePrefetchPtrTable" + p(XSCoreParamsKey).HartId.toString))
