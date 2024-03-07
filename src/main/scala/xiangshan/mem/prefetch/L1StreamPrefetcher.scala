@@ -14,8 +14,8 @@ import xiangshan.mem.L1PrefetchSource
 
 trait HasStreamPrefetchHelper extends HasL1PrefetchHelper {
   // capacity related
-  val STREAM_FILTER_SIZE = 4
-  val BIT_VEC_ARRAY_SIZE = 16
+  val STREAM_FILTER_SIZE = 32
+  val BIT_VEC_ARRAY_SIZE = 4
   val ACTIVE_THRESHOLD = BIT_VEC_WITDH - 4
   val INIT_DEC_MODE = false
 
@@ -85,7 +85,7 @@ class StreamBitVectorBundle(implicit p: Parameters) extends XSBundle with HasStr
     }else {
       decr_mode := INIT_DEC_MODE.B
     }
-    
+
 
     assert(PopCount(alloc_bit_vec) === 1.U, "alloc vector should be one hot")
   }
@@ -126,7 +126,7 @@ class StreamPrefetchReqBundle(implicit p: Parameters) extends XSBundle with HasS
     res.source.value := source
 
     res.trigger_pc := t_pc
-    res.trigger_va := t_va 
+    res.trigger_va := t_va
 
     val region_bits = get_region_bits(vaddr)
     val region_bit_vec = UIntToOH(region_bits)
@@ -218,7 +218,7 @@ class StreamBitVectorArray(implicit p: Parameters) extends XSModule with HasStre
   spf_log_data.Offset := DontCare
   spf_log_data.Score := DontCare
   spf_log_data.Miss := io.train_req.bits.miss
-  
+
   stream_pf_train_debug_table.log(
     data = spf_log_data,
     en = spf_log_enable,
