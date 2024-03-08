@@ -115,7 +115,9 @@ class LsqWrapper(implicit p: Parameters) extends XSModule with HasDCacheParamete
     val vecMMIOReplay = Vec(VecLoadPipelineWidth, DecoupledIO(new LsPipelineBundle()))
       // for vector fast issue
     val lqIssuePtr = Output(new LqPtr)
-    val vecIssued = Flipped(ValidIO(new MemExuOutput(isVector = true)))
+    val lqVecIssued = Flipped(ValidIO(new MemExuOutput(isVector = true)))
+    val sqIssuePtr = Output(new SqPtr)
+    val sqVecIssued = Flipped(ValidIO(new MemExuOutput(isVector = true)))
 
     // top-down
     val debugTopDown = new LoadQueueTopDownIO
@@ -142,6 +144,7 @@ class LsqWrapper(implicit p: Parameters) extends XSModule with HasDCacheParamete
   loadQueue.io.enq.sqCanAccept := storeQueue.io.enq.canAccept
   storeQueue.io.enq.lqCanAccept := loadQueue.io.enq.canAccept
   io.lqIssuePtr := loadQueue.io.lqIssuePtr // for vector load fast issue
+  io.sqIssuePtr := storeQueue.io.sqIssuePtr // for vector store fast issue
   io.lqDeqPtr := loadQueue.io.lqDeqPtr
   io.sqDeqPtr := storeQueue.io.sqDeqPtr
   for (i <- io.enq.req.indices) {
@@ -178,6 +181,7 @@ class LsqWrapper(implicit p: Parameters) extends XSModule with HasDCacheParamete
   storeQueue.io.forward     <> io.forward // overlap forwardMask & forwardData, DO NOT CHANGE SEQUENCE
   storeQueue.io.force_write <> io.force_write
   storeQueue.io.vecStoreRetire <> io.vecStoreRetire
+  io.sqVecIssued            <> storeQueue.io.vecIssued
 
   /* <------- DANGEROUS: Don't change sequence here ! -------> */
 
@@ -213,7 +217,7 @@ class LsqWrapper(implicit p: Parameters) extends XSModule with HasDCacheParamete
   loadQueue.io.lqEmpty             <> io.lqEmpty
   loadQueue.io.vecWriteback        <> io.vecWriteback
   loadQueue.io.vecMMIOReplay       <> io.vecMMIOReplay
-  io.vecIssued                     <> loadQueue.io.vecIssued
+  io.lqVecIssued                   <> loadQueue.io.vecIssued
 
   // rob commits for lsq is delayed for two cycles, which causes the delayed update for deqPtr in lq/sq
   // s0: commit

@@ -58,6 +58,8 @@ class VsUopQueueIOBundle (implicit p: Parameters) extends XSBundle {
   val flowIssue = Vec(VecStorePipelineWidth, Decoupled(new VsFlowBundle()))
   val flowWriteback = Vec(VecStorePipelineWidth, Flipped(DecoupledIO(new VecStoreExuOutput())))
   val uopWriteback = DecoupledIO(new MemExuOutput(isVector = true))
+  //for vector fast issue
+  val lastUopIssued =  ValidIO(new MemExuOutput(isVector = true))
 }
 
 class VsUopQueue(implicit p: Parameters) extends VLSUModule {
@@ -519,6 +521,11 @@ class VsUopQueue(implicit p: Parameters) extends VLSUModule {
     x.vdIdxInField.foreach(_ := DontCare)
     x.debug := DontCare
   }
+  val uopIssuedNext = io.storeIn.fire && !flushEnq && io.storeIn.bits.uop.vpu.lastUop
+  val uopIssued = RegNext(uopIssuedNext, init = false.B)
+  io.lastUopIssued.valid := uopIssued
+  io.lastUopIssued.bits := DontCare
+  io.lastUopIssued.bits.uop  := RegEnable(io.storeIn.bits.uop, uopIssuedNext)
 
   for (i <- 1 until flowIssueWidth) {
     assert(!(issueValid && !io.flowIssue(i-1).valid && io.flowIssue(i).valid),

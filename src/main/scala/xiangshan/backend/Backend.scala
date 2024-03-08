@@ -217,6 +217,7 @@ class BackendImp(override val wrapper: Backend)(implicit p: Parameters) extends 
   memScheduler.io.fromMem.get.sqDeqPtr := io.mem.sqDeqPtr
   memScheduler.io.fromMem.get.lqDeqPtr := io.mem.lqDeqPtr
   memScheduler.io.fromMem.get.lqIssuePtr := io.mem.lqIssuePtr
+  memScheduler.io.fromMem.get.sqIssuePtr := io.mem.sqIssuePtr
   memScheduler.io.fromMem.get.sqCancelCnt := io.mem.sqCancelCnt
   memScheduler.io.fromMem.get.lqCancelCnt := io.mem.lqCancelCnt
   memScheduler.io.fromMem.get.stIssuePtr := io.mem.stIssuePtr
@@ -559,6 +560,7 @@ class BackendMemIO(implicit p: Parameters, params: BackendParams) extends XSBund
   val sqDeqPtr = Input(new SqPtr)
   val lqDeqPtr = Input(new LqPtr)
   val lqIssuePtr = Input(new LqPtr)
+  val sqIssuePtr = Input(new SqPtr)
 
   val lqCancelCnt = Input(UInt(log2Up(VirtualLoadQueueSize + 1).W))
   val sqCancelCnt = Input(UInt(log2Up(StoreQueueSize + 1).W))

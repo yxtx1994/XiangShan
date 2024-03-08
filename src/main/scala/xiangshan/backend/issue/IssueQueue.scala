@@ -895,6 +895,7 @@ class IssueQueueMemBundle(implicit p: Parameters, params: IssueBlockParams) exte
   val sqDeqPtr = OptionWrapper(params.isVecMemIQ, Input(new SqPtr))
   val lqDeqPtr = OptionWrapper(params.isVecMemIQ, Input(new LqPtr))
   val lqIssuePtr = OptionWrapper(params.isVecMemIQ, Input(new LqPtr))
+  val sqIssuePtr = OptionWrapper(params.isVecMemIQ, Input(new SqPtr))
 }
 
 class IssueQueueMemIO(implicit p: Parameters, params: IssueBlockParams) extends IssueQueueIO {
@@ -1034,6 +1035,9 @@ class IssueQueueVecMemImp(override val wrapper: IssueQueue)(implicit p: Paramete
 
   entries.io.vecMemIn.get.sqDeqPtr := memIO.sqDeqPtr.get
   entries.io.vecMemIn.get.lqDeqPtr := memIO.lqDeqPtr.get
+  //for vector fast issue only
+  entries.io.vecMemIn.get.sqIssuePtr := memIO.sqIssuePtr.get
+  entries.io.vecMemIn.get.lqIssuePtr := memIO.lqIssuePtr.get
 
 
   deqBeforeDly.zipWithIndex.foreach { case (deq, i) =>

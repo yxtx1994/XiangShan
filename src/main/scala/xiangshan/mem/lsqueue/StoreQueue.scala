@@ -95,6 +95,9 @@ class StoreQueue(implicit p: Parameters) extends XSModule
     val sqDeq = Output(UInt(log2Ceil(EnsbufferWidth + 1).W))
     val force_write = Output(Bool())
     val vecStoreRetire = Flipped(ValidIO(new SqPtr))
+    val vecIssued   = Flipped(ValidIO(new MemExuOutput(isVector = true))) // for vector store fast issue
+    // to issue queue, only use in vector store fast issue
+    val sqIssuePtr     = Output(new SqPtr)
   })
 
   println("StoreQueue: size:" + StoreQueueSize)
@@ -163,6 +166,10 @@ class StoreQueue(implicit p: Parameters) extends XSModule
   val enqMask = UIntToMask(enqPtr, StoreQueueSize)
 
   val commitCount = RegNext(io.rob.scommit)
+
+    // only for vector load fast issue
+  val vecIssued = RegInit(VecInit(List.fill(StoreQueueSize)(false.B))) // whether vector load issued
+  val issuePtr = Wire(new SqPtr)
 
   // store can be committed by ROB
   io.rob.mmio := DontCare
@@ -234,6 +241,7 @@ class StoreQueue(implicit p: Parameters) extends XSModule
       mmio(index) := false.B
       vec(index) := enqInstr.isVecStore // check vector store by the encoding of inst
       vecAddrvalid(index) := false.B//TODO
+      vecIssued(index) := false.B
 
       XSError(!io.enq.canAccept || !io.enq.lqCanAccept, s"must accept $i\n")
       XSError(index =/= sqIdx.value, s"must be the same entry $i\n")
@@ -289,7 +297,15 @@ class StoreQueue(implicit p: Parameters) extends XSModule
   io.stDataReadySqPtr := dataReadyPtrExt
   io.stIssuePtr := enqPtrExt(0)
   io.sqDeqPtr := deqPtrExt(0)
+  io.sqIssuePtr := issuePtr
 
+  // for vector load fast issue
+  XSError(io.vecIssued.valid && !allocated(io.vecIssued.bits.uop.sqIdx.value),
+    "issue lqIdx should be allocated at dispatch stage")
+  when(io.vecIssued.valid){
+    val vecIssueIndex = io.vecIssued.bits.uop.sqIdx.value
+    vecIssued(vecIssueIndex) := true.B
+  }
   /**
     * Writeback store from store units
     *
@@ -837,6 +853,18 @@ class StoreQueue(implicit p: Parameters) extends XSModule
     enqPtrExt(0).value === deqPtrExt(0).value &&
     enqPtrExt(0).flag === deqPtrExt(0).flag
   )
+    // update issuePtr
+  val enqPtrRedirectNext = enqPtrExt(0) - redirectCancelCount
+    val issuePtrNext = Mux(lastlastCycleRedirect && (issuePtr > enqPtrRedirectNext), enqPtrRedirectNext,
+    Mux(RegNext(io.sbuffer(1).fire),
+      issuePtr + 2.U,
+      Mux(RegNext(io.sbuffer(0).fire) || io.mmioStout.fire || io.vecStoreRetire.valid || (vecIssued(issuePtr.value) && allocated(issuePtr.value)),
+        issuePtr + 1.U,
+        issuePtr
+    )
+  ))
+  issuePtr := RegNext(issuePtrNext, init = 0.U.asTypeOf(new SqPtr))
+  
   // perf counter
   QueuePerf(StoreQueueSize, validCount, !allowEnqueue)
   io.sqFull := !allowEnqueue

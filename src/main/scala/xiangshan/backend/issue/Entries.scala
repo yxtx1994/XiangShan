@@ -395,6 +395,8 @@ class Entries(implicit p: Parameters, params: IssueBlockParams) extends XSModule
     if (params.isVecMemIQ) {
       in.fromLsq.get.sqDeqPtr   := io.vecMemIn.get.sqDeqPtr
       in.fromLsq.get.lqDeqPtr   := io.vecMemIn.get.lqDeqPtr
+      in.fromLsq.get.lqIssuePtr := io.vecMemIn.get.lqIssuePtr
+      in.fromLsq.get.sqIssuePtr := io.vecMemIn.get.sqIssuePtr
     }
     validVec(entryIdx)          := out.valid
     canIssueVec(entryIdx)       := out.canIssue
@@ -497,6 +499,8 @@ class EntriesIO(implicit p: Parameters, params: IssueBlockParams) extends XSBund
   val vecMemIn = OptionWrapper(params.isVecMemIQ, new Bundle {
     val sqDeqPtr          = Input(new SqPtr)
     val lqDeqPtr          = Input(new LqPtr)
+    val sqIssuePtr        = Input(new SqPtr)
+    val lqIssuePtr        = Input(new LqPtr)
   })
   val robIdx = OptionWrapper(params.isVecMemIQ, Output(Vec(params.numEntries, new RobPtr)))
   val uopIdx = OptionWrapper(params.isVecMemIQ, Output(Vec(params.numEntries, UopIdx())))

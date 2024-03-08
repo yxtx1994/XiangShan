@@ -115,6 +115,7 @@ class mem_to_ooo(implicit p: Parameters) extends MemBlockBundle {
   val sqDeqPtr = Output(new SqPtr)
   val lqDeqPtr = Output(new LqPtr)
   val lqIssuePtr = Output(new LqPtr)
+  val sqIssuePtr = Output(new SqPtr)
   val stIn = Vec(StAddrCnt, ValidIO(new MemExuInput))
   val stIssuePtr = Output(new SqPtr())
 
@@ -1252,8 +1253,10 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
     vlWrapper.io.uopWriteback.bits.uop.vpu.lastUop
   lsq.io.vecWriteback.bits := vlWrapper.io.uopWriteback.bits
   // for vector fast issue
-  lsq.io.vecIssued <> vlWrapper.io.lastUopIssued
+  lsq.io.lqVecIssued <> vlWrapper.io.lastUopIssued
   io.mem_to_ooo.lqIssuePtr <> lsq.io.lqIssuePtr
+  lsq.io.sqVecIssued <> vsUopQueue.io.lastUopIssued
+  io.mem_to_ooo.sqIssuePtr <> lsq.io.sqIssuePtr
 
   // vector
   vlWrapper.io.redirect <> redirect

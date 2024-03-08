@@ -109,6 +109,7 @@ object EntryBundles extends HasCircularQueuePtrHelper {
       val sqDeqPtr            = Input(new SqPtr)
       val lqDeqPtr            = Input(new LqPtr)
       val lqIssuePtr          = Input(new LqPtr)
+      val sqIssuePtr          = Input(new SqPtr)
     })
   }
 
@@ -371,8 +372,8 @@ object EntryBundles extends HasCircularQueuePtrHelper {
     val isLqHeadNext = Mux(enqValid, false.B, entryReg.status.vecMem.get.lqIdx <= fromLsq.lqDeqPtr)
     isLqHead := isLqHeadNext
      //for vector fast issue
-    val isVecLoad = FuType.isVLoad(entryRegNext.status.fuType)
-    val isVecStore = FuType.isVStore(entryRegNext.status.fuType)
+    val isVecLoad = FuType.isVLoad(entryRegNext.status.fuType.asUInt)
+    val isVecStore = FuType.isVStore(entryRegNext.status.fuType.asUInt)
     val fastLqHead = entryRegNext.status.vecMem.get.lqIdx <= fromLsq.lqIssuePtr
 
     val isLsqHead = {
