@@ -205,9 +205,15 @@ class PTWFilterEntry(Width: Int, Size: Int, hasHint: Boolean = false)(implicit p
   if (Enable3Load3Store) {
     require(Width <= 4, s"DTLB Filter Width ($Width) must equal or less than 4")
     if (Width == 1) {
-      require(Size == 8, s"prefetch filter Size ($Size) should be 8")
+      require(Size == 8, s"Width == 1 Size ($Size) should be 8")
       canenq(0) := !(Cat(v).andR)
       enqidx(0) := firstValidIndex(v, false.B)
+    } else if (Width == 2) {
+      require(Size == 8, s"Width == 2 Size ($Size) should be 8")
+      canenq(0) := !(Cat(v.take(Size/2)).andR)
+      enqidx(0) := firstValidIndex(v.take(Size/2), false.B)
+      canenq(1) := !(Cat(v.drop(Size/2)).andR)
+      enqidx(1) := firstValidIndex(v.drop(Size/2), false.B) + (Size/2).U
     } else if (Width == 3) {
       require(Size == 8, s"store filter Size ($Size) should be 8")
       canenq(0) := !(Cat(v.take(3)).andR)
@@ -230,11 +236,11 @@ class PTWFilterEntry(Width: Int, Size: Int, hasHint: Boolean = false)(implicit p
   } else {
     require(Width <= 3, s"DTLB Filter Width ($Width) must equal or less than 3")
     if (Width == 1) {
-      require(Size == 8, s"prefetch filter Size ($Size) should be 8")
+      require(Size == 8, s"Width == 1 Size ($Size) should be 8")
       canenq(0) := !(Cat(v).andR)
       enqidx(0) := firstValidIndex(v, false.B)
     } else if (Width == 2) {
-      require(Size == 8, s"store filter Size ($Size) should be 8")
+      require(Size == 8, s"Width == 2 Size ($Size) should be 8")
       canenq(0) := !(Cat(v.take(Size/2)).andR)
       enqidx(0) := firstValidIndex(v.take(Size/2), false.B)
       canenq(1) := !(Cat(v.drop(Size/2)).andR)
