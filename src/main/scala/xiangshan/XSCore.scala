@@ -29,6 +29,8 @@ import xiangshan.backend._
 import xiangshan.backend.exu.{ExuConfig, Wb2Ctrl, WbArbiterWrapper}
 import xiangshan.frontend._
 import xiangshan.mem.L1PrefetchFuzzer
+import xiangshan.cache._
+import freechips.rocketchip.tilelink._
 
 import scala.collection.mutable.ListBuffer
 
@@ -154,7 +156,8 @@ class XSCore()(implicit p: config.Parameters) extends XSCoreBase
 
 class XSCoreImp(outer: XSCoreBase) extends LazyModuleImp(outer)
   with HasXSParameter
-  with HasSoCParameter {
+  with HasSoCParameter 
+  with HasTlBundleParameters{
   val io = IO(new Bundle {
     val hartId = Input(UInt(64.W))
     val reset_vector = Input(UInt(PAddrBits.W))
@@ -169,6 +172,10 @@ class XSCoreImp(outer: XSCoreBase) extends LazyModuleImp(outer)
       val l2MissMatch = Input(Bool())
       val l3MissMatch = Input(Bool())
     }
+    //l1-l2 CoreReuest i/f
+    val l1dBus = new TLBundle(l1dTlBundleParameters)
+    val l1iBus = new TLBundle(l1iTlBundleParameters)
+    val ptwBus = new TLBundle(ptwTlBundleParameters)
   })
 
   println(s"FPGAPlatform:${env.FPGAPlatform} EnableDebug:${env.EnableDebug}")
@@ -176,6 +183,14 @@ class XSCoreImp(outer: XSCoreBase) extends LazyModuleImp(outer)
   private val frontend = outer.frontend.module
   private val backend = outer.backend.module
   private val memBlock = outer.memBlock.module
+  //l1-l2 coreRequest i/f
+//  private val dcache = outer.memBlock.dcache.module
+  private val icache = outer.frontend.module
+//  private val ptw = outer.memBlock.ptw.module
+
+  memBlock.io.l1dBus <> io.l1dBus
+  memBlock.io.ptwBus <> io.ptwBus
+  icache.io.l1iBus <> io.l1iBus
 
   frontend.io.hartId  := memBlock.io.inner_hartId
   backend.io.hartId := memBlock.io.inner_hartId

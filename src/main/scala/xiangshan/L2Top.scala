@@ -23,7 +23,7 @@ import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.interrupts._
 import freechips.rocketchip.tile.{BusErrorUnit, BusErrorUnitParams, BusErrors}
 import freechips.rocketchip.tilelink._
-import coupledL2.{L2ParamKey, CoupledL2}
+import coupledL2.{L2ParamKey, CoupledL2, HasTlBundleParameters, HasCoupledL2Parameters}
 import system.HasSoCParameter
 import top.BusPerfMonitor
 import utility.{DelayN, ResetGen, TLClientsMerger, TLEdgeBuffer, TLLogger}
@@ -111,7 +111,7 @@ class L2Top()(implicit p: Parameters) extends LazyModule
   beu.node := TLBuffer.chainNode(1) := mmio_xbar
   mmio_port := TLBuffer() := mmio_xbar
 
-  class L2TopImp(wrapper: LazyModule) extends LazyModuleImp(wrapper) {
+  class L2TopImp(wrapper: LazyModule) extends LazyModuleImp(wrapper) with HasTlBundleParameters with HasCoupledL2Parameters {
     val beu_errors = IO(Input(chiselTypeOf(beu.module.io.errors)))
     val reset_vector = IO(new Bundle {
       val fromTile = Input(UInt(PAddrBits.W))
@@ -141,12 +141,29 @@ class L2Top()(implicit p: Parameters) extends LazyModule
     dontTouch(cpu_halt)
 
     val l2_hint = IO(ValidIO(new L2ToL1Hint())) // TODO: parameterize this
+    //l1i/l1d/ptw inteface with L2
+    val l1iBus = IO(Flipped(TLBundle(l1iTlBundleParameters)))
+    val ptwBus = IO(Flipped(TLBundle(ptwTlBundleParameters)))
+    val l1dBus = IO(Flipped(TLBundle(l1dTlBundleParameters)))
+    val inBufPipe = cacheParams.innerBufPipe
+
     if (l2cache.isDefined) {
       l2_hint := l2cache.get.module.io.l2_hint
       // debugTopDown <> l2cache.get.module.io.debugTopDown
       l2cache.get.module.io.debugTopDown.robHeadPaddr := DontCare
       l2cache.get.module.io.debugTopDown.robHeadPaddr.head := debugTopDown.robHeadPaddr
       debugTopDown.l2MissMatch := l2cache.get.module.io.debugTopDown.l2MissMatch.head
+      //l1d -> 1 pipe added
+      l2cache.get.module.io.l1dBus.a <> inBufPipe.a(l1dBus.a)
+      l2cache.get.module.io.l1dBus.b <> l1dBus.b
+      l2cache.get.module.io.l1dBus.c <> inBufPipe.c(l1dBus.c)
+      l2cache.get.module.io.l1dBus.d <> l1dBus.d
+      l2cache.get.module.io.l1dBus.e <> inBufPipe.e(l1dBus.e)
+      //l1i -> no pipe
+      l2cache.get.module.io.l1iBus <> l1iBus
+      //ptw -> 1 pipe added
+      l2cache.get.module.io.ptwBus.a <> inBufPipe.a(ptwBus.a)
+      l2cache.get.module.io.ptwBus.d <> ptwBus.d
     } else {
       l2_hint := 0.U.asTypeOf(l2_hint)
       debugTopDown <> DontCare

@@ -28,6 +28,7 @@ import freechips.rocketchip.diplomacy.{LazyModule, LazyModuleImp}
 import freechips.rocketchip.tilelink._
 import xiangshan.backend.fu.{PMPReqBundle, PMPConfig}
 import xiangshan.backend.fu.PMPBundle
+import xiangshan.cache._
 
 
 abstract class TlbBundle(implicit p: Parameters) extends XSBundle with HasTlbConst
@@ -1039,7 +1040,8 @@ class PtwMergeResp(implicit p: Parameters) extends PtwBundle {
   }
 }
 
-class L2TLBIO(implicit p: Parameters) extends PtwBundle {
+class L2TLBIO(implicit p: Parameters) extends PtwBundle with HasTlBundleParameters{
+  val ptwBus = new TLBundle(ptwTlBundleParameters)
   val hartId = Input(UInt(8.W))
   val tlb = Vec(PtwWidth, Flipped(new TlbPtwIO))
   val sfence = Input(new SfenceBundle)
