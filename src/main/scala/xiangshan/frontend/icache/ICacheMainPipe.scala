@@ -191,10 +191,10 @@ class ICacheMainPipe(implicit p: Parameters) extends ICacheModule
     ******************************************************************************
     */
   for(i <- 0 until nWays) {
-    toData(i).valid             := s0_req_valid_all(i)
-    toData(i).bits.isDoubleLine := s0_doubleline_all(i)
-    toData(i).bits.vSetIdx      := s0_req_vSetIdx_all(i)
-    toData(i).bits.waymask      := s0_waymasks
+    toData(i).valid             := s0_fire
+    toData(i).bits.isDoubleLine := DataHoldBypass(s0_doubleline_all(i), s0_fire) 
+    toData(i).bits.vSetIdx      := DataHoldBypass(s0_req_vSetIdx_all(i), s0_fire)
+    toData(i).bits.waymask      := DataHoldBypass(s0_waymasks, s0_fire)
   }
 
   val s0_can_go = toData.last.ready && fromWayLookup.valid && s1_ready
