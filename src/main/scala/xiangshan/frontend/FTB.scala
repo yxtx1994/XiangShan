@@ -356,18 +356,18 @@ class FTB(implicit p: Parameters) extends BasePredictor with FTBParams with BPUU
     val write_set = Wire(UInt(log2Ceil(numSets).W))
     val write_way = Wire(Valid(UInt(log2Ceil(numWays).W)))
 
-    val read_set = Wire(UInt(log2Ceil(numSets).W))
-    val read_way = Wire(Valid(UInt(log2Ceil(numWays).W)))
+    val read_valid = RegNext(io.req_pc.valid)
+    val read_set   = req_idx
+    val read_way   = Wire(Valid(UInt(log2Ceil(numWays).W)))
 
-    read_set := req_idx
     read_way.valid := hit
     read_way.bits  := hit_way
 
-    // Read replacer access is postponed for 1 cycle
-    // this helps timing
-    touch_set(0) := Mux(write_way.valid, write_set, RegNext(read_set))
+    // Read replacer access is postponed for 1 cycle, this helps timing
+    // read_way is clock gated with read_valid but not hit to share gating condition with read_set
+    touch_set(0) := Mux(write_way.valid, write_set, RegEnable(read_set, read_valid))
     touch_way(0).valid := write_way.valid || RegNext(read_way.valid)
-    touch_way(0).bits := Mux(write_way.valid, write_way.bits, RegNext(read_way.bits))
+    touch_way(0).bits := Mux(write_way.valid, write_way.bits, RegEnable(read_way.bits, read_valid))
 
     replacer.access(touch_set, touch_way)
 
