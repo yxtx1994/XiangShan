@@ -676,8 +676,11 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   io.toBackend.newest_entry_target := RegEnable(newest_entry_target, newest_entry_target_modified)
 
 
-  bpuPtr := bpuPtr + enq_fire
-  copied_bpu_ptr.map(_ := bpuPtr + enq_fire)
+  when (enq_fire) {
+    // Avoid using Ptr := Ptr + valid for better static clock gating
+    bpuPtr := bpuPtr + 1.U
+    copied_bpu_ptr.foreach(ptr => ptr := ptr + 1.U)
+  }
   when (io.toIfu.req.fire && allowToIfu) {
     ifuPtr_write := ifuPtrPlus1
     ifuPtrPlus1_write := ifuPtrPlus2
@@ -694,7 +697,7 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   io.toIfu.flushFromBpu.s2.bits := bpu_s2_resp.ftq_idx
   when (bpu_s2_redirect) {
     bpuPtr := bpu_s2_resp.ftq_idx + 1.U
-    copied_bpu_ptr.map(_ := bpu_s2_resp.ftq_idx + 1.U)
+    copied_bpu_ptr.foreach(_ := bpu_s2_resp.ftq_idx + 1.U)
     // only when ifuPtr runs ahead of bpu s2 resp should we recover it
     when (!isBefore(ifuPtr, bpu_s2_resp.ftq_idx)) {
       ifuPtr_write := bpu_s2_resp.ftq_idx
@@ -707,7 +710,7 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   io.toIfu.flushFromBpu.s3.bits := bpu_s3_resp.ftq_idx
   when (bpu_s3_redirect) {
     bpuPtr := bpu_s3_resp.ftq_idx + 1.U
-    copied_bpu_ptr.map(_ := bpu_s3_resp.ftq_idx + 1.U)
+    copied_bpu_ptr.foreach(_ := bpu_s3_resp.ftq_idx + 1.U)
     // only when ifuPtr runs ahead of bpu s2 resp should we recover it
     when (!isBefore(ifuPtr, bpu_s3_resp.ftq_idx)) {
       ifuPtr_write := bpu_s3_resp.ftq_idx
@@ -1121,7 +1124,7 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
     val (idx, offset, flushItSelf) = (r.ftqIdx, r.ftqOffset, RedirectLevel.flushItself(r.level))
     val next = idx + 1.U
     bpuPtr := next
-    copied_bpu_ptr.map(_ := next)
+    copied_bpu_ptr.foreach(_ := next)
     ifuPtr_write := next
     ifuWbPtr_write := next
     ifuPtrPlus1_write := idx + 2.U
