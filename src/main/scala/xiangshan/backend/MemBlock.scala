@@ -354,8 +354,8 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
         l1Prefetcher.stride_train(i).bits := source.bits
         l1Prefetcher.stride_train(i).bits.uop.pc := Mux(
           loadUnits(i).io.s2_ptr_chasing,
-          RegEnable(io.ooo_to_mem.loadPc(i), loadUnits(i).io.s1_prefetch_spec),
-          RegEnable(RegEnable(io.ooo_to_mem.loadPc(i), loadUnits(i).io.s0_prefetch_spec), loadUnits(i).io.s1_prefetch_spec)
+          io.ooo_to_mem.loadPc(i),
+          RegEnable(io.ooo_to_mem.loadPc(i), loadUnits(i).io.s1_prefetch_spec)
         )
       }
       for (i <- 0 until HyuCnt) {
@@ -1060,7 +1060,7 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
           )
       )
       pf.io.st_in(i).bits := stu.io.prefetch_train.bits
-      pf.io.st_in(i).bits.uop.pc := RegEnable(RegEnable(io.ooo_to_mem.storePc(i), stu.io.s0_prefetch_spec), stu.io.s1_prefetch_spec)
+      pf.io.st_in(i).bits.uop.pc := RegEnable(io.ooo_to_mem.storePc(i), stu.io.s1_prefetch_spec)
     })
 
     // 1. sync issue info to store set LFST

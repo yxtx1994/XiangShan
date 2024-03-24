@@ -189,17 +189,17 @@ class CtrlBlockImp(
   redirectGen.io.memPredPcRead.data := pcMem.io.rdata(pcMemRdIndexes("memPred").head).getPc(RegEnable(redirectGen.io.memPredPcRead.offset, redirectGen.io.memPredPcRead.vld))
 
   for ((pcMemIdx, i) <- pcMemRdIndexes("load").zipWithIndex) {
-    // load read pcMem (s0) -> get rdata (s1) -> reg next in Memblock (s2) -> reg next in Memblock (s3) -> consumed by pf (s3)
+    // load read pcMem (s0) -> get rdata (s1) -> reg next in Ctrlblock (s2) -> reg next in Memblock (s3) -> consumed by pf (s3)
     pcMem.io.ren.get(pcMemIdx) := io.memLdPcRead(i).vld
     pcMem.io.raddr(pcMemIdx) := io.memLdPcRead(i).ptr.value
-    io.memLdPcRead(i).data := pcMem.io.rdata(pcMemIdx).getPc(RegEnable(io.memLdPcRead(i).offset, io.memLdPcRead(i).vld))
+    io.memLdPcRead(i).data := RegNext(pcMem.io.rdata(pcMemIdx).getPc(RegEnable(io.memLdPcRead(i).offset, io.memLdPcRead(i).vld)))
   }
 
   for ((pcMemIdx, i) <- pcMemRdIndexes("hybrid").zipWithIndex) {
-    // load read pcMem (s0) -> get rdata (s1) -> reg next in Memblock (s2) -> reg next in Memblock (s3) -> consumed by pf (s3)
+    // load read pcMem (s0) -> get rdata (s1) -> reg next in Ctrlblock (s2) -> reg next in Memblock (s3) -> consumed by pf (s3)
     pcMem.io.ren.get(pcMemIdx) := io.memHyPcRead(i).vld
     pcMem.io.raddr(pcMemIdx) := io.memHyPcRead(i).ptr.value
-    io.memHyPcRead(i).data := pcMem.io.rdata(pcMemIdx).getPc(RegEnable(io.memHyPcRead(i).offset, io.memHyPcRead(i).vld))
+    io.memHyPcRead(i).data := RegNext(pcMem.io.rdata(pcMemIdx).getPc(RegEnable(io.memHyPcRead(i).offset, io.memHyPcRead(i).vld)))
   }
 
   if (EnableStorePrefetchSMS) {
