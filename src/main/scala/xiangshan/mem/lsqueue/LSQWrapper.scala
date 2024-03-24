@@ -69,6 +69,7 @@ class LsqWrapper(implicit p: Parameters) extends XSModule with HasDCacheParamete
       val storeMaskIn = Vec(StorePipelineWidth, Flipped(Valid(new StoreMaskBundle))) // from store_s0, store mask, send to sq from rs
       val storeAddrIn = Vec(StorePipelineWidth, Flipped(Valid(new LsPipelineBundle))) // from store_s1
       val storeAddrInRe = Vec(StorePipelineWidth, Input(new LsPipelineBundle())) // from store_s2
+      val storeNuke = Vec(StorePipelineWidth, Output(Bool())) // from store s2
       val vecStoreAddrIn = Vec(StorePipelineWidth, Flipped(Valid(new LsPipelineBundle))) //from store_s2
       val vecStoreFlowAddrIn = Vec(StorePipelineWidth, Flipped(Valid(new LsPipelineBundle))) // from vsFlowQueue last element issue
     }
@@ -199,6 +200,7 @@ class LsqWrapper(implicit p: Parameters) extends XSModule with HasDCacheParamete
   loadQueue.io.sq.stIssuePtr       <> storeQueue.io.stIssuePtr
   loadQueue.io.sq.sqEmpty          <> storeQueue.io.sqEmpty
   loadQueue.io.sta.storeAddrIn     <> io.sta.storeAddrIn // store_s1
+  loadQueue.io.sta.storeNuke       <> io.sta.storeNuke // store_s2
   loadQueue.io.sta.vecStoreAddrIn  <> io.sta.vecStoreAddrIn // store_s1
   loadQueue.io.std.storeDataIn     <> io.std.storeDataIn // store_s0
   loadQueue.io.lqFull              <> io.lqFull

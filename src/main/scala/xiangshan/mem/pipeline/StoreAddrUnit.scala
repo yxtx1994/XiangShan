@@ -24,10 +24,10 @@ import utility._
 import xiangshan.ExceptionNO._
 import xiangshan._
 import xiangshan.backend.Bundles.{MemExuInput, MemExuOutput}
-import xiangshan.backend.fu._
 import xiangshan.backend.fu.PMPRespBundle
 import xiangshan.backend.fu.FuConfig._
 import xiangshan.backend.fu.FuType._
+import xiangshan.backend.fu._
 import xiangshan.backend.ctrlblock.DebugLsInfoBundle
 import xiangshan.cache.mmu.{TlbCmd, TlbReq, TlbRequestIO, TlbResp}
 import xiangshan.cache.{DcacheStoreRequestIO, DCacheStoreIO, MemoryOpConstants, HasDCacheParameters, StorePrefetchReq}
@@ -49,7 +49,7 @@ class StoreAddrUnit(implicit p: Parameters) extends XSModule with HasDCacheParam
     // speculative for gated control
     val s0_prefetch_spec = Output(Bool())
     val s1_prefetch_spec = Output(Bool())
-    val stld_nuke_query = Valid(new StoreNukeQueryIO)
+    val stld_nuke_query = new StoreNukeQueryIO
     val stout           = DecoupledIO(new MemExuOutput) // writeback store
     // store mask, send to sq in store_s0
     val st_mask_out     = Valid(new StoreMaskBundle)
@@ -61,7 +61,7 @@ class StoreAddrUnit(implicit p: Parameters) extends XSModule with HasDCacheParam
     val vec_feedback_slow = ValidIO(new VSFQFeedback)
   })
 
-  val s1_ready, s2_ready, s3_ready = WireInit(false.B)
+  val s1_ready, s2_ready, s3_ready, s4_ready = WireInit(false.B)
 
   // Pipeline
   // --------------------------------------------------------------------------------
@@ -99,39 +99,31 @@ class StoreAddrUnit(implicit p: Parameters) extends XSModule with HasDCacheParam
   val s0_can_go       = s1_ready
   val s0_fire         = s0_valid && !s0_kill && s0_can_go
   // vector
-  val s0_vecActive          = !s0_use_flow_vec || s0_vecstin.vecActive
+  val s0_vecActive    = !s0_use_flow_vec || s0_vecstin.vecActive
   val s0_flowPtr      = s0_vecstin.flowPtr
   val s0_isLastElem   = s0_vecstin.isLastElem
 
   // generate addr
   val s0_saddr = io.stin.bits.src(0) + SignExt(io.stin.bits.uop.imm(11,0), VAddrBits)
-  val s0_vaddr = Mux(s0_use_flow_rs, s0_saddr, io.prefetch_req.bits.vaddr)
-  val s0_mask  = Mux(s0_use_flow_rs, genVWmask(s0_saddr, s0_uop.fuOpType(1,0)), 3.U)
-
-  io.tlb.req.valid                   := s0_valid
-  io.tlb.req.bits.vaddr              := s0_vaddr
-  io.tlb.req.bits.cmd                := TlbCmd.write
-  io.tlb.req.bits.size               := s0_size
-  io.tlb.req.bits.kill               := false.B
-  io.tlb.req.bits.memidx.is_ld       := false.B
-  io.tlb.req.bits.memidx.is_st       := true.B
-  io.tlb.req.bits.memidx.idx         := s0_mem_idx
-  io.tlb.req.bits.debug.robIdx       := s0_rob_idx
-  io.tlb.req.bits.no_translate       := false.B
-  io.tlb.req.bits.debug.pc           := s0_pc
-  io.tlb.req.bits.debug.isFirstIssue := s0_isFirstIssue
-  io.tlb.req_kill                    := false.B
-
-  // Dcache access here: not **real** dcache write
-  // just read meta and tag in dcache, to find out the store will hit or miss
-
-  // NOTE: The store request does not wait for the dcache to be ready.
-  //       If the dcache is not ready at this time, the dcache is not queried.
-  //       But, store prefetch request will always wait for dcache to be ready to make progress.
-  io.dcache.req.valid              := s0_fire
-  io.dcache.req.bits.cmd           := MemoryOpConstants.M_PFW
-  io.dcache.req.bits.vaddr         := s0_vaddr
-  io.dcache.req.bits.instrtype     := s0_instr_type
+  val s0_vaddr = Mux(
+    s0_use_flow_rs,
+    s0_saddr,
+    Mux(
+      s0_use_flow_vec,
+      s0_vecstin.vaddr,
+      io.prefetch_req.bits.vaddr
+    )
+  )
+  val s0_mask  = Mux(
+    s0_use_flow_rs,
+    genVWmask(s0_saddr, s0_uop.fuOpType(1,0)),
+    Mux(
+      s0_use_flow_vec,
+      s0_vecstin.mask,
+      // -1.asSInt.asUInt
+      Fill(VLEN/8, 1.U(1.W))
+    )
+  )
 
   s0_out              := DontCare
   s0_out.vaddr        := s0_vaddr
@@ -175,250 +167,279 @@ class StoreAddrUnit(implicit p: Parameters) extends XSModule with HasDCacheParam
   // --------------------------------------------------------------------------------
   // stage 1
   // --------------------------------------------------------------------------------
-  // TLB resp (send paddr to dcache)
   val s1_valid  = RegInit(false.B)
   val s1_in     = RegEnable(s0_out, s0_fire)
   val s1_out    = Wire(new LsPipelineBundle)
+  val s1_use_flow_rs  = RegEnable(s0_use_flow_prf, s0_fire)
+  val s1_use_flow_prf = RegEnable(s0_use_flow_prf, s0_fire)
+  val s1_isFirstIssue = RegEnable(s0_isFirstIssue, s0_fire)
+  val s1_rsIdx        = RegEnable(s0_rsIdx, s0_fire)
+  val s1_size         = RegEnable(s0_size, s0_fire)
+  val s1_mem_idx      = RegEnable(s0_mem_idx, s0_fire)
+  val s1_rob_idx      = RegEnable(s0_rob_idx, s0_fire)
+  val s1_pc           = RegEnable(s0_pc, s0_fire)
+  val s1_instr_type   = RegEnable(s0_instr_type, s0_fire)
+  val s1_wlineflag    = RegEnable(s0_wlineflag, s0_fire)
+  val s1_vaddr  = RegEnable(s0_vaddr, s0_fire)
+  val s1_mask   = RegEnable(s0_mask, s0_fire)
   val s1_kill   = Wire(Bool())
   val s1_can_go = s2_ready
   val s1_fire   = s1_valid && !s1_kill && s1_can_go
-  val s1_vecActive    = RegEnable(s0_out.vecActive, true.B, s0_fire)
+  val s1_amo    = FuType.storeIsAMO(s1_in.uop.fuType)
+  val s1_exception = s1_in.uop.exceptionVec(storeAddrMisaligned)
 
-  // mmio cbo decoder
-  val s1_mmio_cbo  = s1_in.uop.fuOpType === LSUOpType.cbo_clean ||
-                     s1_in.uop.fuOpType === LSUOpType.cbo_flush ||
-                     s1_in.uop.fuOpType === LSUOpType.cbo_inval
-  val s1_paddr     = io.tlb.resp.bits.paddr(0)
-  val s1_tlb_miss  = io.tlb.resp.bits.miss
-  val s1_mmio      = s1_mmio_cbo
-  val s1_exception = ExceptionNO.selectByFu(s1_out.uop.exceptionVec, StaCfg).asUInt.orR
-  val s1_isvec     = RegEnable(s0_out.isvec, false.B, s0_fire)
-  val s1_isLastElem = RegEnable(s0_isLastElem, false.B, s0_fire)
-  val s1_amo       = FuType.storeIsAMO(s1_in.uop.fuType)
-  s1_kill := s1_in.uop.robIdx.needFlush(io.redirect) || s1_tlb_miss || s1_amo
-
+  s1_kill := s1_in.uop.robIdx.needFlush(io.redirect) || s1_in.uop.robIdx.needFlush(RegNext(io.redirect)) || s1_amo
   s1_ready := true.B
   io.tlb.resp.ready := true.B // TODO: why dtlbResp needs a ready?
   when (s0_fire) { s1_valid := true.B }
   .elsewhen (s1_fire) { s1_valid := false.B }
   .elsewhen (s1_kill) { s1_valid := false.B }
 
-  // st-ld violation dectect request.
-  io.stld_nuke_query.valid       := s1_valid && !s1_tlb_miss && !s1_in.isHWPrefetch
-  io.stld_nuke_query.bits.robIdx := s1_in.uop.robIdx
-  io.stld_nuke_query.bits.paddr  := s1_paddr
-  io.stld_nuke_query.bits.mask   := s1_in.mask
+  io.tlb.req.valid                   := s1_valid && !s1_amo && !s1_exception
+  io.tlb.req.bits.vaddr              := s1_in.vaddr
+  io.tlb.req.bits.cmd                := TlbCmd.write
+  io.tlb.req.bits.size               := s1_size
+  io.tlb.req.bits.kill               := false.B
+  io.tlb.req.bits.memidx.is_ld       := false.B
+  io.tlb.req.bits.memidx.is_st       := true.B
+  io.tlb.req.bits.memidx.idx         := s1_mem_idx
+  io.tlb.req.bits.debug.robIdx       := s1_rob_idx
+  io.tlb.req.bits.no_translate       := false.B
+  io.tlb.req.bits.debug.pc           := s1_pc
+  io.tlb.req.bits.debug.isFirstIssue := s1_isFirstIssue
+  io.tlb.req_kill                    := s1_kill
 
-  // issue
-  io.issue.valid := s1_valid && !s1_tlb_miss && !s1_in.isHWPrefetch && !s1_isvec
-  io.issue.bits  := RegEnable(s0_stin, s0_valid)
+  // Dcache access here: not **real** dcache write
+  // just read meta and tag in dcache, to find out the store will hit or miss
 
+  // NOTE: The store request does not wait for the dcache to be ready.
+  //       If the dcache is not ready at this time, the dcache is not queried.
+  //       But, store prefetch request will always wait for dcache to be ready to make progress.
+  io.dcache.req.valid              := s1_fire && !s1_amo && !s1_exception
+  io.dcache.req.bits.cmd           := MemoryOpConstants.M_PFW
+  io.dcache.req.bits.vaddr         := s1_vaddr
+  io.dcache.req.bits.instrtype     := s1_instr_type
 
-  // Send TLB feedback to store issue queue
-  // Store feedback is generated in store_s1, sent to RS in store_s2
-  val s1_feedback = Wire(Valid(new RSFeedback))
-  s1_feedback.valid                 := s1_valid & !s1_in.isHWPrefetch && !s1_isvec && !s1_amo
-  s1_feedback.bits.hit              := !s1_tlb_miss
-  s1_feedback.bits.flushState       := io.tlb.resp.bits.ptwBack
-  s1_feedback.bits.robIdx           := s1_out.uop.robIdx
-  s1_feedback.bits.sourceType       := RSFeedbackType.tlbMiss
-  s1_feedback.bits.dataInvalidSqIdx := DontCare
-
-  XSDebug(s1_feedback.valid,
-    "S1 Store: tlbHit: %d robIdx: %d\n",
-    s1_feedback.bits.hit,
-    s1_feedback.bits.robIdx.value
-  )
-
-  val s1_vec_feedback = Wire(Valid(new VSFQFeedback))
-  s1_vec_feedback.valid                 := s1_valid && !s1_in.isHWPrefetch && s1_isvec
-  s1_vec_feedback.bits.flowPtr          := s1_out.sflowPtr
-  s1_vec_feedback.bits.hit              := !s1_tlb_miss
-  s1_vec_feedback.bits.sourceType       := RSFeedbackType.tlbMiss
-  s1_vec_feedback.bits.paddr            := s1_paddr
-  s1_vec_feedback.bits.mmio             := s1_mmio
-  s1_vec_feedback.bits.atomic           := s1_mmio
-  s1_vec_feedback.bits.exceptionVec     := s1_out.uop.exceptionVec
-  XSDebug(s1_vec_feedback.valid,
-    "Vector S1 Store: tlbHit: %d flowPtr: %d\n",
-    s1_vec_feedback.bits.hit,
-    s1_vec_feedback.bits.flowPtr.value
-  )
-
-  // io.feedback_slow := s1_feedback
-  // io.vec_feedback_slow := s1_vec_feedback
-
-  // get paddr from dtlb, check if rollback is needed
-  // writeback store inst to lsq
-  s1_out         := s1_in
-  s1_out.paddr   := s1_paddr
-  s1_out.miss    := false.B
-  s1_out.mmio    := s1_mmio
-  s1_out.tlbMiss := s1_tlb_miss
-  s1_out.atomic  := s1_mmio
-  s1_out.uop.exceptionVec(storePageFault)   := io.tlb.resp.bits.excp(0).pf.st && s1_vecActive
-  s1_out.uop.exceptionVec(storeAccessFault) := io.tlb.resp.bits.excp(0).af.st && s1_vecActive
-
-  // scalar store and scalar load nuke check, and also other purposes
-  io.lsq.valid     := s1_valid && !s1_in.isHWPrefetch && !s1_isvec && !s1_amo
-  io.lsq.bits      := s1_out
-  io.lsq.bits.miss := s1_tlb_miss
-  // vector store and scalar load nuke check
-  io.lsq_vec.valid := s1_valid && !s1_in.isHWPrefetch && s1_isvec
-  io.lsq_vec.bits  := s1_out
-  io.lsq_vec.bits.miss := s1_tlb_miss
-  io.lsq_vec.bits.isLastElem := s1_isLastElem
-
-  // kill dcache write intent request when tlb miss or exception
-  io.dcache.s1_kill  := (s1_kill || s1_exception || s1_mmio)
-  io.dcache.s1_paddr := s1_paddr
-
-  // write below io.out.bits assign sentence to prevent overwriting values
-  val s1_tlb_memidx = io.tlb.resp.bits.memidx
-  when(s1_tlb_memidx.is_st && io.tlb.resp.valid && !s1_tlb_miss && s1_tlb_memidx.idx === s1_out.uop.sqIdx.value) {
-    // printf("Store idx = %d\n", s1_tlb_memidx.idx)
-    s1_out.uop.debugInfo.tlbRespTime := GTimer()
+  s1_out              := s1_in
+  // s1_out.data := genWdata(s1_in.src(1), s1_in.uop.ctrl.fuOpType(1,0))
+  s1_out.miss         := false.B
+  when(s1_valid && s1_isFirstIssue) {
+    s1_out.uop.debugInfo.tlbFirstReqTime := GTimer()
   }
 
   // Pipeline
   // --------------------------------------------------------------------------------
   // stage 2
   // --------------------------------------------------------------------------------
-  // mmio check
+  // TLB resp (send paddr to dcache)
   val s2_valid  = RegInit(false.B)
   val s2_in     = RegEnable(s1_out, s1_fire)
   val s2_out    = Wire(new LsPipelineBundle)
   val s2_kill   = Wire(Bool())
   val s2_can_go = s3_ready
   val s2_fire   = s2_valid && !s2_kill && s2_can_go
-  val s2_vecActive    = RegEnable(s1_out.vecActive, true.B, s1_fire)
+
+  // mmio cbo decoder
+  val s2_mmio_cbo  = s2_in.uop.fuOpType === LSUOpType.cbo_clean ||
+                     s2_in.uop.fuOpType === LSUOpType.cbo_flush ||
+                     s2_in.uop.fuOpType === LSUOpType.cbo_inval
+  val s2_paddr     = io.tlb.resp.bits.paddr(0)
+  val s2_tlb_miss  = io.tlb.resp.bits.miss
+  val s2_mmio      = s2_mmio_cbo
+  val s2_exception = ExceptionNO.selectByFu(s2_out.uop.exceptionVec, StaCfg).asUInt.orR
+  s2_kill := s2_in.uop.robIdx.needFlush(io.redirect) || s2_tlb_miss
 
   s2_ready := true.B
+  io.tlb.resp.ready := true.B // TODO: why dtlbResp needs a ready?
   when (s1_fire) { s2_valid := true.B }
   .elsewhen (s2_fire) { s2_valid := false.B }
   .elsewhen (s2_kill) { s2_valid := false.B }
 
-  val s2_pmp = WireInit(io.pmp)
+  // issue
+  io.issue.valid := s2_valid && !s2_tlb_miss && !s2_in.isHWPrefetch && !s2_in.isvec
+  io.issue.bits  := s2_in
 
-  val s2_exception = ExceptionNO.selectByFu(s2_out.uop.exceptionVec, StaCfg).asUInt.orR
-  val s2_mmio = s2_in.mmio || s2_pmp.mmio
-  s2_kill := (s2_mmio && !s2_exception) || s2_in.uop.robIdx.needFlush(io.redirect)
+  // Send TLB feedback to store issue queue
+  // Store feedback is generated in store_s1, sent to RS in store_s2
+  val s2_feedback = Wire(Valid(new RSFeedback))
+  s2_feedback.valid                 := s2_valid & !s2_in.isHWPrefetch && !s2_in.isvec
+  s2_feedback.bits.hit              := !s2_tlb_miss
+  s2_feedback.bits.flushState       := io.tlb.resp.bits.ptwBack
+  s2_feedback.bits.sourceType       := RSFeedbackType.tlbMiss
+  s2_feedback.bits.dataInvalidSqIdx := DontCare
+  XSDebug(s2_feedback.valid,
+    "s2 Store: tlbHit: %d robIdx: %d\n",
+    s2_feedback.bits.hit,
+    s2_in.uop.robIdx.asUInt
+  )
+  io.feedback_slow := s2_feedback
 
-  s2_out        := s2_in
-  s2_out.mmio   := s2_mmio && !s2_exception
-  s2_out.atomic := s2_in.atomic || s2_pmp.atomic
-  s2_out.uop.exceptionVec(storeAccessFault) := (s2_in.uop.exceptionVec(storeAccessFault) || s2_pmp.st) && s2_vecActive
+  val s2_vec_feedback = Wire(Valid(new VSFQFeedback))
+  s2_vec_feedback.valid             := s2_valid && !s2_in.isHWPrefetch && s2_in.isvec
+  s2_vec_feedback.bits.flowPtr      := s2_out.sflowPtr
+  s2_vec_feedback.bits.hit          := !s2_tlb_miss
+  s2_vec_feedback.bits.sourceType   := RSFeedbackType.tlbMiss
+  s2_vec_feedback.bits.paddr        := s2_paddr
+  s2_vec_feedback.bits.mmio         := s2_mmio
+  s2_vec_feedback.bits.atomic       := s2_mmio
+  s2_vec_feedback.bits.exceptionVec := s2_out.uop.exceptionVec
+  XSDebug(s2_vec_feedback.valid,
+    "Vector s2 Store: tlbHit: %d flowPtr: %d\n",
+    s2_vec_feedback.bits.hit,
+    s2_vec_feedback.bits.flowPtr.value
+  )
+
+  // get paddr from dtlb, check if rollback is needed
+  // writeback store inst to lsq
+  s2_out         := s2_in
+  s2_out.paddr   := s2_paddr
+  s2_out.miss    := false.B
+  s2_out.mmio    := s2_mmio
+  s2_out.tlbMiss := s2_tlb_miss
+  s2_out.atomic  := s2_mmio
+  s2_out.uop.exceptionVec(storePageFault)   := io.tlb.resp.bits.excp(0).pf.st && s2_in.vecActive
+  s2_out.uop.exceptionVec(storeAccessFault) := io.tlb.resp.bits.excp(0).af.st && s2_in.vecActive
+
+  // scalar store and scalar load nuke check, and also other purposes
+  io.lsq.valid     := s2_valid && !s2_in.isHWPrefetch && !s2_in.isvec
+  io.lsq.bits      := s2_out
+  io.lsq.bits.miss := s2_tlb_miss
+  // vector store and scalar load nuke check
+  io.lsq_vec.valid := s2_valid && !s2_in.isHWPrefetch && s2_in.isvec
+  io.lsq_vec.bits  := s2_out
+  io.lsq_vec.bits.miss := s2_tlb_miss
+  io.lsq_vec.bits.isLastElem := s2_in.isLastElem
+
+  // st-ld violation dectect request.
+  io.stld_nuke_query.s2_valid  := s2_valid && !s2_in.isHWPrefetch && !s2_tlb_miss
+  io.stld_nuke_query.s2_robIdx := s2_in.uop.robIdx
+  io.stld_nuke_query.s2_paddr  := s2_paddr
+  io.stld_nuke_query.s2_mask   := s2_in.mask
+
+  // kill dcache write intent request when tlb miss or exception
+  io.dcache.s1_kill  := (s2_kill || s2_exception || s2_mmio)
+  io.dcache.s1_paddr := s2_paddr
+
+  // write below io.out.bits assign sentence to prevent overwriting values
+  val s2_tlb_memidx = io.tlb.resp.bits.memidx
+  when(s2_tlb_memidx.is_st && io.tlb.resp.valid && !s2_tlb_miss && s2_tlb_memidx.idx === s2_out.uop.sqIdx.value) {
+    // printf("Store idx = %d\n", s2_tlb_memidx.idx)
+    s2_out.uop.debugInfo.tlbRespTime := GTimer()
+  }
+
+  // Pipeline
+  // --------------------------------------------------------------------------------
+  // stage 3
+  // --------------------------------------------------------------------------------
+  // mmio check
+  val s3_valid  = RegInit(false.B)
+  val s3_in     = RegEnable(s2_out, s2_fire)
+  val s3_out    = Wire(new LsPipelineBundle)
+  val s3_kill   = Wire(Bool())
+  val s3_can_go = s4_ready
+  val s3_fire   = s3_valid && !s3_kill && s3_can_go
+
+  s3_ready := true.B
+  when (s2_fire) { s3_valid := true.B }
+  .elsewhen (s3_fire) { s3_valid := false.B }
+  .elsewhen (s3_kill) { s3_valid := false.B }
+
+  val s3_pmp = WireInit(io.pmp)
+
+  val s3_exception = ExceptionNO.selectByFu(s3_out.uop.exceptionVec, StaCfg).asUInt.orR
+  val s3_mmio = s3_in.mmio || s3_pmp.mmio
+  s3_kill := (s3_mmio && !s3_exception) || s3_in.uop.robIdx.needFlush(io.redirect)
+
+  s3_out        := s3_in
+  s3_out.mmio   := s3_mmio && !s3_exception
+  s3_out.atomic := s3_in.atomic || s3_pmp.atomic
+  s3_out.miss   := io.dcache.resp.bits.miss
+  s3_out.uop.exceptionVec(storeAccessFault) := s3_in.uop.exceptionVec(storeAccessFault) || s3_pmp.st
 
   // kill dcache write intent request when mmio or exception
-  io.dcache.s2_kill := (s2_mmio || s2_exception || s2_in.uop.robIdx.needFlush(io.redirect))
-  io.dcache.s2_pc   := s2_out.uop.pc
+  io.dcache.s2_kill := (s3_mmio || s3_exception || s3_in.uop.robIdx.needFlush(io.redirect))
+  io.dcache.s2_pc   := s3_out.uop.pc
   // TODO: dcache resp
   io.dcache.resp.ready := true.B
 
-  // feedback tlb miss to RS in store_s2
-  val feedback_slow_valid = WireInit(false.B)
-  feedback_slow_valid := s1_feedback.valid && !s1_out.uop.robIdx.needFlush(io.redirect)
-  io.feedback_slow.valid := GatedValidRegNext(feedback_slow_valid)
-  io.feedback_slow.bits  := RegEnable(s1_feedback.bits, feedback_slow_valid)
-
-  // vector feedback
-  io.vec_feedback_slow.valid := RegNext(s1_vec_feedback.valid && !s1_out.uop.robIdx.needFlush(io.redirect))
-  io.vec_feedback_slow.bits  := RegNext(s1_vec_feedback.bits)
-  io.vec_feedback_slow.bits.mmio := s2_mmio && !s2_exception
-  io.vec_feedback_slow.bits.atomic := s2_in.atomic || s2_pmp.atomic
-
   // mmio and exception
-  io.lsq_replenish := s2_out
+  io.lsq_replenish := s3_out
 
   // prefetch related
   io.lsq_replenish.miss := io.dcache.resp.fire && io.dcache.resp.bits.miss // miss info
 
+  // vector feedback
+  io.vec_feedback_slow.valid := RegNext(s2_vec_feedback.valid) && !s3_out.uop.robIdx.needFlush(io.redirect)
+  io.vec_feedback_slow.bits  := RegNext(s2_vec_feedback.bits)
+  io.vec_feedback_slow.bits.mmio := s3_in.mmio && !s3_exception
+  io.vec_feedback_slow.bits.atomic := s3_in.atomic || s3_pmp.atomic
+
   // RegNext prefetch train for better timing
-  // ** Now, prefetch train is valid at store s3 **
+  // TODO: add prefetch and access bit
   val prefetch_train_valid = WireInit(false.B)
-  prefetch_train_valid := s2_valid && io.dcache.resp.fire && !s2_out.mmio && !s2_in.tlbMiss && !s2_in.isHWPrefetch
-  if (EnableStorePrefetchSMS) {
-    io.s0_prefetch_spec := s0_fire
-    io.s1_prefetch_spec := s1_fire
+  prefetch_train_valid := s3_valid && io.dcache.resp.fire && !s3_out.mmio && !s3_in.tlbMiss && !s3_in.isHWPrefetch
+  if(EnableStorePrefetchSMS) {
+    io.s0_prefetch_spec := s1_fire
+    io.s1_prefetch_spec := s2_fire
+  // ** Now, prefetch train is valid at store s4 **
     io.prefetch_train.valid := GatedValidRegNext(prefetch_train_valid)
-    io.prefetch_train.bits.fromLsPipelineBundle(s2_in, latch = true, enable = prefetch_train_valid)
-  } else {
+    io.prefetch_train.bits.fromLsPipelineBundle(s3_out, latch = true, enable = prefetch_train_valid)
+  }else {
     io.s0_prefetch_spec := false.B
     io.s1_prefetch_spec := false.B
     io.prefetch_train.valid := false.B
-    io.prefetch_train.bits.fromLsPipelineBundle(s2_in, latch = true, enable = false.B)
+    io.prefetch_train.bits.fromLsPipelineBundle(s3_out, latch = true, enable = false.B)
   }
-  // override miss bit
-  io.prefetch_train.bits.miss := RegEnable(io.dcache.resp.bits.miss, prefetch_train_valid)
   // TODO: add prefetch and access bit
   io.prefetch_train.bits.meta_prefetch := false.B
   io.prefetch_train.bits.meta_access := false.B
 
   // Pipeline
   // --------------------------------------------------------------------------------
-  // stage 3
+  // stage 4
   // --------------------------------------------------------------------------------
   // store write back
-  val s3_valid  = RegInit(false.B)
-  val s3_in     = RegEnable(s2_out, s2_fire)
-  val s3_out    = Wire(new MemExuOutput)
-  val s3_kill   = s3_in.uop.robIdx.needFlush(io.redirect)
-  val s3_can_go = s3_ready
-  val s3_fire   = s3_valid && !s3_kill && s3_can_go
+  val s4_valid  = RegInit(false.B)
+  val s4_in     = RegEnable(s3_out, s3_fire)
+  val s4_out    = Wire(new MemExuOutput)
+  val s4_kill   = s4_in.uop.robIdx.needFlush(io.redirect)
+  val s4_can_go = io.stout.ready
+  val s4_fire   = s4_valid && !s4_kill && s4_can_go
+  val s4_bad_nuke_detected = io.stld_nuke_query.s4_nuke
 
-  when (s2_fire) { s3_valid := (!s2_mmio || s2_exception) && !s2_out.isHWPrefetch  }
-  .elsewhen (s3_fire) { s3_valid := false.B }
-  .elsewhen (s3_kill) { s3_valid := false.B }
+  when (s3_fire) { s4_valid := (!s3_mmio || s3_exception) && !s3_out.isHWPrefetch  }
+  .elsewhen (s4_fire) { s4_valid := false.B }
+  .elsewhen (s4_kill) { s4_valid := false.B }
 
   // wb: writeback
-  val SelectGroupSize   = RollbackGroupSize
-  val lgSelectGroupSize = log2Ceil(SelectGroupSize)
-  val TotalSelectCycles = scala.math.ceil(log2Ceil(LoadQueueRAWSize).toFloat / lgSelectGroupSize).toInt + 1
-
-  s3_out                 := DontCare
-  s3_out.uop             := s3_in.uop
-  s3_out.data            := DontCare
-  s3_out.debug.isMMIO    := s3_in.mmio
-  s3_out.debug.paddr     := s3_in.paddr
-  s3_out.debug.vaddr     := s3_in.vaddr
-  s3_out.debug.isPerfCnt := false.B
+  s4_out                     := DontCare
+  s4_out.uop                 := s4_in.uop
+  s4_out.data                := DontCare
+  s4_out.debug.isMMIO        := s4_in.mmio
+  s4_out.debug.paddr         := s4_in.paddr
+  s4_out.debug.vaddr         := s4_in.vaddr
+  s4_out.debug.isPerfCnt     := false.B
 
   // Pipeline
   // --------------------------------------------------------------------------------
-  // stage x
+  // stage 5 (like skid buffer)
   // --------------------------------------------------------------------------------
-  // delay TotalSelectCycles - 2 cycle(s)
-  val TotalDelayCycles = TotalSelectCycles - 2
-  val sx_valid = Wire(Vec(TotalDelayCycles + 1, Bool()))
-  val sx_ready = Wire(Vec(TotalDelayCycles + 1, Bool()))
-  val sx_in    = Wire(Vec(TotalDelayCycles + 1, new MemExuOutput))
+  // store write back
+  val s5_valid  = RegInit(false.B)
+  val s5_in     = RegEnable(s4_out, s4_fire)
+  val s5_out    = s5_in
+  val s5_kill   = s5_in.uop.robIdx.needFlush(io.redirect)
+  val s5_can_go = io.stout.ready
+  val s5_real_valid = s5_valid && !s5_kill
+  val s5_fire   = s5_real_valid && s5_can_go
 
-  // backward ready signal
-  s3_ready := true.B
-  for (i <- 0 until TotalDelayCycles + 1) {
-    if (i == 0) {
-      sx_valid(i) := s3_valid
-      sx_in(i)    := s3_out
-      sx_ready(i) := !s3_valid(i) || sx_in(i).uop.robIdx.needFlush(io.redirect) || (if (TotalDelayCycles == 0) io.stout.ready else sx_ready(i+1))
-    } else {
-      val cur_kill   = sx_in(i).uop.robIdx.needFlush(io.redirect)
-      val cur_can_go = (if (i == TotalDelayCycles) io.stout.ready else sx_ready(i+1))
-      val cur_fire   = sx_valid(i) && !cur_kill && cur_can_go
-      val prev_fire  = sx_valid(i-1) && !sx_in(i-1).uop.robIdx.needFlush(io.redirect) && sx_ready(i)
+  when (s4_fire) { s5_valid := true.B & (s4_bad_nuke_detected || s5_real_valid) } // when detected bad nuke at s4 or skid buffer is full, into skip buffer
+  .elsewhen (s5_fire) { s5_valid := false.B }
+  .elsewhen (s5_kill) { s5_valid := false.B }
 
-      sx_ready(i) := !sx_valid(i) || cur_kill || (if (i == TotalDelayCycles) io.stout.ready else sx_ready(i+1))
-      val sx_valid_can_go = prev_fire || cur_fire || cur_kill
-      sx_valid(i) := RegEnable(Mux(prev_fire, true.B, false.B), false.B, sx_valid_can_go)
-      sx_in(i) := RegEnable(sx_in(i-1), prev_fire)
-    }
-  }
-  val sx_last_valid = sx_valid.takeRight(1).head
-  val sx_last_ready = sx_ready.takeRight(1).head
-  val sx_last_in    = sx_in.takeRight(1).head
-  sx_last_ready := !sx_last_valid || sx_last_in.uop.robIdx.needFlush(io.redirect) || io.stout.ready
-
-  io.stout.valid := sx_last_valid
-  io.stout.bits := sx_last_in
+  s4_ready := Mux(s5_real_valid || s4_bad_nuke_detected, true.B, io.stout.ready)
+  io.stout.valid := s5_real_valid || (s4_valid && !s4_bad_nuke_detected)
+  io.stout.bits := Mux(s5_real_valid, s5_out, s4_out)
 
   io.debug_ls := DontCare
   io.debug_ls.s1.isTlbFirstMiss := io.tlb.resp.valid && io.tlb.resp.bits.miss && io.tlb.resp.bits.debug.isFirstIssue && !s1_in.isHWPrefetch
@@ -446,10 +467,10 @@ class StoreAddrUnit(implicit p: Parameters) extends XSModule with HasDCacheParam
   XSPerfAccumulate("s0_addr_spec_success_once",  s0_fire && !s0_use_flow_vec && s0_saddr(VAddrBits-1, 12) === s0_stin.src(0)(VAddrBits-1, 12) && s0_isFirstIssue)
   XSPerfAccumulate("s0_addr_spec_failed_once",   s0_fire && !s0_use_flow_vec && s0_saddr(VAddrBits-1, 12) =/= s0_stin.src(0)(VAddrBits-1, 12) && s0_isFirstIssue)
 
-  XSPerfAccumulate("s1_in_valid",                s1_valid)
-  XSPerfAccumulate("s1_in_fire",                 s1_fire)
-  XSPerfAccumulate("s1_in_fire_first_issue",     s1_fire && s1_in.isFirstIssue)
-  XSPerfAccumulate("s1_tlb_miss",                s1_fire && s1_tlb_miss)
-  XSPerfAccumulate("s1_tlb_miss_first_issue",    s1_fire && s1_tlb_miss && s1_in.isFirstIssue)
+  XSPerfAccumulate("s2_in_valid",                s2_valid)
+  XSPerfAccumulate("s2_in_fire",                 s2_fire)
+  XSPerfAccumulate("s2_in_fire_first_issue",     s2_fire && s2_in.isFirstIssue)
+  XSPerfAccumulate("s2_tlb_miss",                s2_fire && s2_tlb_miss)
+  XSPerfAccumulate("s2_tlb_miss_first_issue",    s2_fire && s2_tlb_miss && s2_in.isFirstIssue)
   // end
 }

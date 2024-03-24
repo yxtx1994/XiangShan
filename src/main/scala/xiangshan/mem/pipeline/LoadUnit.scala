@@ -168,7 +168,7 @@ class LoadUnit(implicit p: Parameters) extends XSModule
     val s3_dly_ld_err = Output(Bool()) // Note that io.s3_dly_ld_err and io.lsq.s3_dly_ld_err is different
 
     // schedule error query
-    val stld_nuke_query = Flipped(Vec(StorePipelineWidth, Valid(new StoreNukeQueryIO)))
+    val stld_nuke_query = Flipped(Vec(StorePipelineWidth, new StoreNukeQueryIO))
 
     // queue-based replay
     val replay       = Flipped(Decoupled(new LsPipelineBundle))
@@ -766,10 +766,10 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   //   s1_paddr_dup_lsu(PAddrBits-1, 4) === io.stld_nuke_query(w).bits.paddr(PAddrBits-1, 4),
   //   s1_paddr_dup_lsu(PAddrBits-1, 3) === io.stld_nuke_query(w).bits.paddr(PAddrBits-1, 3))}))
   val s1_nuke = VecInit((0 until StorePipelineWidth).map(w => {
-                       io.stld_nuke_query(w).valid && // query valid
-                       isAfter(s1_in.uop.robIdx, io.stld_nuke_query(w).bits.robIdx) && // older store
-                       (s1_paddr_dup_lsu(PAddrBits-1, 3) === io.stld_nuke_query(w).bits.paddr(PAddrBits-1, 3)) && // paddr match
-                       (s1_in.mask & io.stld_nuke_query(w).bits.mask).orR // data mask contain
+                       io.stld_nuke_query(w).s2_valid && // query valid
+                       isAfter(s1_in.uop.robIdx, io.stld_nuke_query(w).s2_robIdx) && // older store
+                       (s1_paddr_dup_lsu(PAddrBits-1, 3) === io.stld_nuke_query(w).s2_paddr(PAddrBits-1, 3)) && // paddr match
+                       (s1_in.mask & io.stld_nuke_query(w).s2_mask).orR // data mask contain
                       })).asUInt.orR && !s1_tlb_miss
 
   s1_out                   := s1_in
@@ -966,13 +966,15 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   //  2. Load instruction is younger than requestors(store instructions).
   //  3. Physical address match.
   //  4. Data contains.
-  val s2_nuke          = VecInit((0 until StorePipelineWidth).map(w => {
-                          io.stld_nuke_query(w).valid && // query valid
-                          isAfter(s2_in.uop.robIdx, io.stld_nuke_query(w).bits.robIdx) && // older store
-                          // TODO: Fix me when vector instruction
-                          (s2_in.paddr(PAddrBits-1, 3) === io.stld_nuke_query(w).bits.paddr(PAddrBits-1, 3)) && // paddr match
-                          (s2_in.mask & io.stld_nuke_query(w).bits.mask).orR // data mask contain
-                        })).asUInt.orR && !s2_tlb_miss || s2_in.rep_info.nuke
+  val s2_bad_nukes    = VecInit((0 until StorePipelineWidth).map(w => {
+                          io.stld_nuke_query(w).s2_valid && // query valid
+                          isAfter(s2_in.uop.robIdx, io.stld_nuke_query(w).s2_robIdx) && // older store
+                           // TODO: Fix me when vector instruction
+                          (s2_in.paddr(PAddrBits-1, 3) === io.stld_nuke_query(w).s2_paddr(PAddrBits-1, 3)) && // paddr match
+                          (s2_in.mask & io.stld_nuke_query(w).s2_mask).orR && // data mask contain
+                          !s2_tlb_miss
+                        }))
+  val s2_nuke          = s2_bad_nukes.asUInt.orR || s2_in.rep_info.nuke
 
   val s2_cache_handled   = io.dcache.resp.bits.handled
   val s2_cache_tag_error = GatedValidRegNext(io.csrCtrl.cache_error_enable) &&
@@ -1219,6 +1221,11 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   val s3_rep_info = WireInit(s3_in.rep_info)
   val s3_sel_rep_cause = PriorityEncoderOH(s3_rep_info.cause.asUInt)
 
+  // s3 nuke check
+  val s3_bad_nuke_detected =  RegNext(s2_bad_nukes.asUInt.orR)
+  (0 until StorePipelineWidth).map(w => {
+    io.stld_nuke_query(w).s4_nuke := DontCare
+  })
   val s3_exception = ExceptionNO.selectByFu(s3_in.uop.exceptionVec, LduCfg).asUInt.orR && s3_vecActive
   when (s3_exception || s3_dly_ld_err || s3_rep_frm_fetch) {
     io.lsq.ldin.bits.rep_info.cause := 0.U.asTypeOf(s3_rep_info.cause.cloneType)

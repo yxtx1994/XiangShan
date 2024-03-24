@@ -1039,6 +1039,8 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
 
     // store unit does not need fast feedback
     io.mem_to_ooo.staIqFeedback(i).feedbackFast := DontCare
+    // stld nuke
+    stu.io.stld_nuke_query.s4_nuke := RegNext(lsq.io.sta.storeNuke(i))
 
     // Lsq to sta unit
     lsq.io.sta.storeMaskIn(i) <> stu.io.st_mask_out
