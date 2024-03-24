@@ -245,6 +245,7 @@ class UncacheBuffer(implicit p: Parameters) extends XSModule with HasCircularQue
     size = LoadUncacheBufferSize,
     allocWidth = LoadPipelineWidth,
     freeWidth = 4,
+    regOut = true,
     enablePreAlloc = true,
     moduleName = "UncacheBuffer freelist"
   ))

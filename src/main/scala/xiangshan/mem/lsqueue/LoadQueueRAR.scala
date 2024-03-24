@@ -84,6 +84,7 @@ class LoadQueueRAR(implicit p: Parameters) extends XSModule
     size = LoadQueueRARSize,
     allocWidth = LoadPipelineWidth,
     freeWidth = 4,
+    regOut = true,
     enablePreAlloc = true,
     moduleName = "LoadQueueRAR freelist"
   ))
@@ -132,7 +133,7 @@ class LoadQueueRAR(implicit p: Parameters) extends XSModule
       XSError(allocated(enqIndex), p"LoadQueueRAR: You can not write an valid entry! check: ldu $w, robIdx $debug_robIdx")
 
       freeList.io.doAllocate(w) := true.B
-     
+
       //  Allocate new entry
       allocated(enqIndex) := true.B
 

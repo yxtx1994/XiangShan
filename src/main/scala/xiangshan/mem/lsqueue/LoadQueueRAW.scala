@@ -67,7 +67,7 @@ class LoadQueueRAW(implicit p: Parameters) extends XSModule
   //  Mask        : data mask
   //  Datavalid   : data valid
   //
-  
+
   //val allocated = RegInit(VecInit(List.fill(LoadQueueRAWSize)(false.B))) // The control signals need to explicitly indicate the initial value
   val allocatedReg = RegInit(VecInit(List.fill(LoadQueueRAWSize)(false.B)))
   val allocatedEnable = WireInit(VecInit(Seq.fill(LoadQueueRAWSize)(false.B)))
@@ -118,6 +118,7 @@ class LoadQueueRAW(implicit p: Parameters) extends XSModule
     size = LoadQueueRAWSize,
     allocWidth = LoadPipelineWidth,
     freeWidth = 4,
+    regOut = true,
     enablePreAlloc = true,
     moduleName = "LoadQueueRAW freelist"
   ))
