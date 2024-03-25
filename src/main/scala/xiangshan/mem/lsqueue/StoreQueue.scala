@@ -272,7 +272,7 @@ class StoreQueue(implicit p: Parameters) extends XSModule
 
   // update
   val dataReadyLookupVec = (0 until IssuePtrMoveStride).map(dataReadyPtrExt + _.U)
-  val dataReadyLookup = dataReadyLookupVec.map(ptr => allocated(ptr.value) && (mmio(ptr.value) || datavalid(ptr.value) || vec(ptr.value)) && ptr =/= enqPtrExt(0)) // TODO : flag of vector store data valid not add yet 
+  val dataReadyLookup = dataReadyLookupVec.map(ptr => allocated(ptr.value) && (mmio(ptr.value) || datavalid(ptr.value) || vec(ptr.value)) && ptr =/= enqPtrExt(0)) // TODO : flag of vector store data valid not add yet
   val nextDataReadyPtr = dataReadyPtrExt + PriorityEncoder(VecInit(dataReadyLookup.map(!_) :+ true.B))
   dataReadyPtrExt := nextDataReadyPtr
 
@@ -365,7 +365,7 @@ class StoreQueue(implicit p: Parameters) extends XSModule
     when(vaddrModule.io.wen(i)){
       debug_vaddr(vaddrModule.io.waddr(i)) := vaddrModule.io.wdata(i)
     }
-    // TODO :  When lastElem issue to stu or inactivative issue in vsFlowQueue, set vector store addr ready 
+    // TODO :  When lastElem issue to stu or inactivative issue in vsFlowQueue, set vector store addr ready
     val vecStWbIndex = io.vecStoreAddrIn(i).bits.uop.sqIdx.value
     when(io.vecStoreAddrIn(i).fire){
       vecAddrvalid(vecStWbIndex) := true.B
@@ -509,16 +509,21 @@ class StoreQueue(implicit p: Parameters) extends XSModule
     // load_s2: generate addrInvalid
     val addrInvalidMask1 = (~addrValidVec.asUInt & storeSetHitVec.asUInt & forwardMask1.asUInt)
     val addrInvalidMask2 = (~addrValidVec.asUInt & storeSetHitVec.asUInt & forwardMask2.asUInt)
+    val addrInvalidMask = addrInvalidMask1 | addrInvalidMask2
+    val hasInvalidAddr = (~addrValidVec.asUInt & needForward).orR
+    io.forward(i).addrInvalidFast := Mux(io.forward(i).uop.cf.loadWaitStrict, hasInvalidAddr, addrInvalidMask.orR)
+
     // make chisel happy
     val addrInvalidMask1Reg = Wire(UInt(StoreQueueSize.W))
-    addrInvalidMask1Reg := GatedRegNext(addrInvalidMask1)
+    addrInvalidMask1Reg := RegNext(addrInvalidMask1)
     // make chisel happy
     val addrInvalidMask2Reg = Wire(UInt(StoreQueueSize.W))
-    addrInvalidMask2Reg := GatedRegNext(addrInvalidMask2)
+    addrInvalidMask2Reg := RegNext(addrInvalidMask2)
     val addrInvalidMaskReg = addrInvalidMask1Reg | addrInvalidMask2Reg
 
     // load_s2
     io.forward(i).dataInvalid := RegNext(io.forward(i).dataInvalidFast)
+    io.forward(i).addrInvalid := RegNext(io.forward(i).addrInvalidFast)
     // check if vaddr forward mismatched
     io.forward(i).matchInvalid := vaddrMatchFailed
 
@@ -534,7 +539,6 @@ class StoreQueue(implicit p: Parameters) extends XSModule
     val addrInvalidMaskRegWire = Wire(UInt(StoreQueueSize.W))
     addrInvalidMaskRegWire := addrInvalidMaskReg
     val addrInvalidFlag = addrInvalidMaskRegWire.orR
-    val hasInvalidAddr = (~addrValidVec.asUInt & needForward).orR
 
     val addrInvalidSqIdx1 = OHToUInt(Reverse(PriorityEncoderOH(Reverse(addrInvalidMask1Reg))))
     val addrInvalidSqIdx2 = OHToUInt(Reverse(PriorityEncoderOH(Reverse(addrInvalidMask2Reg))))
@@ -571,7 +575,6 @@ class StoreQueue(implicit p: Parameters) extends XSModule
       // may be store inst has been written to sbuffer already.
       io.forward(i).addrInvalidSqIdx := RegEnable(io.forward(i).uop.sqIdx, io.forward(i).valid)
     }
-    io.forward(i).addrInvalid := Mux(RegEnable(io.forward(i).uop.loadWaitStrict, io.forward(i).valid), RegNext(hasInvalidAddr), addrInvalidFlag)
 
     // data invalid sq index
     // make chisel happy
