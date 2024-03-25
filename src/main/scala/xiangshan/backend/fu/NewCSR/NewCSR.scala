@@ -5,7 +5,17 @@ import chisel3.util._
 import top.{ArgParser, Generator}
 import xiangshan.backend.fu.NewCSR.CSRDefines.{PrivMode, VirtMode}
 
-class NewCSR extends Module with MachineLevel with SupervisorLevel with Hypervisor with Unprivileged {
+object CSRConfig {
+  final val GEILEN = 63
+
+  final val HIIDWidth = 12 // support Hvictl[27:16](IID)
+
+  final val VMIDLEN = 14 // the length of VMID of XS implementation
+
+  final val VMIDMAX = 14 // the max value of VMIDLEN defined by spec
+}
+
+class NewCSR extends Module with MachineLevel with SupervisorLevel with HypervisorLevel with Unprivileged {
   val io = IO(new Bundle {
     val w = Flipped(ValidIO(new Bundle {
       val addr = UInt(12.W)
@@ -21,6 +31,10 @@ class NewCSR extends Module with MachineLevel with SupervisorLevel with Hypervis
       val toPRVM = PrivMode()
       val toV = VirtMode()
     }))
+    // from interrupt controller
+    val fromIC = Input(new Bundle {
+      val vs = new CSRIRCBundle
+    })
   })
 
   val addr = io.w.bits.addr
@@ -45,15 +59,15 @@ class NewCSR extends Module with MachineLevel with SupervisorLevel with Hypervis
   val isSret = tret && tretPRVM === PrivMode.S
   val isMret = tret && tretPRVM === PrivMode.M
 
-  val CSRWMap = machineLevelCSRMap ++ supervisorLevelCSRMap ++ hypervisorCSRMap ++ unprivilegedCSRMap
+  var csrRwMap = machineLevelCSRMap ++ supervisorLevelCSRMap ++ hypervisorCSRMap ++ unprivilegedCSRMap
 
   val csrMods = machineLevelCSRMods ++ supervisorLevelCSRMods ++ hypervisorCSRMods ++ unprivilegedCSRMods
 
-  for ((id, (wBundle, _)) <- CSRWMap) {
+  for ((id, (wBundle, _)) <- csrRwMap) {
     wBundle.wen := wen && addr === id.U
     wBundle.wdata := data
   }
-  io.rData := Mux1H(CSRWMap.map { case (id, (_, rBundle)) =>
+  io.rData := Mux1H(csrRwMap.map { case (id, (_, rBundle)) =>
     (io.rAddr === id.U) -> rBundle.asUInt
   })
 
@@ -61,6 +75,8 @@ class NewCSR extends Module with MachineLevel with SupervisorLevel with Hypervis
     mod.commonIn.status := mstatus.mstatus
     mod.commonIn.prvm := PRVM
     mod.commonIn.v := V
+    mod.commonIn.hstatus := hstatus.rdata
+    mod.vsi := io.fromIC.vs
     println(s"${mod.modName}: ")
     println(mod.dumpFields)
   }
