@@ -114,7 +114,7 @@ class CSREnumType(
   val msb: Int,
   val lsb: Int,
 )(
-  val rwType: CSRRWType,
+  var rwType: CSRRWType,
 )(
   override val factory: ChiselEnum
 ) extends EnumType(factory) {
@@ -176,6 +176,19 @@ class CSREnumType(
 
   def dumpName = {
     s"${chisel3.reflect.DataMirror.queryNameGuess(this)} ${rwType} [$msb, $lsb] reset($init)"
+  }
+
+  private def setRwType(newType: CSRRWType): this.type = {
+    this.rwType = newType
+    this
+  }
+
+  def setRO(rfn: CSRRfnType = null): this.type = {
+    this.setRwType(ROType(rfn))
+  }
+
+  def setRW(): this.type = {
+    this.setRwType(RWType())
   }
 }
 
@@ -262,3 +275,22 @@ trait CSRMacroApply { self: CSREnum =>
   def RefWARL(ref: CSREnumType, msb: Int, lsb: Int, wfn: CSRWfnType): CSREnumType = self
     .apply(RefWARLType(Some(ref), wfn))(msb, lsb)(ref.factory)
 }
+
+object CSREnumTypeImplicitCast {
+  implicit def CSREnumTypeToUInt(field: CSREnumType): UInt = {
+    field.asUInt
+  }
+
+  class BoolField(val value: Bool) {
+    def && (field: CSREnumType): Bool = {
+      this.value && field.asBool
+    }
+
+    def || (field: CSREnumType): Bool = {
+      this.value || field.asBool
+    }
+  }
+
+  implicit def BoolToBoolField(bool: Bool): BoolField = new BoolField(bool)
+}
+
