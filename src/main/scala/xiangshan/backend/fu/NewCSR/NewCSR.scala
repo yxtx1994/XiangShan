@@ -8,6 +8,10 @@ import xiangshan.backend.fu.NewCSR.CSRDefines.{PrivMode, VirtMode}
 object CSRConfig {
   final val GEILEN = 63
 
+  final val ASIDLEN = 16 // the length of ASID of XS implementation
+
+  final val ASIDMAX = 16 // the max value of ASIDLEN defined by spec
+
   final val HIIDWidth = 12 // support Hvictl[27:16](IID)
 
   final val VMIDLEN = 14 // the length of VMID of XS implementation
@@ -76,6 +80,20 @@ class NewCSR extends Module
   io.rData := Mux1H(csrRwMap.map { case (id, (_, rBundle)) =>
     (io.rAddr === id.U) -> rBundle.asUInt
   })
+
+  csrMods.foreach {
+    case mod: HypervisorBundle =>
+      mod.hstatus := hstatus.rdata
+      mod.hvip := hvip.rdata
+      mod.hideleg := hideleg.rdata
+      mod.hedeleg := hedeleg.rdata
+      mod.hgeip := hgeip.rdata
+      mod.hgeie := hgeie.rdata
+      mod.hip := hip.rdata
+      mod.hie := hie.rdata
+    case _ =>
+  }
+
 
   csrMods.foreach { mod =>
     mod.commonIn.status := mstatus.mstatus
