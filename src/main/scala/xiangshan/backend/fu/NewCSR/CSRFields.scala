@@ -178,6 +178,10 @@ class CSREnumType(
     s"${chisel3.reflect.DataMirror.queryNameGuess(this)} ${rwType} [$msb, $lsb] reset($init)"
   }
 
+  def asBool: Bool = {
+    this.asUInt.asBool
+  }
+
   private def setRwType(newType: CSRRWType): this.type = {
     this.rwType = newType
     this
