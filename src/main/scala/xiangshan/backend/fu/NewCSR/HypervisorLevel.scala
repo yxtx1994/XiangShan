@@ -2,16 +2,11 @@ package xiangshan.backend.fu.NewCSR
 
 import chisel3._
 import chisel3.util._
-import xiangshan.backend.fu.NewCSR.CSRDefines.{
-  CSRRWField => RW,
-  CSRROField => RO,
-  CSRWLRLField => WLRL,
-  CSRWARLField => WARL,
-  _
-}
+import xiangshan.backend.fu.NewCSR.CSRDefines.{CSRROField => RO, CSRRWField => RW, CSRWARLField => WARL, CSRWLRLField => WLRL, _}
 import xiangshan.backend.fu.NewCSR.CSRFunc._
 import xiangshan.backend.fu.NewCSR.CSRConfig._
 import xiangshan.backend.fu.NewCSR.CSRBundles._
+import xiangshan.backend.fu.NewCSR.CSREvents.SretEventSinkBundle
 
 import scala.collection.immutable.SeqMap
 import xiangshan.backend.fu.NewCSR.CSREnumTypeImplicitCast._
@@ -183,7 +178,7 @@ class HstatusBundle extends CSRBundle {
 
   val VSBE  = RO(5).withReset(0.U)
   val GVA   = RW(6)
-  val SPV   = RW(7)
+  val SPV   = VirtMode(7)
   val SPVP  = RW(8)
   val HU    = RW(9)
   val VGEIN = HstatusVgeinField(17, 12, wNoFilter, rNoFilter)
@@ -199,6 +194,7 @@ object HstatusVgeinField extends CSREnum with CSRWLRLApply {
 }
 
 class HstatusModule extends CSRModule("Hstatus", new HstatusBundle)
+  with SretEventSinkBundle
 
 class HvipBundle extends CSRBundle {
   val VSSIP = RW(2)
