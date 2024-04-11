@@ -41,7 +41,6 @@ class NewCSR(implicit val p: Parameters) extends Module
   with Unprivileged
   with CSRAIA
   with HasExternalInterruptBundle
-  with HasInstCommitBundle
   with SupervisorMachineAliasConnect
   with CSREvents
 {
@@ -74,6 +73,8 @@ class NewCSR(implicit val p: Parameters) extends Module
         val fsDirty = Bool()
         val vxsat = ValidIO(Vxsat())
         val vsDirty = Bool()
+        val commitValid = Bool()
+        val commitInstRet = UInt(8.W)
       }
     })
     val mret = Input(Bool())
@@ -187,8 +188,8 @@ class NewCSR(implicit val p: Parameters) extends Module
     }
     mod match {
       case m: HasInstCommitBundle =>
-        m.commitValid := this.commitValid
-        m.commitInstNum := this.commitInstNum
+        m.commitValid   := io.fromRob.commit.commitValid
+        m.commitInstNum := io.fromRob.commit.commitInstRet
       case _ =>
     }
     mod match {

@@ -155,7 +155,7 @@ class AIAToCSRBundle extends Bundle {
     val data = UInt(XLEN.W)
     val illegal = Bool()
   })
-  val mtopei = new TopEIBundle
-  val stopei = new TopEIBundle
-  val vstopei = new TopEIBundle
+  val mtopei = ValidIO(new TopEIBundle)
+  val stopei = ValidIO(new TopEIBundle)
+  val vstopei = ValidIO(new TopEIBundle)
 }
