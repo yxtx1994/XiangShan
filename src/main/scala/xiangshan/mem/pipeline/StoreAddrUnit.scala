@@ -31,7 +31,7 @@ import xiangshan.backend.ctrlblock.DebugLsInfoBundle
 import xiangshan.cache.mmu.{TlbCmd, TlbReq, TlbRequestIO, TlbResp}
 import xiangshan.cache.{DcacheStoreRequestIO, DCacheStoreIO, MemoryOpConstants, HasDCacheParameters, StorePrefetchReq}
 
-class StoreUnit(implicit p: Parameters) extends XSModule with HasDCacheParameters {
+class StoreAddrUnit(implicit p: Parameters) extends XSModule with HasDCacheParameters {
   val io = IO(new Bundle() {
     val redirect        = Flipped(ValidIO(new Redirect))
     val stin            = Flipped(Decoupled(new MemExuInput))
@@ -110,7 +110,7 @@ class StoreUnit(implicit p: Parameters) extends XSModule with HasDCacheParameter
   val s0_saddr = Cat(saddr_hi, saddr_lo(11,0))
   val s0_vaddr = Mux(
     s0_use_flow_rs,
-    s0_saddr, 
+    s0_saddr,
     Mux(
       s0_use_flow_vec,
       s0_vecstin.vaddr,
