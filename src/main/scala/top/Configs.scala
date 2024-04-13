@@ -180,7 +180,11 @@ class MinimalConfig(n: Int = 1) extends Config(
           ways = 8,
           sets = 128,
           echoField = Seq(huancun.DirtyField()),
-          prefetch = None
+          prefetch = None,
+          clientCaches = Seq(L1Param(
+            "dcache",
+            isKeywordBitsOpt = p.dcacheParametersOpt.get.isKeywordBitsOpt
+          )),
         )),
         L2NBanks = 2,
         prefetcher = None // if L2 pf_recv_node does not exist, disable SMS prefetcher
@@ -358,6 +362,20 @@ class FuzzConfig(dummy: Int = 0) extends Config(
 
 class DefaultConfig(n: Int = 1) extends Config(
   new WithNKBL3(16 * 1024, inclusive = false, banks = 4, ways = 16)
+    ++ new WithNKBL2(2 * 512, inclusive = true, banks = 4)
+    ++ new WithNKBL1D(64, ways = 4)
+    ++ new BaseConfig(n)
+)
+
+class WithCHI extends Config((_, _, _) => {
+  case EnableCHI => true
+})
+
+class KunminghuV2Config(n: Int = 1) extends Config(
+  new WithCHI
+    ++ new Config((site, here, up) => {
+      case SoCParamsKey => up(SoCParamsKey).copy(L3CacheParamsOpt = None) // There will be no L3
+    })
     ++ new WithNKBL2(2 * 512, inclusive = true, banks = 4)
     ++ new WithNKBL1D(64, ways = 4)
     ++ new BaseConfig(n)
