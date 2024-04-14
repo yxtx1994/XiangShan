@@ -22,28 +22,14 @@ import xiangshan.backend.rob.RobPtr
 import xiangshan.backend.CtrlToFtqIO
 import xiangshan.backend.decode.{ImmUnion, XDecode}
 import xiangshan.mem.{LqPtr, SqPtr}
-import xiangshan.frontend.PreDecodeInfo
-import xiangshan.frontend.HasBPUParameter
-import xiangshan.frontend.{AllFoldedHistories, CircularGlobalHistory, GlobalHistory, ShiftingGlobalHistory}
-import xiangshan.frontend.RASEntry
-import xiangshan.frontend.BPUCtrl
-import xiangshan.frontend.FtqPtr
-import xiangshan.frontend.CGHPtr
-import xiangshan.frontend.FtqRead
-import xiangshan.frontend.FtqToCtrlIO
+import xiangshan.frontend.{AllAheadFoldedHistoryOldestBits, AllFoldedHistories, BPUCtrl, CGHPtr, FtqPtr, FtqToCtrlIO}
+import xiangshan.frontend.{Ftq_Redirect_SRAMEntry, HasBPUParameter, IfuToBackendIO, PreDecodeInfo, RASPtr}
 import xiangshan.cache.HasDCacheParameters
-import utils._
 import utility._
 
-import scala.math.max
 import org.chipsalliance.cde.config.Parameters
 import chisel3.util.BitPat.bitPatToUInt
 import xiangshan.backend.exu.ExuConfig
-import xiangshan.backend.fu.PMPEntry
-import xiangshan.frontend.Ftq_Redirect_SRAMEntry
-import xiangshan.frontend.AllFoldedHistories
-import xiangshan.frontend.AllAheadFoldedHistoryOldestBits
-import xiangshan.frontend.RASPtr
 
 class ValidUndirectioned[T <: Data](gen: T) extends Bundle {
   val valid = Bool()
@@ -440,6 +426,7 @@ class FrontendToCtrlIO(implicit p: Parameters) extends XSBundle {
   val cfVec = Vec(DecodeWidth, DecoupledIO(new CtrlFlow))
   val stallReason = new StallReasonIO(DecodeWidth)
   val fromFtq = new FtqToCtrlIO
+  val fromIfu = new IfuToBackendIO
   // from backend
   val toFtq = Flipped(new CtrlToFtqIO)
 }
