@@ -54,7 +54,6 @@ class NewCSR(implicit val p: Parameters) extends Module
       val addr = UInt(12.W)
       val wdata = UInt(64.W)
     })
-    val rAddr = Input(UInt(12.W))
     val fromMem = Input(new Bundle {
       val excpVA  = UInt(VaddrMaxWidth.W)
       val excpGPA = UInt(VaddrMaxWidth.W) // Todo: use guest physical address width
@@ -141,6 +140,9 @@ class NewCSR(implicit val p: Parameters) extends Module
   trapHandleMod.io.in.medeleg := medeleg.regOut
   trapHandleMod.io.in.hideleg := hideleg.regOut
   trapHandleMod.io.in.hedeleg := hedeleg.regOut
+  trapHandleMod.io.in.mtvec := mtvec.regOut
+  trapHandleMod.io.in.stvec := stvec.regOut
+  trapHandleMod.io.in.vstvec := vstvec.regOut
 
   val entryPrivState = trapHandleMod.io.out.entryPrivState
 
@@ -233,27 +235,30 @@ class NewCSR(implicit val p: Parameters) extends Module
   trapEntryVSEvent.valid := entryPrivState.isModeVS
 
   Seq(trapEntryMEvent, trapEntryHSEvent, trapEntryVSEvent).foreach { eMod =>
-    eMod.in match { case in: TrapEntryEventInput =>
-      in.causeNO := trapHandleMod.io.out.causeNO
-      in.trapPc := trapPC
-      in.isCrossPageIPF := trapIsCrossPageIPF
+    eMod.in match {
+      case in: TrapEntryEventInput =>
+        in.causeNO := trapHandleMod.io.out.causeNO
+        in.trapPc := trapPC
+        in.isCrossPageIPF := trapIsCrossPageIPF
 
-      in.iMode.PRVM := PRVM
-      in.iMode.V := V
-      in.dMode.PRVM := Mux(mstatus.rdata.MPRV.asBool, mstatus.rdata.MPP, PRVM)
-      in.dMode.V := Mux(mstatus.rdata.MPRV.asBool, mstatus.rdata.MPV, V)
+        in.iMode.PRVM := PRVM
+        in.iMode.V := V
+        in.dMode.PRVM := Mux(mstatus.rdata.MPRV.asBool, mstatus.rdata.MPP, PRVM)
+        in.dMode.V := Mux(mstatus.rdata.MPRV.asBool, mstatus.rdata.MPV, V)
 
-      in.privState.PRVM := PRVM
-      in.privState.V := V
-      in.mstatus := mstatus.regOut
-      in.hstatus := hstatus.regOut
-      in.sstatus := mstatus.sstatus
-      in.vsstatus := vsstatus.regOut
-      in.satp := satp.rdata
-      in.vsatp := vsatp.rdata
+        in.privState.PRVM := PRVM
+        in.privState.V := V
+        in.mstatus := mstatus.regOut
+        in.hstatus := hstatus.regOut
+        in.sstatus := mstatus.sstatus
+        in.vsstatus := vsstatus.regOut
+        in.pcFromXtvec := trapHandleMod.io.out.pcFromXtvec
 
-      in.memExceptionVAddr := io.fromMem.excpVA
-      in.memExceptionGPAddr := io.fromMem.excpGPA
+        in.satp := satp.rdata
+        in.vsatp := vsatp.rdata
+
+        in.memExceptionVAddr := io.fromMem.excpVA
+        in.memExceptionGPAddr := io.fromMem.excpGPA
     }
   }
 
@@ -309,8 +314,11 @@ class NewCSR(implicit val p: Parameters) extends Module
   io.out.rData := Mux(ren, rdata, 0.U)
   io.out.regOut := regOut
   io.out.targetPc := Mux1H(Seq(
-    mretEvent.out.targetPc.valid -> mretEvent.out.targetPc.bits.asUInt,
-    sretEvent.out.targetPc.valid -> sretEvent.out.targetPc.bits.asUInt,
+    mretEvent.out.targetPc.valid -> mretEvent.out.targetPc.bits,
+    sretEvent.out.targetPc.valid -> sretEvent.out.targetPc.bits,
+    trapEntryMEvent.out.targetPc.valid -> trapEntryMEvent.out.targetPc.bits,
+    trapEntryHSEvent.out.targetPc.valid -> trapEntryHSEvent.out.targetPc.bits,
+    trapEntryVSEvent.out.targetPc.valid -> trapEntryVSEvent.out.targetPc.bits,
   ))
 
   io.out.privState.PRVM := PRVM
