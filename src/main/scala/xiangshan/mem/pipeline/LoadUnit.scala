@@ -570,14 +570,14 @@ class LoadUnit(implicit p: Parameters) extends XSModule
 
   // set default
   val s0_src_selector = Seq(
-    s0_super_ld_rep_select,
-    s0_ld_fast_rep_select,
-    s0_ld_mmio_select,
-    s0_ld_rep_select,
-    s0_hw_prf_select,
-    s0_int_iss_select,
-    s0_vec_iss_select,
-    (if (EnableLoadToLoadForward) s0_l2l_fwd_select else true.B)
+    s0_super_ld_rep_valid,
+    s0_ld_fast_rep_valid,
+    s0_ld_mmio_valid,
+    s0_ld_rep_valid,
+    s0_hw_prf_valid,
+    s0_int_iss_valid,
+    s0_vec_iss_valid,
+    (if (EnableLoadToLoadForward) s0_l2l_fwd_valid else true.B)
   )
   val s0_src_format = Seq(
     fromNormalReplaySource(io.replay.bits),
