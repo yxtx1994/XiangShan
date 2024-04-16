@@ -17,6 +17,7 @@
 package xiangshan
 
 import chisel3._
+import chisel3.util._
 import org.chipsalliance.cde.config._
 import chisel3.util.{Valid, ValidIO}
 import freechips.rocketchip.diplomacy._
@@ -109,7 +110,7 @@ class L2Top()(implicit p: Parameters) extends LazyModule
       )
       case EnableCHI => true
       // case XSCoreParamsKey => p(XSCoreParamsKey)
-      case BankBitsKey => coreParams.L2NBanks
+      case BankBitsKey => log2Ceil(coreParams.L2NBanks)
     }))))
   } else None
   val l2_binder = coreParams.L2CacheParamsOpt.map(_ => BankBinder(coreParams.L2NBanks, 64))
@@ -128,6 +129,7 @@ class L2Top()(implicit p: Parameters) extends LazyModule
   tl2chi_l2cache match {
     case Some(l2) =>
       l2.managerNode := TLXbar() :=* l2_binder.get :*= l2.node :*= l1_xbar
+      l2.mmioNode := mmio_port
     case None =>
   }
   
