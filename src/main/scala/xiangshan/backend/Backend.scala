@@ -394,6 +394,11 @@ class BackendImp(override val wrapper: Backend)(implicit p: Parameters) extends 
   pcTargetMem.io.fromFrontendFtq := io.frontend.fromFtq
   pcTargetMem.io.toDataPath <> dataPath.io.fromPcTargetMem
 
+  private val csrin = intExuBlock.io.csrin.get
+  csrin.hartId := io.fromTop.hartId
+  csrin.setIpNumValidVec2 := io.fromTop.setIpNumValidVec2
+  csrin.setIpNum := io.fromTop.setIpNum
+
   private val csrio = intExuBlock.io.csrio.get
   csrio.hartId := io.fromTop.hartId
   csrio.fpu.fflags := ctrlBlock.io.robio.csr.fflags
@@ -760,6 +765,8 @@ class BackendIO(implicit p: Parameters, params: BackendParams) extends XSBundle 
   val fromTop = new Bundle {
     val hartId = Input(UInt(hartIdLen.W))
     val externalInterrupt = new ExternalInterruptIO
+    val setIpNumValidVec2 = Input(Vec(2, Vec(7, Bool())))
+    val setIpNum = Input(UInt(4.W))
   }
 
   val toTop = new Bundle {

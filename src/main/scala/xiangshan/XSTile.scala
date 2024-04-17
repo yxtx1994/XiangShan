@@ -93,6 +93,8 @@ class XSTile()(implicit p: Parameters) extends LazyModule
   class XSTileImp(wrapper: LazyModule) extends LazyModuleImp(wrapper) {
     val io = IO(new Bundle {
       val hartId = Input(UInt(hartIdLen.W))
+      val setIpNumValidVec2 = Input(Vec(2, Vec(7, Bool())))
+      val setIpNum = Input(UInt(4.W))
       val reset_vector = Input(UInt(PAddrBits.W))
       val cpu_halt = Output(Bool())
       val debugTopDown = new Bundle {
@@ -110,6 +112,8 @@ class XSTile()(implicit p: Parameters) extends LazyModule
     l2top.module.hartId.fromTile := io.hartId
     core.module.io.hartId := l2top.module.hartId.toCore
     core.module.io.reset_vector := l2top.module.reset_vector.toCore
+    core.module.io.setIpNumValidVec2 := io.setIpNumValidVec2
+    core.module.io.setIpNum := io.setIpNum
     l2top.module.reset_vector.fromTile := io.reset_vector
     l2top.module.cpu_halt.fromCore := core.module.io.cpu_halt
     io.cpu_halt := l2top.module.cpu_halt.toTile
@@ -132,7 +136,7 @@ class XSTile()(implicit p: Parameters) extends LazyModule
       l2top.module.debugTopDown.robTrueCommit := core.module.io.debugTopDown.robTrueCommit
       core.module.io.l2_tlb_req <> l2top.module.l2_tlb_req
     } else {
-      
+
       l2top.module.beu_errors.l2 <> 0.U.asTypeOf(l2top.module.beu_errors.l2)
       core.module.io.l2_hint.bits.sourceId := l2top.module.l2_hint.bits.sourceId
       core.module.io.l2_hint.bits.isKeyword := l2top.module.l2_hint.bits.isKeyword
