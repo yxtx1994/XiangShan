@@ -30,7 +30,7 @@ class IMSIC(
       })
     }
   }))
-  val o = Output(new Bundle {
+  val o = IO(Output(new Bundle {
     val csr = new Bundle {
       val rdata = ValidIO(new Bundle {
         val rdata   = UInt(XLEN.W)
@@ -40,14 +40,14 @@ class IMSIC(
     val mtopei  = ValidIO(UInt(32.W))
     val stopei  = ValidIO(UInt(32.W))
     val vstopei = ValidIO(UInt(32.W))
-  })
+  }))
 
   val imsicTop = Module(new imsic_csr_top)
 
   imsicTop.csr_clk         := clock
   imsicTop.csr_rstn        := reset
   imsicTop.i.setipnum_vld  := Cat(i.setIpNumValidVec2.flatten.reverse)
-  imsicTop.i.setipnum      := i.setIpNum
+  imsicTop.i.setipnum      := i.setIpNum.bits
   imsicTop.i.hart_id       := i.hartId
   imsicTop.i.csr.addr_vld  := i.csr.addr.valid
   imsicTop.i.csr.addr      := i.csr.addr.bits.addr
@@ -83,10 +83,10 @@ class imsic_csr_top(
   private val HART_ID_WIDTH = log2Up(NumHart)
   private val NR_SRC_WIDTH = log2Up(NumIRSrc)
 
-  val csr_clk = Input(Clock())
-  val csr_rstn = Input(Reset())
+  val csr_clk = IO(Input(Clock()))
+  val csr_rstn = IO(Input(Reset()))
 
-  val i = Input(new Bundle {
+  val i = IO(Input(new Bundle {
     val setipnum_vld = UInt((NumHart * NumIRFiles).W)
     val setipnum = UInt(NR_SRC_WIDTH.W)
     val hart_id = UInt(HART_ID_WIDTH.W)
@@ -100,9 +100,9 @@ class imsic_csr_top(
       val wdata_vld = Bool()
       val wdata = UInt(64.W)
     }
-  })
+  }))
 
-  val o = Output(new Bundle{
+  val o = IO(Output(new Bundle{
     val csr = new Bundle {
       val rdata_vld = Bool()
       val rdata = UInt(XLEN.W)
@@ -112,8 +112,8 @@ class imsic_csr_top(
       val stopei = UInt(32.W)
       val vstopei = UInt(32.W)
     }
-  })
+  }))
 
-  addResource("/vsrc/imsic_csr_top.v")
+  addResource("/vsrc/imsic/imsic_csr_top.v")
 }
 

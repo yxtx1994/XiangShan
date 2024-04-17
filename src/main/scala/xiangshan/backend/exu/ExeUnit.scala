@@ -28,11 +28,13 @@ import xiangshan.backend.Bundles.{ExuInput, ExuOutput, MemExuInput, MemExuOutput
 import xiangshan.{FPUCtrlSignals, HasXSParameter, Redirect, XSBundle, XSModule}
 import xiangshan.backend.datapath.WbConfig.{PregWB, _}
 import xiangshan.backend.fu.FuType
+import xiangshan.backend.fu.wrapper.CSRInput
 
 class ExeUnitIO(params: ExeUnitParams)(implicit p: Parameters) extends XSBundle {
   val flush = Flipped(ValidIO(new Redirect()))
   val in = Flipped(DecoupledIO(new ExuInput(params)))
   val out = DecoupledIO(new ExuOutput(params))
+  val csrin = if (params.hasCSR) Some(new CSRInput) else None
   val csrio = if (params.hasCSR) Some(new CSRFileIO) else None
   val fenceio = if (params.hasFence) Some(new FenceIO) else None
   val frm = if (params.needSrcFrm) Some(Input(UInt(3.W))) else None
