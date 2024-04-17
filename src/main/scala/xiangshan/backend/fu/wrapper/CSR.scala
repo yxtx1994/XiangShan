@@ -7,6 +7,7 @@ import xiangshan._
 import xiangshan.backend.fu.NewCSR.{CSRPermitModule, NewCSR}
 import xiangshan.backend.fu.util._
 import xiangshan.backend.fu.{FuConfig, FuncUnit}
+import device._
 
 class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
 {
@@ -99,6 +100,31 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
   csrMod.platformIRP.VSEIP := false.B // Todo
   csrMod.platformIRP.VSTIP := false.B // Todo
 
+  private val imsic = Module(new IMSIC)
+  imsic.i.hartId := io.csrin.get.hartId
+  imsic.i.setIpNumValidVec2 := io.csrin.get.setIpNumValidVec2
+  imsic.i.setIpNum := io.csrin.get.setIpNum
+  imsic.i.csr.addr.valid := csrMod.toAIA.addr.valid
+  imsic.i.csr.addr.bits.addr := csrMod.toAIA.addr.bits.addr
+  imsic.i.csr.addr.bits.prvm := csrMod.toAIA.addr.bits.prvm
+  imsic.i.csr.addr.bits.v := csrMod.toAIA.addr.bits.v
+  imsic.i.csr.vgein := csrMod.toAIA.vgein
+  imsic.i.csr.mClaim := csrMod.toAIA.mClaim
+  imsic.i.csr.sClaim := csrMod.toAIA.sClaim
+  imsic.i.csr.vsClaim := csrMod.toAIA.vsClaim
+  imsic.i.csr.wdata.valid := csrMod.toAIA.wdata.valid
+  imsic.i.csr.wdata.bits.data := csrMod.toAIA.wdata.bits.data
+
+  csrMod.fromAIA.rdata.valid := imsic.o.csr.rdata.valid
+  csrMod.fromAIA.rdata.bits.data := imsic.o.csr.rdata.bits.rdata
+  csrMod.fromAIA.rdata.bits.illegal := imsic.o.csr.rdata.bits.illegal
+  csrMod.fromAIA.mtopei.valid := imsic.o.mtopei.valid
+  csrMod.fromAIA.stopei.valid := imsic.o.stopei.valid
+  csrMod.fromAIA.vstopei.valid := imsic.o.vstopei.valid
+  csrMod.fromAIA.mtopei.bits := imsic.o.mtopei.bits
+  csrMod.fromAIA.stopei.bits := imsic.o.stopei.bits
+  csrMod.fromAIA.vstopei.bits := imsic.o.vstopei.bits
+
   private val exceptionVec = WireInit(VecInit(Seq.fill(XLEN)(false.B)))
   import ExceptionNO._
   exceptionVec(EX_BP    ) := isEbreak
@@ -116,75 +142,81 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
   io.out.bits.res.data := csrMod.io.out.rData
   connect0LatencyCtrlSingal
 
-  csrOut.isPerfCnt
+  csrOut.isPerfCnt := DontCare
   csrOut.fpu.frm := csrMod.io.out.frm
-  csrOut.vpu.vstart
-  csrOut.vpu.vxsat
+  csrOut.vpu.vstart := DontCare
+  csrOut.vpu.vxsat := DontCare
   csrOut.vpu.vxrm := csrMod.io.out.vxrm
-  csrOut.vpu.vcsr
-  csrOut.vpu.vl
-  csrOut.vpu.vtype
-  csrOut.vpu.vlenb
-  csrOut.vpu.vill
-  csrOut.vpu.vma
-  csrOut.vpu.vta
-  csrOut.vpu.vsew
-  csrOut.vpu.vlmul
+  csrOut.vpu.vcsr := DontCare
+  csrOut.vpu.vl := DontCare
+  csrOut.vpu.vtype := DontCare
+  csrOut.vpu.vlenb := DontCare
+  csrOut.vpu.vill := DontCare
+  csrOut.vpu.vma := DontCare
+  csrOut.vpu.vta := DontCare
+  csrOut.vpu.vsew := DontCare
+  csrOut.vpu.vlmul := DontCare
 
-  csrOut.isXRet
+  csrOut.isXRet := DontCare
 
   csrOut.trapTarget := csrMod.io.out.targetPc
-  csrOut.interrupt
-  csrOut.wfi_event
+  csrOut.interrupt := DontCare
+  csrOut.wfi_event := DontCare
 
-  csrOut.tlb
+  csrOut.tlb := DontCare
 
-  csrOut.debugMode
+  csrOut.debugMode := DontCare
 
-  csrOut.disableSfence
+  csrOut.disableSfence := DontCare
 
   csrOut.customCtrl match {
     case custom =>
-      custom.l1I_pf_enable
-      custom.l2_pf_enable
-      custom.l1D_pf_enable
-      custom.l1D_pf_train_on_hit
-      custom.l1D_pf_enable_agt
-      custom.l1D_pf_enable_pht
-      custom.l1D_pf_active_threshold
-      custom.l1D_pf_active_stride
-      custom.l1D_pf_enable_stride
-      custom.l2_pf_store_only
+      custom.l1I_pf_enable := DontCare
+      custom.l2_pf_enable := DontCare
+      custom.l1D_pf_enable := DontCare
+      custom.l1D_pf_train_on_hit := DontCare
+      custom.l1D_pf_enable_agt := DontCare
+      custom.l1D_pf_enable_pht := DontCare
+      custom.l1D_pf_active_threshold := DontCare
+      custom.l1D_pf_active_stride := DontCare
+      custom.l1D_pf_enable_stride := DontCare
+      custom.l2_pf_store_only := DontCare
       // ICache
-      custom.icache_parity_enable
+      custom.icache_parity_enable := DontCare
       // Labeled XiangShan
-      custom.dsid
+      custom.dsid := DontCare
       // Load violation predictor
-      custom.lvpred_disable
-      custom.no_spec_load
-      custom.storeset_wait_store
-      custom.storeset_no_fast_wakeup
-      custom.lvpred_timeout
+      custom.lvpred_disable := DontCare
+      custom.no_spec_load := DontCare
+      custom.storeset_wait_store := DontCare
+      custom.storeset_no_fast_wakeup := DontCare
+      custom.lvpred_timeout := DontCare
       // Branch predictor
-      custom.bp_ctrl
+      custom.bp_ctrl := DontCare
       // Memory Block
-      custom.sbuffer_threshold
-      custom.ldld_vio_check_enable
-      custom.soft_prefetch_enable
-      custom.cache_error_enable
-      custom.uncache_write_outstanding_enable
+      custom.sbuffer_threshold := DontCare
+      custom.ldld_vio_check_enable := DontCare
+      custom.soft_prefetch_enable := DontCare
+      custom.cache_error_enable := DontCare
+      custom.uncache_write_outstanding_enable := DontCare
       // Rename
-      custom.fusion_enable
-      custom.wfi_enable
+      custom.fusion_enable := DontCare
+      custom.wfi_enable := DontCare
       // Decode
-      custom.svinval_enable
+      custom.svinval_enable := DontCare
       // distribute csr write signal
       // write to frontend and memory
-      custom.distribute_csr
+      custom.distribute_csr := DontCare
       // rename single step
-      custom.singlestep
+      custom.singlestep := DontCare
       // trigger
-      custom.frontend_trigger
-      custom.mem_trigger
+      custom.frontend_trigger := DontCare
+      custom.mem_trigger := DontCare
   }
+}
+
+class CSRInput(implicit p: Parameters) extends XSBundle {
+  val hartId = Input(UInt(8.W))
+  val setIpNumValidVec2 = Input(Vec(2, Vec(7, Bool())))
+  val setIpNum = Input(UInt(4.W))
 }
