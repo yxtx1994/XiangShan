@@ -10,6 +10,7 @@ import xiangshan.backend.issue.SchdBlockParams
 import xiangshan.{HasXSParameter, Redirect, XSBundle}
 import utils._
 import xiangshan.backend.fu.FuConfig.{AluCfg, BrhCfg}
+import xiangshan.backend.fu.wrapper.CSRInput
 
 class ExuBlock(params: SchdBlockParams)(implicit p: Parameters) extends LazyModule with HasXSParameter {
   override def shouldBeInlined: Boolean = false
@@ -35,6 +36,7 @@ class ExuBlockImp(
   (ins zip exus zip outs).foreach { case ((input, exu), output) =>
     exu.io.flush <> io.flush
     exu.io.csrio.foreach(exuio => io.csrio.get <> exuio)
+    exu.io.csrin.foreach(exuio => io.csrin.get <> exuio)
     exu.io.fenceio.foreach(exuio => io.fenceio.get <> exuio)
     exu.io.frm.foreach(exuio => io.frm.get <> exuio)
     exu.io.in <> input
@@ -61,6 +63,9 @@ class ExuBlockIO(implicit p: Parameters, params: SchdBlockParams) extends XSBund
   val out: MixedVec[MixedVec[DecoupledIO[ExuOutput]]] = params.genExuOutputDecoupledBundle
 
   val csrio = if (params.hasCSR) Some(new CSRFileIO) else None
+
+  val csrin = if (params.hasCSR) Some(new CSRInput) else None
+
   val fenceio = if (params.hasFence) Some(new FenceIO) else None
   val frm = if (params.needSrcFrm) Some(Input(UInt(3.W))) else None
 }
