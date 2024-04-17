@@ -162,6 +162,7 @@ class HybridUnit(implicit p: Parameters) extends XSModule
   val s0_dcache_ready  = Wire(Bool())
   val s0_kill          = Wire(Bool())
   val s0_vaddr         = Wire(UInt(VAddrBits.W))
+  val s0_tlb_vaddr     = Wire(UInt(VAddrBits.W))
   val s0_mask          = Wire(UInt((VLEN/8).W))
   val s0_uop           = Wire(new DynInst)
   val s0_has_rob_entry = Wire(Bool())
@@ -309,7 +310,7 @@ class HybridUnit(implicit p: Parameters) extends XSModule
                                          Mux(s0_prf_wr, TlbCmd.write, TlbCmd.read),
                                          Mux(s0_ld_flow, TlbCmd.read, TlbCmd.write)
                                        )
-  io.tlb.req.bits.vaddr              := Mux(s0_hw_prf_select, io.ldu_io.prefetch_req.bits.paddr, s0_vaddr)
+  io.tlb.req.bits.vaddr              := s0_tlb_vaddr
   io.tlb.req.bits.size               := Mux(s0_isvec, io.vec_stu_io.in.bits.alignedType, LSUOpType.size(s0_uop.fuOpType))
   io.tlb.req.bits.kill               := s0_kill
   io.tlb.req.bits.memidx.is_ld       := s0_ld_flow
@@ -343,7 +344,6 @@ class HybridUnit(implicit p: Parameters) extends XSModule
 
   // load flow priority mux
   def fromNullSource() = {
-    s0_vaddr         := 0.U
     s0_mask          := 0.U
     s0_uop           := 0.U.asTypeOf(new DynInst)
     s0_try_l2l       := false.B
@@ -362,7 +362,6 @@ class HybridUnit(implicit p: Parameters) extends XSModule
   }
 
   def fromFastReplaySource(src: LqWriteBundle) = {
-    s0_vaddr         := src.vaddr
     s0_mask          := src.mask
     s0_uop           := src.uop
     s0_try_l2l       := false.B
@@ -381,7 +380,6 @@ class HybridUnit(implicit p: Parameters) extends XSModule
   }
 
   def fromNormalReplaySource(src: LsPipelineBundle) = {
-    s0_vaddr         := src.vaddr
     s0_mask          := genVWmask(src.vaddr, src.uop.fuOpType(1, 0))
     s0_uop           := src.uop
     s0_try_l2l       := false.B
@@ -400,7 +398,6 @@ class HybridUnit(implicit p: Parameters) extends XSModule
   }
 
   def fromPrefetchSource(src: L1PrefetchReq) = {
-    s0_vaddr         := src.getVaddr()
     s0_mask          := 0.U
     s0_uop           := DontCare
     s0_try_l2l       := false.B
@@ -419,7 +416,6 @@ class HybridUnit(implicit p: Parameters) extends XSModule
   }
 
   def fromIntIssueSource(src: MemExuInput) = {
-    s0_vaddr         := src.src(0) + SignExt(src.uop.imm(11, 0), VAddrBits)
     s0_mask          := genVWmask(s0_vaddr, src.uop.fuOpType(1,0))
     s0_uop           := src.uop
     s0_try_l2l       := false.B
@@ -439,7 +435,6 @@ class HybridUnit(implicit p: Parameters) extends XSModule
 
   def fromVecIssueSource(src: VecStorePipeBundle) = {
     // For now, vector port handles only vector store flows
-    s0_vaddr         := src.vaddr
     s0_mask          := src.mask
     s0_uop           := src.uop
     s0_try_l2l       := false.B
@@ -463,7 +458,6 @@ class HybridUnit(implicit p: Parameters) extends XSModule
   }
 
   def fromLoadToLoadSource(src: LoadToLoadIO) = {
-    s0_vaddr              := Cat(src.data(XLEN-1, 6), s0_ptr_chasing_vaddr(5,0))
     s0_mask               := genVWmask(s0_vaddr, io.ldu_io.ld_fast_fuOpType(1, 0))
     // When there's no valid instruction from RS and LSQ, we try the load-to-load forwarding.
     // Assume the pointer chasing is always ld.
