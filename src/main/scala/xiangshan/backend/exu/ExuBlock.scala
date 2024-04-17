@@ -12,6 +12,7 @@ import utils._
 import xiangshan.backend.fu.FuConfig.{AluCfg, BrhCfg}
 import xiangshan.backend.fu.vector.Bundles.{VType, Vxrm}
 import xiangshan.backend.fu.fpu.Bundles.Frm
+import xiangshan.backend.fu.wrapper.CSRInput
 
 class ExuBlock(params: SchdBlockParams)(implicit p: Parameters) extends LazyModule with HasXSParameter {
   override def shouldBeInlined: Boolean = false
@@ -37,6 +38,7 @@ class ExuBlockImp(
   (ins zip exus zip outs).foreach { case ((input, exu), output) =>
     exu.io.flush <> io.flush
     exu.io.csrio.foreach(exuio => io.csrio.get <> exuio)
+    exu.io.csrin.foreach(exuio => io.csrin.get <> exuio)
     exu.io.fenceio.foreach(exuio => io.fenceio.get <> exuio)
     exu.io.frm.foreach(exuio => exuio := RegNext(io.frm.get))  // each vf exu pipe frm from csr
     exu.io.vxrm.foreach(exuio => io.vxrm.get <> exuio)
@@ -68,6 +70,9 @@ class ExuBlockIO(implicit p: Parameters, params: SchdBlockParams) extends XSBund
   val out: MixedVec[MixedVec[DecoupledIO[ExuOutput]]] = params.genExuOutputDecoupledBundle
 
   val csrio = OptionWrapper(params.hasCSR, new CSRFileIO)
+
+  val csrin = OptionWrapper(params.hasCSR, new CSRInput)
+
   val fenceio = OptionWrapper(params.hasFence, new FenceIO)
   val frm = OptionWrapper(params.needSrcFrm, Input(Frm()))
   val vxrm = OptionWrapper(params.needSrcVxrm, Input(Vxrm()))
