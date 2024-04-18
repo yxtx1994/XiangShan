@@ -1,10 +1,11 @@
 package xiangshan.backend.fu.wrapper
 
 import chisel3._
+import chisel3.util.Mux1H
 import org.chipsalliance.cde.config.Parameters
 import utility._
 import xiangshan._
-import xiangshan.backend.fu.NewCSR.{CSRPermitModule, NewCSR}
+import xiangshan.backend.fu.NewCSR.{CSRPermitModule, NewCSR, VtypeBundle}
 import xiangshan.backend.fu.util._
 import xiangshan.backend.fu.{FuConfig, FuncUnit}
 import device._
@@ -19,7 +20,7 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
   val setVsDirty = csrIn.vpu.dirty_vs
   val setVxsat = csrIn.vpu.vxsat
 
-  //val flushPipe = Wire(Bool()) // Todo
+  val flush = io.flush.valid
 
   val (valid, src1, src2, func) = (
     io.in.valid,
@@ -140,33 +141,48 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
   exceptionVec(EX_II    ) := csrMod.io.out.EX_II
   exceptionVec(EX_VI    ) := csrMod.io.out.EX_VI // Todo: check other EX_VI
 
+  val isXRet = valid && func === CSROpType.jmp && !isEcall && !isEbreak
+
+  // ctrl block will use theses later for flush
+  val isXRetFlag = RegInit(false.B)
+  isXRetFlag := Mux1H(
+    Seq(
+      DelayN(flush, 5),
+      isXRet,
+    ),
+    Seq(
+      false.B,
+      true.B,
+    )
+  )
+
   io.in.ready := true.B // Todo: Async read imsic may block CSR
   io.out.valid := valid
   io.out.bits.ctrl.exceptionVec.get := exceptionVec
-  io.out.bits.ctrl.flushPipe.get := csrMod.io.out.flushPipe
+  io.out.bits.ctrl.flushPipe.get := csrMod.io.out.flushPipe || isXRet // || frontendTriggerUpdate
   io.out.bits.res.data := csrMod.io.out.rData
   connect0LatencyCtrlSingal
 
-  csrOut.isPerfCnt := DontCare
-  csrOut.fpu.frm := csrMod.io.out.frm
-  csrOut.vpu.vstart := DontCare
-  csrOut.vpu.vxsat := DontCare
-  csrOut.vpu.vxrm := csrMod.io.out.vxrm
-  csrOut.vpu.vcsr := DontCare
-  csrOut.vpu.vl := DontCare
-  csrOut.vpu.vtype := DontCare
-  csrOut.vpu.vlenb := DontCare
-  csrOut.vpu.vill := DontCare
-  csrOut.vpu.vma := DontCare
-  csrOut.vpu.vta := DontCare
-  csrOut.vpu.vsew := DontCare
-  csrOut.vpu.vlmul := DontCare
+  csrOut.isPerfCnt  := csrMod.io.out.isPerfCnt && valid && func =/= CSROpType.jmp
+  csrOut.fpu.frm    := csrMod.io.out.frm
+  csrOut.vpu.vstart := csrMod.io.out.vstart
+  csrOut.vpu.vxsat  := csrMod.io.out.vxsat
+  csrOut.vpu.vxrm   := csrMod.io.out.vxrm
+  csrOut.vpu.vcsr   := csrMod.io.out.vcsr
+  csrOut.vpu.vl     := csrMod.io.out.vl
+  csrOut.vpu.vtype  := csrMod.io.out.vtype
+  csrOut.vpu.vlenb  := csrMod.io.out.vlenb
+  csrOut.vpu.vill   := csrMod.io.out.vtype.asTypeOf(new VtypeBundle).VILL
+  csrOut.vpu.vma    := csrMod.io.out.vtype.asTypeOf(new VtypeBundle).VMA
+  csrOut.vpu.vta    := csrMod.io.out.vtype.asTypeOf(new VtypeBundle).VTA
+  csrOut.vpu.vsew   := csrMod.io.out.vtype.asTypeOf(new VtypeBundle).VSEW
+  csrOut.vpu.vlmul  := csrMod.io.out.vtype.asTypeOf(new VtypeBundle).VLMUL
 
-  csrOut.isXRet := DontCare
+  csrOut.isXRet := isXRetFlag
 
   csrOut.trapTarget := csrMod.io.out.targetPc
-  csrOut.interrupt := DontCare
-  csrOut.wfi_event := DontCare
+  csrOut.interrupt := csrMod.io.out.interrupt
+  csrOut.wfi_event := csrMod.io.out.wfi_event
 
   csrOut.tlb := DontCare
 
