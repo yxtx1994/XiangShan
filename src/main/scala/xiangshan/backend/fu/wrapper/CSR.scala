@@ -157,6 +157,15 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
     )
   )
 
+  // tlb
+  val tlb = Wire(new TlbCsrBundle)
+  tlb.satp.apply(csrMod.io.tlb.satp)
+  // expose several csr bits for tlb
+  tlb.priv.mxr := csrMod.io.tlb.mxr
+  tlb.priv.sum := csrMod.io.tlb.sum
+  tlb.priv.imode := csrMod.io.tlb.imode
+  tlb.priv.dmode := csrMod.io.tlb.dmode
+
   io.in.ready := true.B // Todo: Async read imsic may block CSR
   io.out.valid := valid
   io.out.bits.ctrl.exceptionVec.get := exceptionVec
@@ -185,7 +194,7 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
   csrOut.interrupt := csrMod.io.out.interrupt
   csrOut.wfi_event := csrMod.io.out.wfi_event
 
-  csrOut.tlb := DontCare
+  csrOut.tlb := tlb
 
   csrOut.debugMode := csrMod.io.out.debugMode
 
