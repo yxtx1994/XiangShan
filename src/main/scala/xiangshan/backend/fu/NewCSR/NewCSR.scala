@@ -5,7 +5,7 @@ import chisel3.util._
 import top.{ArgParser, Generator}
 import xiangshan.backend.fu.NewCSR.CSRBundles.PrivState
 import xiangshan.backend.fu.NewCSR.CSRDefines.{PrivMode, VirtMode}
-import xiangshan.backend.fu.NewCSR.CSREvents.{CSREvents, EventUpdatePrivStateOutput, MretEventSinkBundle, SretEventSinkBundle, TrapEntryEventInput, TrapEntryHSEventSinkBundle, TrapEntryMEventSinkBundle, TrapEntryVSEventSinkBundle}
+import xiangshan.backend.fu.NewCSR.CSREvents.{CSREvents, EventUpdatePrivStateOutput, MretEventSinkBundle, SretEventSinkBundle, DretEventSinkBundle, TrapEntryEventInput, TrapEntryHSEventSinkBundle, TrapEntryMEventSinkBundle, TrapEntryVSEventSinkBundle}
 import xiangshan.backend.fu.fpu.Bundles.{Fflags, Frm}
 import xiangshan.backend.fu.vector.Bundles.{Vxrm, Vxsat}
 
@@ -40,6 +40,8 @@ class NewCSR extends Module
   with HasExternalInterruptBundle
   with SupervisorMachineAliasConnect
   with CSREvents
+  with CSRDebugTrigger
+  with HasDebugExternalInterruptBundle
 {
 
   import CSRConfig._
@@ -101,6 +103,8 @@ class NewCSR extends Module
       val vlenb = UInt(XLEN.W)
       // perf
       val isPerfCnt = Bool()
+      // debug
+      val debugMode = Bool()
     })
   })
 
@@ -129,6 +133,7 @@ class NewCSR extends Module
   val isCSRAccess = io.in.ren || io.in.wen
   val isSret = io.sret
   val isMret = io.mret
+  val isDret = io.dret
 
   var csrRwMap = machineLevelCSRMap ++ supervisorLevelCSRMap ++ hypervisorCSRMap ++ virtualSupervisorCSRMap ++ unprivilegedCSRMap ++ aiaCSRMap
 
@@ -232,6 +237,10 @@ class NewCSR extends Module
       case _ =>
     }
     mod match {
+      case m: DretEventSinkBundle =>
+        m.retFromD := dretEvent.out
+    }
+    mod match {
       case m: HasAIABundle =>
         m.aiaToCSR.rdata.valid := fromAIA.rdata.valid
         m.aiaToCSR.rdata.bits.data := fromAIA.rdata.bits.data
@@ -308,6 +317,14 @@ class NewCSR extends Module
       in.vsepc := vsepc.regOut
   }
 
+  dretEvent.valid := isDret
+  dretEvent.in match {
+    case in =>
+      in.dcsr := dcsr.regOut
+      in.dpc  := dpc.regOut
+      in.mstatus := mstatus.regOut
+  }
+
   PRVM := MuxCase(
     PRVM,
     events.filter(_.out.isInstanceOf[EventUpdatePrivStateOutput]).map {
@@ -339,14 +356,22 @@ class NewCSR extends Module
   val frmChange = wFcsrChangeRM || wFrmChangeRM
   val flushPipe = resetSatp || frmChange
 
+  // debug
+  val debugMode = RegInit(false.B)
+  val debugIntrEnable = RegInit(true.B) // debug interrupt will be handle only when debugIntrEnable
+  debugMode := dretEvent.out.debugMode
+  debugIntrEnable := dretEvent.out.debugIntrEnable
+  val debugIntr = debugIRP & debugIntrEnable
+
   // interrupt
+  val disableInterrupt = debugMode || (dcsr.rdata.STEP.asBool && !dcsr.rdata.STEPIE.asBool)
   val ideleg = mideleg.rdata.asUInt & mip.rdata.asUInt
   def priviledgeEnableDetect(x: Bool): Bool = Mux(x, ((PRVM === PrivMode.S) && mstatus.rdata.SIE.asBool) || (PRVM < PrivMode.S),
     ((PRVM === PrivMode.M) && mstatus.rdata.MIE.asBool) || (PRVM < PrivMode.M))
 
   val intrVecEnable = Wire(Vec(12, Bool()))
-  intrVecEnable.zip(ideleg.asBools).map{ case(x, y) => x := priviledgeEnableDetect(y) }
-  val intrVec = mip.rdata.asUInt & intrVecEnable.asUInt // Todo
+  intrVecEnable.zip(ideleg.asBools).map{ case(x, y) => x := priviledgeEnableDetect(y) && !disableInterrupt}
+  val intrVec = Cat(debugIntr && !debugMode, mie.rdata.asUInt(11, 0) & mip.rdata.asUInt & intrVecEnable.asUInt) // Todo: asUInt(11,0) is ok?
   val intrBitSet = intrVec.orR
 
   // wfi
@@ -365,6 +390,7 @@ class NewCSR extends Module
   io.out.targetPc := Mux1H(Seq(
     mretEvent.out.targetPc.valid -> mretEvent.out.targetPc.bits,
     sretEvent.out.targetPc.valid -> sretEvent.out.targetPc.bits,
+    dretEvent.out.targetPc.valid -> dretEvent.out.targetPc.bits,
     trapEntryMEvent.out.targetPc.valid -> trapEntryMEvent.out.targetPc.bits,
     trapEntryHSEvent.out.targetPc.valid -> trapEntryHSEvent.out.targetPc.bits,
     trapEntryVSEvent.out.targetPc.valid -> trapEntryVSEvent.out.targetPc.bits,
@@ -388,6 +414,7 @@ class NewCSR extends Module
   io.out.isPerfCnt := addrInPerfCnt
   io.out.interrupt := intrBitSet
   io.out.wfi_event := wfi_event
+  io.out.debugMode := debugMode
 
   // Todo: record the last address to avoid xireg is different with xiselect
   toAIA.addr.valid := isCSRAccess && Seq(miselect, siselect, vsiselect).map(
