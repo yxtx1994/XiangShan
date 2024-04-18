@@ -62,7 +62,7 @@ class NewCSR(implicit val p: Parameters) extends Module
       val trap = ValidIO(new Bundle {
         val pc = UInt(VaddrMaxWidth.W)
         val instr = UInt(32.W)
-        val trapVec = Vec(64, Bool())
+        val trapVec = UInt(64.W)
         val singleStep = Bool()
         val crossPageIPFFix = Bool()
         val isInterrupt = Bool()
@@ -79,21 +79,30 @@ class NewCSR(implicit val p: Parameters) extends Module
     val mret = Input(Bool())
     val sret = Input(Bool())
     val dret = Input(Bool())
-    val wfi = Input(Bool())
+    val wfi  = Input(Bool())
 
     val out = Output(new Bundle {
       val EX_II = Bool()
       val EX_VI = Bool()
       val flushPipe = Bool()
-      val rData = Output(UInt(64.W))
+      val rData = UInt(64.W)
       val targetPc = UInt(VaddrMaxWidth.W)
-      val regOut = Output(UInt(64.W))
-      val privState = Output(new PrivState)
+      val regOut = UInt(64.W)
+      val privState = new PrivState
+      val interrupt = Bool()
+      val wfi_event = Bool()
       // fp
       val frm = Frm()
       // vec
       val vstart = UInt(XLEN.W)
-      val vxrm = Vxrm()
+      val vxsat = Vxsat()
+      val vxrm  = Vxrm()
+      val vcsr  = UInt(XLEN.W)
+      val vl    = UInt(XLEN.W)
+      val vtype = UInt(XLEN.W)
+      val vlenb = UInt(XLEN.W)
+      // perf
+      val isPerfCnt = Bool()
     })
   })
 
@@ -312,6 +321,32 @@ class NewCSR(implicit val p: Parameters) extends Module
     }
   )
 
+  // perf
+  val addrInPerfCnt = (addr >= mcycle.addr.U) && (addr <= mhpmcounters.last.addr.U) ||
+    (addr >= mcountinhibit.addr.U) && (addr <= mhpmevents.last.addr.U) ||
+    addr === mip.addr.U
+    // (addr >= cycle.addr.U) && (addr <= hpmcounters.last.addr.U) // User
+
+  // flush
+  val resetSatp = addr === satp.addr.U && wen // write to satp will cause the pipeline be flushed
+  val wFcsrChangeRM = addr === fcsr.addr.U && wen && wdata(7, 5) =/= fcsr.frm
+  val wFrmChangeRM  = addr === 2.U && wen && wdata(7, 5) =/= fcsr.frm
+  val frmChange = wFcsrChangeRM || wFrmChangeRM
+  val flushPipe = resetSatp || frmChange
+
+  // interrupt
+  val ideleg = mideleg.rdata.asUInt & mip.rdata.asUInt
+  def priviledgeEnableDetect(x: Bool): Bool = Mux(x, ((PRVM === PrivMode.S) && mstatus.rdata.SIE.asBool) || (PRVM < PrivMode.S),
+    ((PRVM === PrivMode.M) && mstatus.rdata.MIE.asBool) || (PRVM < PrivMode.M))
+
+  val intrVecEnable = Wire(Vec(12, Bool()))
+  intrVecEnable.zip(ideleg.asBools).map{ case(x, y) => x := priviledgeEnableDetect(y) }
+  val intrVec = mip.rdata.asUInt & intrVecEnable.asUInt // Todo
+  val intrBitSet = intrVec.orR
+
+  // wfi
+  val wfi_event = (mie.rdata.asUInt(11, 0) & mip.rdata.asUInt).orR // Todo
+
   private val rdata = Mux1H(csrRwMap.map { case (id, (_, rBundle)) =>
     (raddr === id.U) -> rBundle.asUInt
   })
@@ -337,9 +372,17 @@ class NewCSR(implicit val p: Parameters) extends Module
   io.out.privState.PRVM := PRVM
   io.out.privState.V    := V
 
-  io.out.frm    := fcsr.frm
-  io.out.vstart := 0.U // Todo
-  io.out.vxrm   := 0.U // Todo
+  io.out.frm := fcsr.frm
+  io.out.vstart := vstart.rdata.asUInt
+  io.out.vxsat := vcsr.vxsat
+  io.out.vxrm := vcsr.vxrm
+  io.out.vcsr := vcsr.rdata.asUInt
+  io.out.vl := vl.rdata.asUInt
+  io.out.vtype := vtype.rdata.asUInt
+  io.out.vlenb := vlenb.rdata.asUInt
+  io.out.isPerfCnt := addrInPerfCnt
+  io.out.interrupt := intrBitSet
+  io.out.wfi_event := wfi_event
 
   // Todo: record the last address to avoid xireg is different with xiselect
   toAIA.addr.valid := isCSRAccess && Seq(miselect, siselect, vsiselect).map(
