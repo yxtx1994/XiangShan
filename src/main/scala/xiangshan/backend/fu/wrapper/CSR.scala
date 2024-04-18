@@ -130,7 +130,7 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
   csrMod.fromAIA.stopei.bits := imsic.o.stopei.bits
   csrMod.fromAIA.vstopei.bits := imsic.o.vstopei.bits
 
-  private val exceptionVec = WireInit(VecInit(Seq.fill(16)(false.B))) // Todo:
+  private val exceptionVec = WireInit(VecInit(Seq.fill(XLEN)(false.B)))
   import ExceptionNO._
   exceptionVec(EX_BP    ) := isEbreak
   exceptionVec(EX_MCALL ) := isEcall && privState.isModeM
@@ -138,7 +138,7 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
   exceptionVec(EX_VSCALL) := isEcall && privState.isModeVS
   exceptionVec(EX_UCALL ) := isEcall && privState.isModeHUorVU
   exceptionVec(EX_II    ) := csrMod.io.out.EX_II
-  //exceptionVec(EX_VI    ) := csrMod.io.out.EX_VI // Todo: check other EX_VI
+  exceptionVec(EX_VI    ) := csrMod.io.out.EX_VI // Todo: check other EX_VI
 
   io.in.ready := true.B // Todo: Async read imsic may block CSR
   io.out.valid := valid
