@@ -7,7 +7,7 @@ import xiangshan.ExceptionNO._
 import xiangshan.SelImm
 import xiangshan.backend.Std
 import xiangshan.backend.fu.fpu.{FDivSqrt, FMA, FPToFP, FPToInt, IntToFP, IntFPToVec}
-import xiangshan.backend.fu.wrapper.{Alu, BranchUnit, DivUnit, JumpUnit, MulUnit, VFAlu, VFMA, VFDivSqrt, VIAluFix, VIMacU, VIDiv, VPPU, VIPU, VSetRiWi, VSetRiWvf, VSetRvfWvf, VCVT}
+import xiangshan.backend.fu.wrapper.{Alu, BranchUnit, CSR, DivUnit, JumpUnit, MulUnit, VFAlu, VFMA, VFDivSqrt, VIAluFix, VIMacU, VIDiv, VPPU, VIPU, VSetRiWi, VSetRiWvf, VSetRvfWvf, VCVT}
 import xiangshan.backend.Bundles.ExuInput
 import xiangshan.backend.datapath.DataConfig._
 

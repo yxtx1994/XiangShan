@@ -19,7 +19,7 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
   val setVsDirty = csrIn.vpu.dirty_vs
   val setVxsat = csrIn.vpu.vxsat
 
-  val flushPipe = Wire(Bool())
+  //val flushPipe = Wire(Bool()) // Todo
 
   val (valid, src1, src2, func) = (
     io.in.valid,
@@ -86,8 +86,11 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
 
   csrMod.io.fromRob.commit.fflags := setFflags
   csrMod.io.fromRob.commit.fsDirty := setFsDirty
-  csrMod.io.fromRob.commit.vxsat := setVxsat
+  csrMod.io.fromRob.commit.vxsat.valid := true.B // Todo:
+  csrMod.io.fromRob.commit.vxsat.bits := setVxsat // Todo:
   csrMod.io.fromRob.commit.vsDirty := setVsDirty
+  csrMod.io.fromRob.commit.commitValid := false.B // Todo:
+  csrMod.io.fromRob.commit.commitInstRet := 0.U // Todo:
 
   csrMod.io.mret := isMret
   csrMod.io.sret := isSret
@@ -104,11 +107,12 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
   private val imsic = Module(new IMSIC)
   imsic.i.hartId := io.csrin.get.hartId
   imsic.i.setIpNumValidVec2 := io.csrin.get.setIpNumValidVec2
-  imsic.i.setIpNum := io.csrin.get.setIpNum
+  imsic.i.setIpNum.valid := true.B // Todo:
+  imsic.i.setIpNum.bits := io.csrin.get.setIpNum // Todo:
   imsic.i.csr.addr.valid := csrMod.toAIA.addr.valid
   imsic.i.csr.addr.bits.addr := csrMod.toAIA.addr.bits.addr
-  imsic.i.csr.addr.bits.prvm := csrMod.toAIA.addr.bits.prvm
-  imsic.i.csr.addr.bits.v := csrMod.toAIA.addr.bits.v
+  imsic.i.csr.addr.bits.prvm := csrMod.toAIA.addr.bits.prvm.asUInt
+  imsic.i.csr.addr.bits.v := csrMod.toAIA.addr.bits.v.asUInt
   imsic.i.csr.vgein := csrMod.toAIA.vgein
   imsic.i.csr.mClaim := csrMod.toAIA.mClaim
   imsic.i.csr.sClaim := csrMod.toAIA.sClaim
@@ -126,7 +130,7 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
   csrMod.fromAIA.stopei.bits := imsic.o.stopei.bits
   csrMod.fromAIA.vstopei.bits := imsic.o.vstopei.bits
 
-  private val exceptionVec = WireInit(VecInit(Seq.fill(XLEN)(false.B)))
+  private val exceptionVec = WireInit(VecInit(Seq.fill(16)(false.B))) // Todo:
   import ExceptionNO._
   exceptionVec(EX_BP    ) := isEbreak
   exceptionVec(EX_MCALL ) := isEcall && privState.isModeM
@@ -134,7 +138,7 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
   exceptionVec(EX_VSCALL) := isEcall && privState.isModeVS
   exceptionVec(EX_UCALL ) := isEcall && privState.isModeHUorVU
   exceptionVec(EX_II    ) := csrMod.io.out.EX_II
-  exceptionVec(EX_VI    ) := csrMod.io.out.EX_VI // Todo: check other EX_VI
+  //exceptionVec(EX_VI    ) := csrMod.io.out.EX_VI // Todo: check other EX_VI
 
   io.in.ready := true.B // Todo: Async read imsic may block CSR
   io.out.valid := valid

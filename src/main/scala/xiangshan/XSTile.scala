@@ -102,6 +102,8 @@ class XSTile()(implicit p: Parameters) extends LazyModule
     })
 
     dontTouch(io.hartId)
+    dontTouch(io.setIpNumValidVec2)
+    dontTouch(io.setIpNum)
 
     val core_soft_rst = core_reset_sink.in.head._1 // unused
 
