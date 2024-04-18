@@ -63,9 +63,7 @@ class ExuBlockIO(implicit p: Parameters, params: SchdBlockParams) extends XSBund
   val out: MixedVec[MixedVec[DecoupledIO[ExuOutput]]] = params.genExuOutputDecoupledBundle
 
   val csrio = if (params.hasCSR) Some(new CSRFileIO) else None
-
   val csrin = if (params.hasCSR) Some(new CSRInput) else None
-
   val fenceio = if (params.hasFence) Some(new FenceIO) else None
   val frm = if (params.needSrcFrm) Some(Input(UInt(3.W))) else None
 }

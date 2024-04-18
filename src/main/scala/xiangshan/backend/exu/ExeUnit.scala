@@ -257,6 +257,7 @@ class ExeUnitImp(
       exuio <> fuio
       fuio.exception := DelayN(exuio.exception, 2)
   }))
+  io.csrin.foreach(exuio => funcUnits.foreach(fu => fu.io.csrin.foreach{fuio => fuio <> exuio}))
   io.fenceio.foreach(exuio => funcUnits.foreach(fu => fu.io.fenceio.foreach(fuio => fuio <> exuio)))
   io.frm.foreach(exuio => funcUnits.foreach(fu => fu.io.frm.foreach(fuio => fuio <> exuio)))
 
