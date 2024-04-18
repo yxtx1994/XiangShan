@@ -60,7 +60,7 @@ class NewCSR extends Module
       val trap = ValidIO(new Bundle {
         val pc = UInt(VaddrWidth.W)
         val instr = UInt(32.W)
-        val trapVec = Vec(64, Bool())
+        val trapVec = Vec(16, Bool()) // Todo:
         val singleStep = Bool()
         val crossPageIPFFix = Bool()
         val isInterrupt = Bool()
@@ -183,10 +183,12 @@ class NewCSR extends Module
     }
     mod match {
       case m: HasExternalInterruptBundle =>
-        m.platformIRP.MEIP := this.platformIRP.MEIP
-        m.platformIRP.MTIP := this.platformIRP.MTIP
-        m.platformIRP.MSIP := this.platformIRP.MSIP
-        m.platformIRP.SEIP := this.platformIRP.SEIP
+        m.platformIRP.MEIP := platformIRP.MEIP
+        m.platformIRP.MTIP := platformIRP.MTIP
+        m.platformIRP.MSIP := platformIRP.MSIP
+        m.platformIRP.SEIP := platformIRP.SEIP
+        m.platformIRP.VSEIP := false.B // Todo
+        m.platformIRP.VSTIP := false.B // Todo
       case _ =>
     }
     mod match {
