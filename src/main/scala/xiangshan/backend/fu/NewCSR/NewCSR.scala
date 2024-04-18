@@ -42,6 +42,7 @@ class NewCSR extends Module
   with CSREvents
   with CSRDebugTrigger
   with HasDebugExternalInterruptBundle
+  with CSRCustom
 {
 
   import CSRConfig._
@@ -91,6 +92,7 @@ class NewCSR extends Module
       val privState = new PrivState
       val interrupt = Bool()
       val wfi_event = Bool()
+      val disableSfence = Bool()
       // fp
       val frm = Frm()
       // vec
@@ -113,6 +115,10 @@ class NewCSR extends Module
       val sum = Bool()
       val imode = UInt(2.W)
       val dmode = UInt(2.W)
+    })
+    // customCtrl
+    val customCtrl = Output(new Bundle {
+      val spfctl = UInt(XLEN.W)
     })
   })
 
@@ -144,11 +150,11 @@ class NewCSR extends Module
   val isDret = io.dret
   val isWfi  = io.wfi
 
-  var csrRwMap = machineLevelCSRMap ++ supervisorLevelCSRMap ++ hypervisorCSRMap ++ virtualSupervisorCSRMap ++ unprivilegedCSRMap ++ aiaCSRMap
+  var csrRwMap = machineLevelCSRMap ++ supervisorLevelCSRMap ++ hypervisorCSRMap ++ virtualSupervisorCSRMap ++ unprivilegedCSRMap ++ aiaCSRMap ++ customCSRMap
 
-  val csrMods = machineLevelCSRMods ++ supervisorLevelCSRMods ++ hypervisorCSRMods ++ virtualSupervisorCSRMods ++ unprivilegedCSRMods ++ aiaCSRMods
+  val csrMods = machineLevelCSRMods ++ supervisorLevelCSRMods ++ hypervisorCSRMods ++ virtualSupervisorCSRMods ++ unprivilegedCSRMods ++ aiaCSRMods ++ customCSRMods
 
-  var csrOutMap = machineLevelCSROutMap ++ supervisorLevelCSROutMap ++ hypervisorCSROutMap ++ virtualSupervisorCSROutMap ++ unprivilegedCSROutMap ++ aiaCSROutMap
+  var csrOutMap = machineLevelCSROutMap ++ supervisorLevelCSROutMap ++ hypervisorCSROutMap ++ virtualSupervisorCSROutMap ++ unprivilegedCSROutMap ++ aiaCSROutMap ++ customCSROutMap
 
   val trapHandleMod = Module(new TrapHandleModule)
 
@@ -385,10 +391,15 @@ class NewCSR extends Module
   def priviledgeEnableDetect(x: Bool): Bool = Mux(x, ((PRVM === PrivMode.S) && mstatus.rdata.SIE.asBool) || (PRVM < PrivMode.S),
     ((PRVM === PrivMode.M) && mstatus.rdata.MIE.asBool) || (PRVM < PrivMode.M))
 
+  val debugIntr = debugIRP & debugIntrEnable
   val intrVecEnable = Wire(Vec(12, Bool()))
   intrVecEnable.zip(ideleg.asBools).map{ case(x, y) => x := priviledgeEnableDetect(y) && !disableInterrupt}
   val intrVec = Cat(debugIntr && !debugMode, mie.rdata.asUInt(11, 0) & mip.rdata.asUInt & intrVecEnable.asUInt) // Todo: asUInt(11,0) is ok?
   val intrBitSet = intrVec.orR
+
+  // fence
+  // csr access check, special case
+  val tvmNotPermit = PRVM === PrivMode.S && mstatus.rdata.TVM.asBool
 
   private val rdata = Mux1H(csrRwMap.map { case (id, (_, rBundle)) =>
     (raddr === id.U) -> rBundle.asUInt
@@ -428,6 +439,7 @@ class NewCSR extends Module
   io.out.interrupt := intrBitSet
   io.out.wfi_event :=  wfiEvent.out.wfi_event.bits
   io.out.debugMode := debugMode
+  io.out.disableSfence := tvmNotPermit || PRVM === PrivMode.U
 
   // Todo: record the last address to avoid xireg is different with xiselect
   toAIA.addr.valid := isCSRAccess && Seq(miselect, siselect, vsiselect).map(
@@ -451,6 +463,9 @@ class NewCSR extends Module
   io.tlb.sum := mstatus.rdata.SUM.asBool
   io.tlb.imode := PRVM.asUInt
   io.tlb.dmode := Mux((debugMode && dcsr.rdata.MPRVEN.asBool || !debugMode) && mstatus.rdata.MPRV.asBool, mstatus.rdata.MPP.asUInt, PRVM.asUInt)
+
+  // customCtrl
+  io.customCtrl.spfctl := spfctl.rdata.asUInt
 }
 
 trait SupervisorMachineAliasConnect { self: NewCSR with MachineLevel with SupervisorLevel =>
