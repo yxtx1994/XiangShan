@@ -106,7 +106,7 @@ class XSTop()(implicit p: Parameters) extends BaseXSSoc() with HasSoCParameter
     core_with_l2(i).debug_int_node := misc.debugModule.debug.dmOuter.dmOuter.intnode
     misc.plic.intnode := IntBuffer() := core_with_l2(i).beu_int_source
     if (!enableCHI) {
-      misc.peripheral_ports(i) := core_with_l2(i).tl_uncache 
+      misc.peripheral_ports(i) := core_with_l2(i).tl_uncache
     } else {
       // Make diplomacy happy
       val clientParameters = TLMasterPortParameters.v1(
