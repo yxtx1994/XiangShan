@@ -1,10 +1,11 @@
 package xiangshan.backend.fu.wrapper
 
 import chisel3._
+import chisel3.util.Mux1H
 import org.chipsalliance.cde.config.Parameters
 import utility._
 import xiangshan._
-import xiangshan.backend.fu.NewCSR.{CSRPermitModule, NewCSR}
+import xiangshan.backend.fu.NewCSR.{CSRPermitModule, NewCSR, VtypeBundle}
 import xiangshan.backend.fu.util._
 import xiangshan.backend.fu.{FuConfig, FuncUnit}
 import device._
@@ -19,7 +20,7 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
   val setVsDirty = csrIn.vpu.dirty_vs
   val setVxsat = csrIn.vpu.vxsat
 
-  val flushPipe = Wire(Bool())
+  val flush = io.flush.valid
 
   val (valid, src1, src2, func) = (
     io.in.valid,
@@ -78,15 +79,20 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
   csrMod.io.fromRob.trap.valid := csrIn.exception.valid
   csrMod.io.fromRob.trap.bits.pc := csrIn.exception.bits.pc
   csrMod.io.fromRob.trap.bits.instr := csrIn.exception.bits.instr
-  csrMod.io.fromRob.trap.bits.trapVec := csrIn.exception.bits.exceptionVec
+  // Todo: shrink the width of trap vector.
+  // We use 64bits trap vector in CSR, and 24 bits exceptionVec in exception bundle.
+  csrMod.io.fromRob.trap.bits.trapVec := csrIn.exception.bits.exceptionVec.asUInt
   csrMod.io.fromRob.trap.bits.singleStep := csrIn.exception.bits.singleStep
   csrMod.io.fromRob.trap.bits.crossPageIPFFix := csrIn.exception.bits.crossPageIPFFix
   csrMod.io.fromRob.trap.bits.isInterrupt := csrIn.exception.bits.isInterrupt
 
   csrMod.io.fromRob.commit.fflags := setFflags
   csrMod.io.fromRob.commit.fsDirty := setFsDirty
-  csrMod.io.fromRob.commit.vxsat := setVxsat
+  csrMod.io.fromRob.commit.vxsat.valid := true.B // Todo:
+  csrMod.io.fromRob.commit.vxsat.bits := setVxsat // Todo:
   csrMod.io.fromRob.commit.vsDirty := setVsDirty
+  csrMod.io.fromRob.commit.commitValid := false.B // Todo:
+  csrMod.io.fromRob.commit.commitInstRet := 0.U // Todo:
 
   csrMod.io.mret := isMret
   csrMod.io.sret := isSret
@@ -103,11 +109,12 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
   private val imsic = Module(new IMSIC)
   imsic.i.hartId := io.csrin.get.hartId
   imsic.i.setIpNumValidVec2 := io.csrin.get.setIpNumValidVec2
-  imsic.i.setIpNum := io.csrin.get.setIpNum
+  imsic.i.setIpNum.valid := true.B // Todo:
+  imsic.i.setIpNum.bits := io.csrin.get.setIpNum // Todo:
   imsic.i.csr.addr.valid := csrMod.toAIA.addr.valid
   imsic.i.csr.addr.bits.addr := csrMod.toAIA.addr.bits.addr
-  imsic.i.csr.addr.bits.prvm := csrMod.toAIA.addr.bits.prvm
-  imsic.i.csr.addr.bits.v := csrMod.toAIA.addr.bits.v
+  imsic.i.csr.addr.bits.prvm := csrMod.toAIA.addr.bits.prvm.asUInt
+  imsic.i.csr.addr.bits.v := csrMod.toAIA.addr.bits.v.asUInt
   imsic.i.csr.vgein := csrMod.toAIA.vgein
   imsic.i.csr.mClaim := csrMod.toAIA.mClaim
   imsic.i.csr.sClaim := csrMod.toAIA.sClaim
@@ -125,7 +132,7 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
   csrMod.fromAIA.stopei.bits := imsic.o.stopei.bits
   csrMod.fromAIA.vstopei.bits := imsic.o.vstopei.bits
 
-  private val exceptionVec = WireInit(VecInit(Seq.fill(XLEN)(false.B)))
+  private val exceptionVec = WireInit(0.U.asTypeOf(ExceptionVec())) // Todo:
   import ExceptionNO._
   exceptionVec(EX_BP    ) := isEbreak
   exceptionVec(EX_MCALL ) := isEcall && privState.isModeM
@@ -133,35 +140,50 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
   exceptionVec(EX_VSCALL) := isEcall && privState.isModeVS
   exceptionVec(EX_UCALL ) := isEcall && privState.isModeHUorVU
   exceptionVec(EX_II    ) := csrMod.io.out.EX_II
-  exceptionVec(EX_VI    ) := csrMod.io.out.EX_VI // Todo: check other EX_VI
+  //exceptionVec(EX_VI    ) := csrMod.io.out.EX_VI // Todo: check other EX_VI
+
+  val isXRet = valid && func === CSROpType.jmp && !isEcall && !isEbreak
+
+  // ctrl block will use theses later for flush
+  val isXRetFlag = RegInit(false.B)
+  isXRetFlag := Mux1H(
+    Seq(
+      DelayN(flush, 5),
+      isXRet,
+    ),
+    Seq(
+      false.B,
+      true.B,
+    )
+  )
 
   io.in.ready := true.B // Todo: Async read imsic may block CSR
   io.out.valid := valid
   io.out.bits.ctrl.exceptionVec.get := exceptionVec
-  io.out.bits.ctrl.flushPipe.get := csrMod.io.out.flushPipe
+  io.out.bits.ctrl.flushPipe.get := csrMod.io.out.flushPipe || isXRet // || frontendTriggerUpdate
   io.out.bits.res.data := csrMod.io.out.rData
   connect0LatencyCtrlSingal
 
-  csrOut.isPerfCnt := DontCare
-  csrOut.fpu.frm := csrMod.io.out.frm
-  csrOut.vpu.vstart := DontCare
-  csrOut.vpu.vxsat := DontCare
-  csrOut.vpu.vxrm := csrMod.io.out.vxrm
-  csrOut.vpu.vcsr := DontCare
-  csrOut.vpu.vl := DontCare
-  csrOut.vpu.vtype := DontCare
-  csrOut.vpu.vlenb := DontCare
-  csrOut.vpu.vill := DontCare
-  csrOut.vpu.vma := DontCare
-  csrOut.vpu.vta := DontCare
-  csrOut.vpu.vsew := DontCare
-  csrOut.vpu.vlmul := DontCare
+  csrOut.isPerfCnt  := csrMod.io.out.isPerfCnt && valid && func =/= CSROpType.jmp
+  csrOut.fpu.frm    := csrMod.io.out.frm
+  csrOut.vpu.vstart := csrMod.io.out.vstart
+  csrOut.vpu.vxsat  := csrMod.io.out.vxsat
+  csrOut.vpu.vxrm   := csrMod.io.out.vxrm
+  csrOut.vpu.vcsr   := csrMod.io.out.vcsr
+  csrOut.vpu.vl     := csrMod.io.out.vl
+  csrOut.vpu.vtype  := csrMod.io.out.vtype
+  csrOut.vpu.vlenb  := csrMod.io.out.vlenb
+  csrOut.vpu.vill   := csrMod.io.out.vtype.asTypeOf(new VtypeBundle).VILL.asUInt
+  csrOut.vpu.vma    := csrMod.io.out.vtype.asTypeOf(new VtypeBundle).VMA.asUInt
+  csrOut.vpu.vta    := csrMod.io.out.vtype.asTypeOf(new VtypeBundle).VTA.asUInt
+  csrOut.vpu.vsew   := csrMod.io.out.vtype.asTypeOf(new VtypeBundle).VSEW.asUInt
+  csrOut.vpu.vlmul  := csrMod.io.out.vtype.asTypeOf(new VtypeBundle).VLMUL.asUInt
 
-  csrOut.isXRet := DontCare
+  csrOut.isXRet := isXRetFlag
 
   csrOut.trapTarget := csrMod.io.out.targetPc
-  csrOut.interrupt := DontCare
-  csrOut.wfi_event := DontCare
+  csrOut.interrupt := csrMod.io.out.interrupt
+  csrOut.wfi_event := csrMod.io.out.wfi_event
 
   csrOut.tlb := DontCare
 
