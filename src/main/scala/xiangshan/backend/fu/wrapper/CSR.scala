@@ -1,6 +1,7 @@
 package xiangshan.backend.fu.wrapper
 
 import chisel3._
+import chisel3.util._
 import org.chipsalliance.cde.config.Parameters
 import utility._
 import xiangshan._
@@ -8,6 +9,7 @@ import xiangshan.backend.fu.NewCSR.{CSRPermitModule, NewCSR}
 import xiangshan.backend.fu.util._
 import xiangshan.backend.fu.{FuConfig, FuncUnit}
 import device._
+import system.HasSoCParameter
 
 class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
 {
@@ -130,7 +132,7 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
   csrMod.fromAIA.stopei.bits := imsic.o.stopei.bits
   csrMod.fromAIA.vstopei.bits := imsic.o.vstopei.bits
 
-  private val exceptionVec = WireInit(VecInit(Seq.fill(16)(false.B))) // Todo:
+  private val exceptionVec = WireInit(VecInit(Seq.fill(XLEN)(false.B)))
   import ExceptionNO._
   exceptionVec(EX_BP    ) := isEbreak
   exceptionVec(EX_MCALL ) := isEcall && privState.isModeM
@@ -138,7 +140,7 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
   exceptionVec(EX_VSCALL) := isEcall && privState.isModeVS
   exceptionVec(EX_UCALL ) := isEcall && privState.isModeHUorVU
   exceptionVec(EX_II    ) := csrMod.io.out.EX_II
-  //exceptionVec(EX_VI    ) := csrMod.io.out.EX_VI // Todo: check other EX_VI
+  exceptionVec(EX_VI    ) := csrMod.io.out.EX_VI // Todo: check other EX_VI
 
   io.in.ready := true.B // Todo: Async read imsic may block CSR
   io.out.valid := valid
@@ -220,8 +222,8 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
   }
 }
 
-class CSRInput(implicit p: Parameters) extends XSBundle {
+class CSRInput(implicit p: Parameters) extends XSBundle with HasSoCParameter{
   val hartId = Input(UInt(8.W))
-  val setIpNumValidVec2 = Input(Vec(64, Vec(7, Bool())))
-  val setIpNum = Input(UInt(8.W))
+  val setIpNumValidVec2 = Input(UInt(SetIpNumValidSize.W))
+  val setIpNum = Input(UInt(log2Up(NumIRSrc).W))
 }

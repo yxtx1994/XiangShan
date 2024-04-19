@@ -153,7 +153,7 @@ package object xiangshan {
   }
 
   object ExceptionVec {
-    val ExceptionVecSize = 16
+    val ExceptionVecSize = 64
     def apply() = Vec(ExceptionVecSize, Bool())
   }
 
