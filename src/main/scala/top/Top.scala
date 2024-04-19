@@ -252,7 +252,7 @@ class XSTop()(implicit p: Parameters) extends BaseXSSoc() with HasSoCParameter
 
     io.pll0_ctrl <> misc.module.pll0_ctrl
 
-    val setIpNumValidVec2 = WireInit(VecInit(Seq.fill(2)(VecInit(Seq.fill(7)(false.B))))) // Todo
+    val setIpNumValidVec2 = WireInit(VecInit(Seq.fill(64)(VecInit(Seq.fill(7)(false.B))))) // Todo
 
     for ((core, i) <- core_with_l2.zipWithIndex) {
       core.module.io.hartId := i.U

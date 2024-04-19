@@ -182,8 +182,7 @@ class MinimalConfig(n: Int = 1) extends Config(
           echoField = Seq(huancun.DirtyField()),
           prefetch = None,
           clientCaches = Seq(L1Param(
-            "dcache",
-            isKeywordBitsOpt = p.dcacheParametersOpt.get.isKeywordBitsOpt
+            "dcache"
           )),
         )),
         L2NBanks = 2,

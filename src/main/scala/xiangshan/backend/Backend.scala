@@ -615,8 +615,8 @@ class BackendIO(implicit p: Parameters, params: BackendParams) extends XSBundle 
   val fromTop = new Bundle {
     val hartId = Input(UInt(8.W))
     val externalInterrupt = new ExternalInterruptIO
-    val setIpNumValidVec2 = Input(Vec(2, Vec(7, Bool())))
-    val setIpNum = Input(UInt(4.W))
+    val setIpNumValidVec2 = Input(Vec(64, Vec(7, Bool())))
+    val setIpNum = Input(UInt(8.W))
   }
 
   val toTop = new Bundle {

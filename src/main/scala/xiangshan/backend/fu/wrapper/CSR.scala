@@ -222,6 +222,6 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
 
 class CSRInput(implicit p: Parameters) extends XSBundle {
   val hartId = Input(UInt(8.W))
-  val setIpNumValidVec2 = Input(Vec(2, Vec(7, Bool())))
-  val setIpNum = Input(UInt(4.W))
+  val setIpNumValidVec2 = Input(Vec(64, Vec(7, Bool())))
+  val setIpNum = Input(UInt(8.W))
 }
