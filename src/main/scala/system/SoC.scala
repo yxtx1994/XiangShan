@@ -48,7 +48,10 @@ case class SoCParameters
     sets = 2048 // 1MB per bank
   )),
   XSTopPrefix: Option[String] = None,
-  NodeIDWidth: Int = 7
+  NodeIDWidth: Int = 7,
+  NumHart: Int = 64,
+  NumIRFiles: Int = 7,
+  NumIRSrc: Int = 256,
 ){
   // L3 configurations
   val L3InnerBusWidth = 256
@@ -76,6 +79,10 @@ trait HasSoCParameter {
   val L3OuterBusWidth = soc.L3OuterBusWidth
 
   val NrExtIntr = soc.extIntrs
+
+  val SetIpNumValidSize = soc.NumHart * soc.NumIRFiles
+
+  val NumIRSrc = soc.NumIRSrc
 }
 
 class ILABundle extends Bundle {}
