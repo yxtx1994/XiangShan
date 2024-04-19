@@ -4,6 +4,7 @@ import org.chipsalliance.cde.config.Parameters
 import chisel3._
 import chisel3.util._
 import freechips.rocketchip.diplomacy.{LazyModule, LazyModuleImp}
+import system.HasSoCParameter
 import utility.{Constantin, ZeroExt}
 import xiangshan._
 import xiangshan.backend.Bundles.{DynInst, IssueQueueIQWakeUpBundle, LoadShouldCancel, MemExuInput, MemExuOutput, VPUCtrlSignals}
@@ -611,12 +612,12 @@ class BackendMemIO(implicit p: Parameters, params: BackendParams) extends XSBund
   }
 }
 
-class BackendIO(implicit p: Parameters, params: BackendParams) extends XSBundle {
+class BackendIO(implicit p: Parameters, params: BackendParams) extends XSBundle with HasSoCParameter {
   val fromTop = new Bundle {
     val hartId = Input(UInt(8.W))
     val externalInterrupt = new ExternalInterruptIO
-    val setIpNumValidVec2 = Input(Vec(2, Vec(7, Bool())))
-    val setIpNum = Input(UInt(4.W))
+    val setIpNumValidVec2 = Input(UInt(SetIpNumValidSize.W))
+    val setIpNum = Input(UInt(log2Up(NumIRSrc).W))
   }
 
   val toTop = new Bundle {
