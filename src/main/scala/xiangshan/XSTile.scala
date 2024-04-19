@@ -18,7 +18,7 @@ package xiangshan
 
 import org.chipsalliance.cde.config.{Config, Parameters}
 import chisel3._
-import chisel3.util.{Valid, ValidIO}
+import chisel3.util.{Valid, ValidIO, log2Up}
 import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.interrupts._
 import freechips.rocketchip.tile.{BusErrorUnit, BusErrorUnitParams, BusErrors}
@@ -93,8 +93,8 @@ class XSTile()(implicit p: Parameters) extends LazyModule
   class XSTileImp(wrapper: LazyModule) extends LazyModuleImp(wrapper) {
     val io = IO(new Bundle {
       val hartId = Input(UInt(hartIdLen.W))
-      val setIpNumValidVec2 = Input(Vec(2, Vec(7, Bool())))
-      val setIpNum = Input(UInt(4.W))
+      val setIpNumValidVec2 = Input(UInt(SetIpNumValidSize.W))
+      val setIpNum = Input(UInt(log2Up(NumIRSrc).W))
       val reset_vector = Input(UInt(PAddrBits.W))
       val cpu_halt = Output(Bool())
       val debugTopDown = new Bundle {
