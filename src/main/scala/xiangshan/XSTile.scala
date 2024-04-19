@@ -154,14 +154,14 @@ class XSTile()(implicit p: Parameters) extends LazyModule
     if (enableL2) {
       // TODO: add ECC interface of L2
       l2top.module.beu_errors.l2 <> 0.U.asTypeOf(l2top.module.beu_errors.l2)
-      core.module.io.l2_hint.bits.sourceId := l2top.module.l2_hint.bits
+      core.module.io.l2_hint.bits.sourceId := l2top.module.l2_hint.bits.sourceId
       core.module.io.l2_hint.valid := l2top.module.l2_hint.valid
       core.module.io.l2PfqBusy := false.B
       core.module.io.debugTopDown.l2MissMatch := l2top.module.debugTopDown.l2MissMatch
       l2top.module.debugTopDown.robHeadPaddr := core.module.io.debugTopDown.robHeadPaddr
     } else {
       l2top.module.beu_errors.l2 <> 0.U.asTypeOf(l2top.module.beu_errors.l2)
-      core.module.io.l2_hint.bits.sourceId := l2top.module.l2_hint.bits
+      core.module.io.l2_hint.bits.sourceId := l2top.module.l2_hint.bits.sourceId
       core.module.io.l2_hint.valid := l2top.module.l2_hint.valid
       core.module.io.l2PfqBusy := false.B
       core.module.io.debugTopDown.l2MissMatch := false.B
