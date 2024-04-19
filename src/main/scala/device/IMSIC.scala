@@ -6,13 +6,13 @@ import chisel3.experimental._
 
 class IMSIC(
   NumIRFiles: Int = 7,
-  NumHart: Int = 2,
+  NumHart: Int = 64,
   XLEN: Int = 64,
-  NumIRSrc: Int = 12,
+  NumIRSrc: Int = 256,
 ) extends Module {
   // has default clock and reset
   val i = IO(Input(new Bundle {
-    val setIpNumValidVec2 = Vec(NumHart, Vec(NumIRFiles, Bool()))
+    val setIpNumValidVec2 = UInt((NumHart * NumIRFiles).W)
     val setIpNum          = ValidIO(UInt(log2Up(NumIRSrc).W))
     val hartId            = UInt(log2Up(NumHart).W)
     val csr = new Bundle {
@@ -46,7 +46,7 @@ class IMSIC(
 
   imsicTop.io.csr_clk         := clock
   imsicTop.io.csr_rstn        := reset
-  imsicTop.io.i.setipnum_vld  := Cat(i.setIpNumValidVec2.flatten.reverse)
+  imsicTop.io.i.setipnum_vld  := i.setIpNumValidVec2
   imsicTop.io.i.setipnum      := i.setIpNum.bits
   imsicTop.io.i.hart_id       := i.hartId
   imsicTop.io.i.csr.addr_vld  := i.csr.addr.valid
@@ -71,8 +71,8 @@ class IMSIC(
 
 class imsic_csr_top(
   NumIRFiles: Int = 7,
-  NumIRSrc: Int = 12,
-  NumHart: Int = 2,
+  NumIRSrc: Int = 256,
+  NumHart: Int = 64,
   XLEN: Int = 64,
 ) extends BlackBox(Map(
   "NR_INTP_FILES" -> NumIRFiles,

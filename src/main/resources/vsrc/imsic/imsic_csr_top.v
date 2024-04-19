@@ -3,9 +3,9 @@
  * Function: receive active setipnum, and map the interrupt file ,last,delivery the irqs*/
 module imsic_csr_top #(
 parameter NR_INTP_FILES     = 7,    // m,s,5vs,
-parameter NR_HARTS          = 4,    //harts number.
+parameter NR_HARTS          = 64,   //harts number.
 parameter XLEN              = 64,   // harts number.
-parameter NR_SRC            = 32,
+parameter NR_SRC            = 256,
 // DO NOT INSTANCE BY PARAMETER
 parameter HART_ID_WIDTH     = $clog2(NR_HARTS), // default 4 current hart Index value.
 parameter NR_SRC_WIDTH      = $clog2(NR_SRC)  //max is 12.

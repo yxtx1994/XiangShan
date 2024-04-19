@@ -1,7 +1,7 @@
 package xiangshan.backend.fu.wrapper
 
 import chisel3._
-import chisel3.util.Mux1H
+import chisel3.util._
 import org.chipsalliance.cde.config.Parameters
 import utility._
 import xiangshan._
@@ -9,6 +9,7 @@ import xiangshan.backend.fu.NewCSR._
 import xiangshan.backend.fu.util._
 import xiangshan.backend.fu.{FuConfig, FuncUnit}
 import device._
+import system.HasSoCParameter
 
 class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
 {
@@ -252,8 +253,8 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
   }
 }
 
-class CSRInput(implicit p: Parameters) extends XSBundle {
+class CSRInput(implicit p: Parameters) extends XSBundle with HasSoCParameter{
   val hartId = Input(UInt(8.W))
-  val setIpNumValidVec2 = Input(Vec(2, Vec(7, Bool())))
-  val setIpNum = Input(UInt(4.W))
+  val setIpNumValidVec2 = Input(UInt(SetIpNumValidSize.W))
+  val setIpNum = Input(UInt(log2Up(NumIRSrc).W))
 }

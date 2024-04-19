@@ -36,7 +36,6 @@ import xiangshan.frontend.icache.ICacheParameters
 import xiangshan.cache.mmu.{L2TLBParameters, TLBParameters}
 import xiangshan.frontend._
 import xiangshan.frontend.icache.ICacheParameters
-
 import freechips.rocketchip.diplomacy.AddressSet
 import freechips.rocketchip.tile.MaxHartIdBits
 import system.SoCParamsKey
