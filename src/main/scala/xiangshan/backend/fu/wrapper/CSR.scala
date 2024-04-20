@@ -5,7 +5,7 @@ import chisel3.util.Mux1H
 import org.chipsalliance.cde.config.Parameters
 import utility._
 import xiangshan._
-import xiangshan.backend.fu.NewCSR.{CSRPermitModule, NewCSR, SpfctlBundle, VtypeBundle}
+import xiangshan.backend.fu.NewCSR.{CSRPermitModule, NewCSR, SbpctlBundle, SlvpredctlBundle, SmblockctlBundle, SpfctlBundle, SrnctlBundle, VtypeBundle}
 import xiangshan.backend.fu.util._
 import xiangshan.backend.fu.{FuConfig, FuncUnit}
 import device._
@@ -20,6 +20,7 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
   val setVsDirty = csrIn.vpu.dirty_vs
   val setVxsat = csrIn.vpu.vxsat
 
+  val flushPipe = Wire(Bool())
   val flush = io.flush.valid
 
   val (valid, src1, src2, func) = (
@@ -104,7 +105,7 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
   csrMod.platformIRP.SEIP := csrIn.externalInterrupt.seip
   csrMod.platformIRP.VSEIP := false.B // Todo
   csrMod.platformIRP.VSTIP := false.B // Todo
-  csrMod.debugIRP := csrIn.externalInterrupt.debug
+  csrMod.io.debug := csrIn.externalInterrupt.debug
 
   private val imsic = Module(new IMSIC)
   imsic.i.hartId := io.csrin.get.hartId
@@ -157,6 +158,8 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
     )
   )
 
+  flushPipe := csrMod.io.out.flushPipe || isXRet // || frontendTriggerUpdate // Todo: trigger
+
   // tlb
   val tlb = Wire(new TlbCsrBundle)
   tlb.satp.apply(csrMod.io.tlb.satp)
@@ -169,24 +172,24 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
   io.in.ready := true.B // Todo: Async read imsic may block CSR
   io.out.valid := valid
   io.out.bits.ctrl.exceptionVec.get := exceptionVec
-  io.out.bits.ctrl.flushPipe.get := csrMod.io.out.flushPipe || isXRet // || frontendTriggerUpdate // Todo: trigger
+  io.out.bits.ctrl.flushPipe.get := flushPipe
   io.out.bits.res.data := csrMod.io.out.rData
   connect0LatencyCtrlSingal
 
   csrOut.isPerfCnt  := csrMod.io.out.isPerfCnt && valid && func =/= CSROpType.jmp
   csrOut.fpu.frm    := csrMod.io.out.frm
-  csrOut.vpu.vstart := csrMod.io.out.vstart
-  csrOut.vpu.vxsat  := csrMod.io.out.vxsat
-  csrOut.vpu.vxrm   := csrMod.io.out.vxrm
-  csrOut.vpu.vcsr   := csrMod.io.out.vcsr
-  csrOut.vpu.vl     := csrMod.io.out.vl
+  csrOut.vpu.vstart := csrMod.vstart.rdata.asUInt
+  csrOut.vpu.vxsat  := csrMod.vcsr.vxsat
+  csrOut.vpu.vxrm   := csrMod.vcsr.vxrm
+  csrOut.vpu.vcsr   := csrMod.vcsr.rdata.asUInt
+  csrOut.vpu.vl     := csrMod.vl.rdata.asUInt
   csrOut.vpu.vtype  := csrMod.io.out.vtype
   csrOut.vpu.vlenb  := csrMod.io.out.vlenb
-  csrOut.vpu.vill   := csrMod.io.out.vtype.asTypeOf(new VtypeBundle).VILL
-  csrOut.vpu.vma    := csrMod.io.out.vtype.asTypeOf(new VtypeBundle).VMA
-  csrOut.vpu.vta    := csrMod.io.out.vtype.asTypeOf(new VtypeBundle).VTA
-  csrOut.vpu.vsew   := csrMod.io.out.vtype.asTypeOf(new VtypeBundle).VSEW
-  csrOut.vpu.vlmul  := csrMod.io.out.vtype.asTypeOf(new VtypeBundle).VLMUL
+  csrOut.vpu.vill   := csrMod.io.out.vtype.asTypeOf(new VtypeBundle).VILL.asUInt
+  csrOut.vpu.vma    := csrMod.io.out.vtype.asTypeOf(new VtypeBundle).VMA.asUInt
+  csrOut.vpu.vta    := csrMod.io.out.vtype.asTypeOf(new VtypeBundle).VTA.asUInt
+  csrOut.vpu.vsew   := csrMod.io.out.vtype.asTypeOf(new VtypeBundle).VSEW.asUInt
+  csrOut.vpu.vlmul  := csrMod.io.out.vtype.asTypeOf(new VtypeBundle).VLMUL.asUInt
 
   csrOut.isXRet := isXRetFlag
 
@@ -202,7 +205,7 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
 
   csrOut.customCtrl match {
     case custom =>
-      custom.l1I_pf_enable           := csrMod.io.customCtrl.spfctl.asTypeOf(new SpfctlBundle).L1I_PF_ENABLE.asBool
+      custom.l1I_pf_enable           := csrMod.spfctl.rdata.L1I_PF_ENABLE
       custom.l2_pf_enable            := csrMod.io.customCtrl.spfctl.asTypeOf(new SpfctlBundle).L2_PF_ENABLE.asBool
       custom.l1D_pf_enable           := csrMod.io.customCtrl.spfctl.asTypeOf(new SpfctlBundle).L1D_PF_ENABLE.asBool
       custom.l1D_pf_train_on_hit     := csrMod.io.customCtrl.spfctl.asTypeOf(new SpfctlBundle).L1D_PF_TRAIN_ON_HIT.asBool
@@ -213,31 +216,33 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
       custom.l1D_pf_enable_stride    := csrMod.io.customCtrl.spfctl.asTypeOf(new SpfctlBundle).L1D_PF_ENABLE_STRIDE.asBool
       custom.l2_pf_store_only        := csrMod.io.customCtrl.spfctl.asTypeOf(new SpfctlBundle).L2_PF_STORE_ONLY.asBool
       // ICache
-      custom.icache_parity_enable := DontCare
+      custom.icache_parity_enable := csrMod.io.customCtrl.sfetchctl
       // Labeled XiangShan
-      custom.dsid := DontCare
+      custom.dsid := csrMod.io.customCtrl.sdsid
       // Load violation predictor
-      custom.lvpred_disable := DontCare
-      custom.no_spec_load := DontCare
-      custom.storeset_wait_store := DontCare
-      custom.storeset_no_fast_wakeup := DontCare
-      custom.lvpred_timeout := DontCare
+      custom.lvpred_disable          := csrMod.io.customCtrl.slvpredctl.asTypeOf(new SlvpredctlBundle).LVPRED_DISABLE.asBool
+      custom.no_spec_load            := csrMod.io.customCtrl.slvpredctl.asTypeOf(new SlvpredctlBundle).NO_SPEC_LOAD.asBool
+      custom.storeset_wait_store     := csrMod.io.customCtrl.slvpredctl.asTypeOf(new SlvpredctlBundle).STORESET_WAIT_STORE.asBool
+      custom.storeset_no_fast_wakeup := csrMod.io.customCtrl.slvpredctl.asTypeOf(new SlvpredctlBundle).STORESET_NO_FAST_WAKEUP.asBool
+      custom.lvpred_timeout          := csrMod.io.customCtrl.slvpredctl.asTypeOf(new SlvpredctlBundle).LVPRED_TIMEOUT.asUInt
       // Branch predictor
-      custom.bp_ctrl := DontCare
+      custom.bp_ctrl := csrMod.io.customCtrl.sbpctl.asUInt(6, 0)
       // Memory Block
-      custom.sbuffer_threshold := DontCare
-      custom.ldld_vio_check_enable := DontCare
-      custom.soft_prefetch_enable := DontCare
-      custom.cache_error_enable := DontCare
-      custom.uncache_write_outstanding_enable := DontCare
+      custom.sbuffer_threshold     := csrMod.io.customCtrl.smblockctl.asTypeOf(new SmblockctlBundle).SBUFFER_THRESHOLD.asUInt
+      custom.ldld_vio_check_enable := csrMod.io.customCtrl.smblockctl.asTypeOf(new SmblockctlBundle).LDLD_VIO_CHECK_ENABLE.asBool
+      custom.soft_prefetch_enable  := csrMod.io.customCtrl.smblockctl.asTypeOf(new SmblockctlBundle).SOFT_PREFETCH_ENABLE.asBool
+      custom.cache_error_enable    := csrMod.io.customCtrl.smblockctl.asTypeOf(new SmblockctlBundle).CACHE_ERROR_ENABLE.asBool
+      custom.uncache_write_outstanding_enable := csrMod.io.customCtrl.smblockctl.asTypeOf(new SmblockctlBundle).UNCACHE_WRITE_OUTSTANDING_ENABLE.asBool
       // Rename
-      custom.fusion_enable := DontCare
-      custom.wfi_enable := DontCare
+      custom.fusion_enable := csrMod.io.customCtrl.srnctl.asTypeOf(new SrnctlBundle).FUSION_ENABLE.asBool
+      custom.wfi_enable    := csrMod.io.customCtrl.srnctl.asTypeOf(new SrnctlBundle).WFI_ENABLE.asBool
       // Decode
-      custom.svinval_enable := DontCare
+      custom.svinval_enable := csrMod.io.customCtrl.srnctl.asTypeOf(new SrnctlBundle).SVINVAL_ENABLE.asBool
       // distribute csr write signal
       // write to frontend and memory
-      custom.distribute_csr := DontCare
+      custom.distribute_csr.w.valid // Todo:
+      custom.distribute_csr.w.bits.addr := addr
+      custom.distribute_csr.w.bits.data := wdata
       // rename single step
       custom.singlestep := DontCare
       // trigger

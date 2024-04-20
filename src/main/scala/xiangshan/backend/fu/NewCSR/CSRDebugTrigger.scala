@@ -44,10 +44,12 @@ trait CSRDebugTrigger { self: NewCSR =>
 
 class DcsrBundle extends CSRBundle {
 
-  val DEBUGVER  =   RO(31, 28).withReset(4.U) // Debug implementation as it described in 0.13 draft
+  val DEBUGVER  = DebugverMode(31, 28).withReset(DebugverMode.Spec) // Debug implementation as it described in 0.13 draft // todo
+  val PAD1      =   RO(27, 18).withReset(0.U)
   val EBREAKVS  = WARL(    17, wNoFilter).withReset(0.U)
   val EBREAKVU  = WARL(    16, wNoFilter).withReset(0.U)
   val EBREAKM   =   RW(    15).withReset(0.U)
+  val PAD0      =   RO(    14).withReset(0.U) // ebreakh has been removed
   val EBREAKS   = WARL(    13, wNoFilter).withReset(0.U)
   val EBREAKU   = WARL(    12, wNoFilter).withReset(0.U)
   val STEPIE    = WARL(    11, wNoFilter).withReset(0.U)
@@ -58,14 +60,10 @@ class DcsrBundle extends CSRBundle {
   val MPRVEN    = WARL(     4, wNoFilter) // Whether use mstatus.perven as mprven
   val NMIP      =   RO(     3).withReset(0.U)
   val STEP      =   RW(     2).withReset(0.U)
-  val PRV       = WARL(  1, 0, wNoFilter).withReset(3.U)
+  val PRV       = PrivMode(1, 0).withReset(PrivMode.M)
 }
 
 class Dpc extends CSRBundle {
 
   val ALL = RW(63, 1)
-}
-
-trait HasDebugExternalInterruptBundle {
-  val debugIRP = IO(Input(Bool()))
 }

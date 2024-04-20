@@ -5,7 +5,7 @@ import chisel3.util._
 import top.{ArgParser, Generator}
 import xiangshan.backend.fu.NewCSR.CSRBundles.PrivState
 import xiangshan.backend.fu.NewCSR.CSRDefines.{PrivMode, VirtMode}
-import xiangshan.backend.fu.NewCSR.CSREvents.{CSREvents, EventUpdatePrivStateOutput, MretEventSinkBundle, SretEventSinkBundle, DretEventSinkBundle, TrapEntryEventInput, TrapEntryHSEventSinkBundle, TrapEntryMEventSinkBundle, TrapEntryVSEventSinkBundle}
+import xiangshan.backend.fu.NewCSR.CSREvents.{CSREvents, DretEventSinkBundle, EventUpdatePrivStateOutput, MretEventSinkBundle, SretEventSinkBundle, TrapEntryEventInput, TrapEntryHSEventSinkBundle, TrapEntryMEventSinkBundle, TrapEntryVSEventSinkBundle}
 import xiangshan.backend.fu.fpu.Bundles.{Fflags, Frm}
 import xiangshan.backend.fu.vector.Bundles.{Vxrm, Vxsat}
 
@@ -41,7 +41,6 @@ class NewCSR extends Module
   with SupervisorMachineAliasConnect
   with CSREvents
   with CSRDebugTrigger
-  with HasDebugExternalInterruptBundle
   with CSRCustom
 {
 
@@ -81,6 +80,7 @@ class NewCSR extends Module
     val sret = Input(Bool())
     val dret = Input(Bool())
     val wfi  = Input(Bool())
+    val debug = Input(Bool())
 
     val out = Output(new Bundle {
       val EX_II = Bool()
@@ -118,7 +118,13 @@ class NewCSR extends Module
     })
     // customCtrl
     val customCtrl = Output(new Bundle {
+      val sbpctl = UInt(XLEN.W)
       val spfctl = UInt(XLEN.W)
+      val slvpredctl = UInt(XLEN.W)
+      val smblockctl = UInt(XLEN.W)
+      val srnctl = UInt(XLEN.W)
+      val sdsid = UInt(XLEN.W)
+      val sfetchctl  = Bool()
     })
   })
 
@@ -340,12 +346,6 @@ class NewCSR extends Module
       in.dpc  := dpc.regOut
       in.mstatus := mstatus.regOut
   }
-  wfiEvent.valid := isWfi
-  wfiEvent.in match {
-    case in =>
-      in.mie := mie.regOut
-      in.mip := mip.regOut
-  }
 
   PRVM := MuxCase(
     PRVM,
@@ -383,7 +383,7 @@ class NewCSR extends Module
   val debugIntrEnable = RegInit(true.B) // debug interrupt will be handle only when debugIntrEnable
   debugMode := dretEvent.out.debugMode
   debugIntrEnable := dretEvent.out.debugIntrEnable
-  val debugIntr = debugIRP & debugIntrEnable
+  val debugIntr =  io.debug & debugIntrEnable
 
   // interrupt
   val disableInterrupt = debugMode || (dcsr.rdata.STEP.asBool && !dcsr.rdata.STEPIE.asBool)
@@ -391,7 +391,6 @@ class NewCSR extends Module
   def priviledgeEnableDetect(x: Bool): Bool = Mux(x, ((PRVM === PrivMode.S) && mstatus.rdata.SIE.asBool) || (PRVM < PrivMode.S),
     ((PRVM === PrivMode.M) && mstatus.rdata.MIE.asBool) || (PRVM < PrivMode.M))
 
-  val debugIntr = debugIRP & debugIntrEnable
   val intrVecEnable = Wire(Vec(12, Bool()))
   intrVecEnable.zip(ideleg.asBools).map{ case(x, y) => x := priviledgeEnableDetect(y) && !disableInterrupt}
   val intrVec = Cat(debugIntr && !debugMode, mie.rdata.asUInt(11, 0) & mip.rdata.asUInt & intrVecEnable.asUInt) // Todo: asUInt(11,0) is ok?
@@ -437,7 +436,7 @@ class NewCSR extends Module
   io.out.vlenb := vlenb.rdata.asUInt
   io.out.isPerfCnt := addrInPerfCnt
   io.out.interrupt := intrBitSet
-  io.out.wfi_event :=  wfiEvent.out.wfi_event.bits
+  io.out.wfi_event := debugIntr || (mie.rdata.asUInt(11, 0) & mip.rdata.asUInt).orR
   io.out.debugMode := debugMode
   io.out.disableSfence := tvmNotPermit || PRVM === PrivMode.U
 
@@ -465,7 +464,15 @@ class NewCSR extends Module
   io.tlb.dmode := Mux((debugMode && dcsr.rdata.MPRVEN.asBool || !debugMode) && mstatus.rdata.MPRV.asBool, mstatus.rdata.MPP.asUInt, PRVM.asUInt)
 
   // customCtrl
+  io.customCtrl.sbpctl := sbpctl.rdata.asUInt
   io.customCtrl.spfctl := spfctl.rdata.asUInt
+  io.customCtrl.slvpredctl := slvpredctl.rdata.asUInt
+  io.customCtrl.smblockctl := smblockctl.rdata.asUInt
+  io.customCtrl.srnctl := srnctl.rdata.asUInt
+  io.customCtrl.sdsid := sdsid.rdata.asUInt
+  io.customCtrl.sfetchctl := sfetchctl.rdata.ICACHE_PARITY_ENABLE.asBool
+
+
 }
 
 trait SupervisorMachineAliasConnect { self: NewCSR with MachineLevel with SupervisorLevel =>
