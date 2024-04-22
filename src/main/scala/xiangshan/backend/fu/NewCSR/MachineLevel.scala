@@ -2,13 +2,12 @@ package xiangshan.backend.fu.NewCSR
 
 import chisel3._
 import chisel3.util._
+import org.chipsalliance.cde.config.Parameters
 import xiangshan.backend.fu.NewCSR.CSRBundles._
 import xiangshan.backend.fu.NewCSR.CSRDefines._
 import xiangshan.backend.fu.NewCSR.CSRDefines.{
   CSRROField => RO,
   CSRRWField => RW,
-  CSRWARLField => WARL,
-  CSRWLRLField => WLRL,
   _
 }
 import xiangshan.backend.fu.NewCSR.CSREvents._
@@ -156,8 +155,8 @@ trait MachineLevel { self: NewCSR =>
     reg.ALL := Mux(!mcountinhibit.CY.asUInt.asBool, reg.ALL.asUInt + 1.U, reg.ALL.asUInt)
   }).setAddr(0xB00)
 
-  val minstret = Module(new CSRModule("Minstret") with HasMachineCounterControlBundle with HasInstCommitBundle {
-    reg.ALL := Mux(!mcountinhibit.IR.asUInt.asBool && commitValid, reg.ALL.asUInt + commitInstNum, reg.ALL.asUInt)
+  val minstret = Module(new CSRModule("Minstret") with HasMachineCounterControlBundle with HasRobCommitBundle {
+    reg.ALL := Mux(!mcountinhibit.IR.asUInt.asBool && robCommit.instNum.valid, reg.ALL.asUInt + robCommit.instNum.bits, reg.ALL.asUInt)
   })
 
   // Todo: guarded by mcountinhibit
@@ -240,11 +239,12 @@ class MstatusBundle extends CSRBundle {
   )
 }
 
-class MstatusModule extends CSRModule("MStatus", new MstatusBundle)
+class MstatusModule(implicit override val p: Parameters) extends CSRModule("MStatus", new MstatusBundle)
   with TrapEntryMEventSinkBundle
   with TrapEntryHSEventSinkBundle
   with MretEventSinkBundle
   with SretEventSinkBundle
+  with HasRobCommitBundle
 {
   val mstatus = IO(Output(bundle))
   val sstatus = IO(Output(new SstatusBundle))
@@ -253,6 +253,16 @@ class MstatusModule extends CSRModule("MStatus", new MstatusBundle)
 
   // write connection
   this.wfn(reg)(Seq(wAliasSstatus))
+
+  when (robCommit.fsDirty) {
+    assert(reg.FS =/= ContextStatus.Off, "The [m|s]status.FS should not be Off when set dirty")
+    reg.FS := ContextStatus.Dirty
+  }
+
+  when (robCommit.vsDirty) {
+    assert(reg.VS =/= ContextStatus.Off, "The [m|s]status.VS should not be Off when set dirty")
+    reg.VS := ContextStatus.Dirty
+  }
 
   // read connection
   mstatus :|= reg
@@ -397,8 +407,6 @@ trait HasMachineCounterControlBundle { self: CSRModule[_] =>
   val mcountinhibit = IO(Input(new McountinhibitBundle))
 }
 
-trait HasInstCommitBundle {
-  val commitValid   = IO(Input(Bool()))
-  // need contain 8x8
-  val commitInstNum = IO(Input(UInt(7.W)))
+trait HasRobCommitBundle { self: CSRModule[_] =>
+  val robCommit = IO(Input(new RobCommitCSR))
 }

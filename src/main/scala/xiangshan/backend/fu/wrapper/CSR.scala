@@ -5,7 +5,7 @@ import chisel3.util._
 import org.chipsalliance.cde.config.Parameters
 import utility._
 import xiangshan._
-import xiangshan.backend.fu.NewCSR.{CSRPermitModule, NewCSR, SbpctlBundle, SlvpredctlBundle, SmblockctlBundle, SpfctlBundle, SrnctlBundle, VtypeBundle}
+import xiangshan.backend.fu.NewCSR.{CSRPermitModule, NewCSR, SbpctlBundle, SlvpredctlBundle, SmblockctlBundle, SpfctlBundle, SrnctlBundle, CSRVTypeBundle}
 import xiangshan.backend.fu.util._
 import xiangshan.backend.fu.{FuConfig, FuncUnit}
 import device._
@@ -92,8 +92,8 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
   csrMod.io.fromRob.commit.vxsat.valid := true.B // Todo:
   csrMod.io.fromRob.commit.vxsat.bits := setVxsat // Todo:
   csrMod.io.fromRob.commit.vsDirty := setVsDirty
-  csrMod.io.fromRob.commit.commitValid := false.B // Todo:
-  csrMod.io.fromRob.commit.commitInstRet := 0.U // Todo:
+  csrMod.io.fromRob.commit.instNum.valid := false.B // Todo:
+  csrMod.io.fromRob.commit.instNum.bits := 0.U // Todo:
 
   csrMod.io.mret := isMret
   csrMod.io.sret := isSret
@@ -186,11 +186,11 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
   csrOut.vpu.vl     := csrMod.vl.rdata.asUInt
   csrOut.vpu.vtype  := csrMod.io.out.vtype
   csrOut.vpu.vlenb  := csrMod.io.out.vlenb
-  csrOut.vpu.vill   := csrMod.io.out.vtype.asTypeOf(new VtypeBundle).VILL.asUInt
-  csrOut.vpu.vma    := csrMod.io.out.vtype.asTypeOf(new VtypeBundle).VMA.asUInt
-  csrOut.vpu.vta    := csrMod.io.out.vtype.asTypeOf(new VtypeBundle).VTA.asUInt
-  csrOut.vpu.vsew   := csrMod.io.out.vtype.asTypeOf(new VtypeBundle).VSEW.asUInt
-  csrOut.vpu.vlmul  := csrMod.io.out.vtype.asTypeOf(new VtypeBundle).VLMUL.asUInt
+  csrOut.vpu.vill   := csrMod.io.out.vtype.asTypeOf(new CSRVTypeBundle).VILL.asUInt
+  csrOut.vpu.vma    := csrMod.io.out.vtype.asTypeOf(new CSRVTypeBundle).VMA.asUInt
+  csrOut.vpu.vta    := csrMod.io.out.vtype.asTypeOf(new CSRVTypeBundle).VTA.asUInt
+  csrOut.vpu.vsew   := csrMod.io.out.vtype.asTypeOf(new CSRVTypeBundle).VSEW.asUInt
+  csrOut.vpu.vlmul  := csrMod.io.out.vtype.asTypeOf(new CSRVTypeBundle).VLMUL.asUInt
 
   csrOut.isXRet := isXRetFlag
 
@@ -212,9 +212,9 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
       custom.l1D_pf_train_on_hit     := csrMod.io.customCtrl.spfctl.asTypeOf(new SpfctlBundle).L1D_PF_TRAIN_ON_HIT.asBool
       custom.l1D_pf_enable_agt       := csrMod.io.customCtrl.spfctl.asTypeOf(new SpfctlBundle).L1D_PF_ENABLE_AGT.asBool
       custom.l1D_pf_enable_pht       := csrMod.io.customCtrl.spfctl.asTypeOf(new SpfctlBundle).L1D_PF_ENABLE_PHT.asBool
-      custom.l1D_pf_active_threshold := csrMod.io.customCtrl.spfctl.asTypeOf(new SpfctlBundle).L1D_PF_ACTIVE_THRESHOLD.asBool
-      custom.l1D_pf_active_stride    := csrMod.io.customCtrl.spfctl.asTypeOf(new SpfctlBundle).L1D_PF_ACTIVE_STRIDE.asBool
-      custom.l1D_pf_enable_stride    := csrMod.io.customCtrl.spfctl.asTypeOf(new SpfctlBundle).L1D_PF_ENABLE_STRIDE.asBool
+      custom.l1D_pf_active_threshold := csrMod.io.customCtrl.spfctl.asTypeOf(new SpfctlBundle).L1D_PF_ACTIVE_THRESHOLD
+      custom.l1D_pf_active_stride    := csrMod.io.customCtrl.spfctl.asTypeOf(new SpfctlBundle).L1D_PF_ACTIVE_STRIDE
+      custom.l1D_pf_enable_stride    := csrMod.io.customCtrl.spfctl.asTypeOf(new SpfctlBundle).L1D_PF_ENABLE_STRIDE
       custom.l2_pf_store_only        := csrMod.io.customCtrl.spfctl.asTypeOf(new SpfctlBundle).L2_PF_STORE_ONLY.asBool
       // ICache
       custom.icache_parity_enable := csrMod.io.customCtrl.sfetchctl
