@@ -79,7 +79,7 @@ class imsic_csr_top(
   "NR_HARTS"      -> NumHart,
   "XLEN"          -> XLEN,
   "NR_SRC"        -> NumIRSrc,
-)) with HasBlackBoxResource {
+)) with HasBlackBoxPath {
   private val HART_ID_WIDTH = log2Up(NumHart)
   private val NR_SRC_WIDTH = log2Up(NumIRSrc)
 
@@ -116,6 +116,8 @@ class imsic_csr_top(
     })
   })
 
-  addResource("/vsrc/imsic/imsic_csr_top.v")
+  addPath("../src/main/resources/vsrc/imsic/imsic_csr_top.v")
+  addPath("../src/main/resources/vsrc/imsic/imsic_csr_gate.v")
+  addPath("../src/main/resources/vsrc/imsic/imsic_csr_reg.v")
 }
 
