@@ -96,7 +96,7 @@ trait Unprivileged { self: NewCSR with MachineLevel with SupervisorLevel =>
     .setAddr(0xC21)
 
   val vlenb = Module(new CSRModule("Vlenb", new CSRBundle {
-    val VLENB = RO(63, 0, /*resetVal = */ (VLEN / 8).U)
+    val VLENB = VlenbField(63, 0).withReset(VlenbField.Vlenb)
   }))
     .setAddr(0xC22)
 
@@ -154,4 +154,8 @@ class CSRFFlagsBundle extends CSRBundle {
   val OF = WARL(2, wNoFilter)
   val DZ = WARL(3, wNoFilter)
   val NV = WARL(4, wNoFilter)
+}
+
+object VlenbField extends CSREnum with ROApply {
+  val Vlenb = Value((VLEN / 8).U)
 }
