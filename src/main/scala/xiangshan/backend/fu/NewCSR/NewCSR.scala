@@ -219,6 +219,23 @@ class NewCSR(implicit val p: Parameters) extends Module
 
   val entryPrivState = trapHandleMod.io.out.entryPrivState
 
+    // interrupt
+  val intrMod = Module(new InterruptFilter)
+  intrMod.io.in.mstatusMIE := mstatus.rdata.MIE.asBool
+  intrMod.io.in.sstatusSIE := mstatus.rdata.SIE.asBool
+  intrMod.io.in.vsstatusSIE := vsstatus.rdata.SIE.asBool
+  intrMod.io.in.mip := mip.rdata.asUInt
+  intrMod.io.in.mie := mie.rdata.asUInt
+  intrMod.io.in.mideleg := mideleg.rdata.asUInt
+  intrMod.io.in.privState.PRVM := PRVM
+  intrMod.io.in.privState.V := V
+  intrMod.io.in.hip := hip.rdata.asUInt
+  intrMod.io.in.hie := hie.rdata.asUInt
+  intrMod.io.in.hideleg := hideleg.rdata.asUInt
+  intrMod.io.in.iprios := 1.U
+  // val disableInterrupt = debugMode || (dcsr.rdata.STEP.asBool && !dcsr.rdata.STEPIE.asBool)
+  // val intrVec = Cat(debugIntr && !debugMode, mie.rdata.asUInt(11, 0) & mip.rdata.asUInt & intrVecEnable.asUInt) // Todo: asUInt(11,0) is ok?
+
   for ((id, (wBundle, _)) <- csrRwMap) {
     wBundle.wen := wenLegal && addr === id.U
     wBundle.wdata := wdata
@@ -326,6 +343,16 @@ class NewCSR(implicit val p: Parameters) extends Module
         m.aiaToCSR.mtopei.bits := fromAIA.mtopei.bits
         m.aiaToCSR.stopei.bits := fromAIA.stopei.bits
         m.aiaToCSR.vstopei.bits := fromAIA.vstopei.bits
+      case _ =>
+    }
+    mod match {
+      case m: HasInterruptFilterBundle =>
+        m.topIn.mtopi.valid  := intrMod.io.out.mtopi.valid
+        m.topIn.stopi.valid  := intrMod.io.out.stopi.valid
+        m.topIn.vstopi.valid := intrMod.io.out.vstopi.valid
+        m.topIn.mtopi.bits   := intrMod.io.out.mtopi.bits
+        m.topIn.stopi.bits   := intrMod.io.out.stopi.bits
+        m.topIn.vstopi.bits  := intrMod.io.out.vstopi.bits
       case _ =>
     }
   }
@@ -443,17 +470,6 @@ class NewCSR(implicit val p: Parameters) extends Module
   debugIntrEnable := dretEvent.out.debugIntrEnable
   val debugIntr = platformIRP.debugIP && debugIntrEnable
 
-  // interrupt
-  val disableInterrupt = debugMode || (dcsr.rdata.STEP.asBool && !dcsr.rdata.STEPIE.asBool)
-  val ideleg = mideleg.rdata.asUInt & mip.rdata.asUInt
-  def priviledgeEnableDetect(x: Bool): Bool = Mux(x, ((PRVM === PrivMode.S) && mstatus.rdata.SIE.asBool) || (PRVM < PrivMode.S),
-    ((PRVM === PrivMode.M) && mstatus.rdata.MIE.asBool) || (PRVM < PrivMode.M))
-
-  val intrVecEnable = Wire(Vec(12, Bool()))
-  intrVecEnable.zip(ideleg.asBools).map{ case(x, y) => x := priviledgeEnableDetect(y) && !disableInterrupt}
-  val intrVec = Cat(debugIntr && !debugMode, mie.rdata.asUInt(11, 0) & mip.rdata.asUInt & intrVecEnable.asUInt) // Todo: asUInt(11,0) is ok?
-  val intrBitSet = intrVec.orR
-
   // fence
   // csr access check, special case
   val tvmNotPermit = PRVM === PrivMode.S && mstatus.rdata.TVM.asBool
@@ -498,7 +514,7 @@ class NewCSR(implicit val p: Parameters) extends Module
   io.out.vecState.vlenb := vlenb.rdata.asUInt
   io.out.vecState.off := mstatus.rdata.VS === ContextStatus.Off
   io.out.isPerfCnt := addrInPerfCnt
-  io.out.interrupt := intrBitSet
+  io.out.interrupt := intrMod.io.out.interruptVec.valid
   io.out.wfi_event := debugIntr || (mie.rdata.asUInt & mip.rdata.asUInt).orR
   io.out.debugMode := debugMode
   io.out.disableSfence := tvmNotPermit || PRVM === PrivMode.U
