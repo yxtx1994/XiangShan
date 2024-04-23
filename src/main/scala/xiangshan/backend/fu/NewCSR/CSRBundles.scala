@@ -110,6 +110,7 @@ object CSRBundles {
     val vxsat   = ValidIO(Vxsat())
     val vsDirty = Bool()
     val vtype   = ValidIO(new CSRVTypeBundle)
-    val vl = ValidIO(Vl())
+    val vl      = ValidIO(Vl())
+    val vstart  = ValidIO(Vl())
   }
 }

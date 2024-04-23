@@ -20,6 +20,9 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
   val setFflags = csrIn.fpu.fflags
   val setVsDirty = csrIn.vpu.dirty_vs
   val setVxsat = csrIn.vpu.vxsat
+  val setVstart = csrIn.vpu.set_vstart
+  val setVl = csrIn.vpu.set_vl
+  val setVtype = csrIn.vpu.set_vtype
 
   val flushPipe = Wire(Bool())
   val flush = io.flush.valid
@@ -43,8 +46,8 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
   private val isSret   = CSROpType.isSystemOp(func) && addr === privSret
   private val isDret   = CSROpType.isSystemOp(func) && addr === privDret
   private val isWfi    = CSROpType.isWfi(func)
+  private val isCSRAcc = CSROpType.isCsrAccess(func)
 
-  val permitMod = Module(new CSRPermitModule)
   val csrMod = Module(new NewCSR)
 
   private val privState = csrMod.io.out.privState
@@ -64,13 +67,9 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
   private val csrAccess = valid && CSROpType.isCsrAccess(func)
   private val csrWen = valid && CSROpType.notReadOnly(func)
 
-  permitMod.io.in.wen       := csrWen
-  permitMod.io.in.addr      := addr
-  permitMod.io.in.privState := csrMod.io.out.privState
-
   csrMod.io.in match {
     case in =>
-      in.wen := csrWen && permitMod.io.out.legal
+      in.wen := csrWen
       in.ren := csrAccess
       in.addr := addr
       in.wdata := wdata
@@ -89,9 +88,12 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
 
   csrMod.io.fromRob.commit.fflags := setFflags
   csrMod.io.fromRob.commit.fsDirty := setFsDirty
-  csrMod.io.fromRob.commit.vxsat.valid := true.B // Todo:
-  csrMod.io.fromRob.commit.vxsat.bits := setVxsat // Todo:
+  csrMod.io.fromRob.commit.vxsat.valid := setVxsat
+  csrMod.io.fromRob.commit.vxsat.bits := setVxsat
   csrMod.io.fromRob.commit.vsDirty := setVsDirty
+  csrMod.io.fromRob.commit.vstart := setVstart
+  csrMod.io.fromRob.commit.vl := setVl
+  csrMod.io.fromRob.commit.vtype := setVtype // Todo: correct vtype
   csrMod.io.fromRob.commit.instNum.valid := false.B // Todo:
   csrMod.io.fromRob.commit.instNum.bits := 0.U // Todo:
 
@@ -146,7 +148,7 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
 
   val isXRet = valid && func === CSROpType.jmp && !isEcall && !isEbreak
 
-  // ctrl block will use theses later for flush
+  // ctrl block will use theses later for flush // Todo: optimize this shit
   val isXRetFlag = RegInit(false.B)
   isXRetFlag := Mux1H(
     Seq(
@@ -177,20 +179,21 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
   io.out.bits.res.data := csrMod.io.out.rData
   connect0LatencyCtrlSingal
 
+  // Todo: summerize all difftest skip condition
   csrOut.isPerfCnt  := csrMod.io.out.isPerfCnt && valid && func =/= CSROpType.jmp
-  csrOut.fpu.frm    := csrMod.io.out.frm
-  csrOut.vpu.vstart := csrMod.vstart.rdata.asUInt
-  csrOut.vpu.vxsat  := csrMod.vcsr.vxsat
-  csrOut.vpu.vxrm   := csrMod.vcsr.vxrm
-  csrOut.vpu.vcsr   := csrMod.vcsr.rdata.asUInt
-  csrOut.vpu.vl     := csrMod.vl.rdata.asUInt
-  csrOut.vpu.vtype  := csrMod.io.out.vtype
-  csrOut.vpu.vlenb  := csrMod.io.out.vlenb
-  csrOut.vpu.vill   := csrMod.io.out.vtype.asTypeOf(new CSRVTypeBundle).VILL.asUInt
-  csrOut.vpu.vma    := csrMod.io.out.vtype.asTypeOf(new CSRVTypeBundle).VMA.asUInt
-  csrOut.vpu.vta    := csrMod.io.out.vtype.asTypeOf(new CSRVTypeBundle).VTA.asUInt
-  csrOut.vpu.vsew   := csrMod.io.out.vtype.asTypeOf(new CSRVTypeBundle).VSEW.asUInt
-  csrOut.vpu.vlmul  := csrMod.io.out.vtype.asTypeOf(new CSRVTypeBundle).VLMUL.asUInt
+  csrOut.fpu.frm    := csrMod.io.out.fpState.frm
+  csrOut.vpu.vstart := csrMod.io.out.vecState.vstart
+  csrOut.vpu.vxsat  := csrMod.io.out.vecState.vxsat
+  csrOut.vpu.vxrm   := csrMod.io.out.vecState.vxrm
+  csrOut.vpu.vcsr   := csrMod.io.out.vecState.vcsr
+  csrOut.vpu.vl     := csrMod.io.out.vecState.vl
+  csrOut.vpu.vtype  := csrMod.io.out.vecState.vtype
+  csrOut.vpu.vlenb  := csrMod.io.out.vecState.vlenb
+  csrOut.vpu.vill   := csrMod.io.out.vecState.vtype.asTypeOf(new CSRVTypeBundle).VILL.asUInt
+  csrOut.vpu.vma    := csrMod.io.out.vecState.vtype.asTypeOf(new CSRVTypeBundle).VMA.asUInt
+  csrOut.vpu.vta    := csrMod.io.out.vecState.vtype.asTypeOf(new CSRVTypeBundle).VTA.asUInt
+  csrOut.vpu.vsew   := csrMod.io.out.vecState.vtype.asTypeOf(new CSRVTypeBundle).VSEW.asUInt
+  csrOut.vpu.vlmul  := csrMod.io.out.vecState.vtype.asTypeOf(new CSRVTypeBundle).VLMUL.asUInt
 
   csrOut.isXRet := isXRetFlag
 
@@ -241,11 +244,11 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
       custom.svinval_enable := csrMod.io.customCtrl.srnctl.asTypeOf(new SrnctlBundle).SVINVAL_ENABLE.asBool
       // distribute csr write signal
       // write to frontend and memory
-      custom.distribute_csr.w.valid // Todo:
+      custom.distribute_csr.w.valid := csrWen
       custom.distribute_csr.w.bits.addr := addr
       custom.distribute_csr.w.bits.data := wdata
       // rename single step
-      custom.singlestep := DontCare
+      custom.singlestep := csrMod.io.out.singleStepFlag
       // trigger
       custom.frontend_trigger := DontCare
       custom.mem_trigger := DontCare

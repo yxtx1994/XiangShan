@@ -1,14 +1,11 @@
 package xiangshan.backend.fu.NewCSR
 
 import chisel3._
-import xiangshan.backend.fu.NewCSR.CSRDefines.{
-  CSRWARLField => WARL,
-  CSRROField => RO,
-  CSRRWField => RW,
-}
+import xiangshan.backend.fu.NewCSR.CSRDefines.{CSRROField => RO, CSRRWField => RW, CSRWARLField => WARL}
 import xiangshan.backend.fu.NewCSR.CSRFunc._
 import xiangshan.backend.fu.vector.Bundles._
 import xiangshan.backend.fu.NewCSR.CSRConfig._
+import xiangshan.backend.fu.fpu.Bundles.{Fflags, Frm}
 
 import scala.collection.immutable.SeqMap
 
@@ -24,18 +21,18 @@ trait Unprivileged { self: NewCSR with MachineLevel with SupervisorLevel =>
   }) with HasRobCommitBundle {
     val wAliasFflags = IO(Input(new CSRAddrWriteBundle(new CSRFFlagsBundle)))
     val wAliasFfm = IO(Input(new CSRAddrWriteBundle(new CSRFrmBundle)))
-    val fflags = IO(Output(UInt(64.W)))
-    val frm = IO(Output(UInt(64.W)))
+    val fflags = IO(Output(Fflags()))
+    val frm = IO(Output(Frm()))
 
     // write connection
     this.wfn(reg)(Seq(wAliasFflags, wAliasFfm))
 
     when (robCommit.fflags.valid) {
-      reg.NX := robCommit.fflags.bits(0)
-      reg.UF := robCommit.fflags.bits(1)
-      reg.OF := robCommit.fflags.bits(2)
-      reg.DZ := robCommit.fflags.bits(3)
-      reg.NV := robCommit.fflags.bits(4)
+      reg.NX := robCommit.fflags.bits(0) | reg.NX
+      reg.UF := robCommit.fflags.bits(1) | reg.UF
+      reg.OF := robCommit.fflags.bits(2) | reg.OF
+      reg.DZ := robCommit.fflags.bits(3) | reg.DZ
+      reg.NV := robCommit.fflags.bits(4) | reg.NV
     }
 
     // read connection
@@ -45,8 +42,16 @@ trait Unprivileged { self: NewCSR with MachineLevel with SupervisorLevel =>
 
   // vec
   val vstart = Module(new CSRModule("Vstart", new CSRBundle {
-    val vstart = RW(VlWidth - 1, 0)
-  }))
+    val vstart = RW(VlWidth - 2, 0) // hold [0, 128)
+  }) with HasRobCommitBundle {
+    // Todo make The use of vstart values greater than the largest element index for the current SEW setting is reserved.
+    // Not trap
+    when (wen && io.in.wdata < VLEN.U) {
+      reg.vstart := io.in.wdata
+    }.elsewhen (robCommit.vstart.valid) {
+      reg.vstart := robCommit.vstart.bits
+    }
+  })
     .setAddr(0x008)
 
   val vcsr = Module(new CSRModule("Vcsr", new CSRBundle {
@@ -66,7 +71,7 @@ trait Unprivileged { self: NewCSR with MachineLevel with SupervisorLevel =>
     this.wfn(reg)(Seq(wAliasVxsat, wAlisaVxrm))
 
     when(robCommit.vxsat.valid) {
-      reg.VXSAT := robCommit.vxsat.bits
+      reg.VXSAT := reg.VXSAT.asBool || robCommit.vxsat.bits.asBool
     }
 
     // read connection

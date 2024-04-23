@@ -218,9 +218,9 @@ class MstatusBundle extends CSRBundle {
   val UBE  = CSRROField     (6).withReset(0.U)
   val MPIE = CSRRWField     (7).withReset(0.U)
   val SPP  = CSRRWField     (8).withReset(0.U)
-  val VS   = ContextStatus  (10,  9).withReset(ContextStatus.Initial)
+  val VS   = ContextStatus  (10,  9).withReset(ContextStatus.Off)
   val MPP  = PrivMode       (12, 11).withReset(PrivMode.U)
-  val FS   = ContextStatus  (14, 13).withReset(ContextStatus.Initial)
+  val FS   = ContextStatus  (14, 13).withReset(ContextStatus.Off)
   val XS   = ContextStatusRO(16, 15).withReset(0.U)
   val MPRV = CSRRWField     (17).withReset(0.U)
   val SUM  = CSRRWField     (18).withReset(0.U)
@@ -255,12 +255,12 @@ class MstatusModule(implicit override val p: Parameters) extends CSRModule("MSta
   this.wfn(reg)(Seq(wAliasSstatus))
 
   when (robCommit.fsDirty) {
-    assert(reg.FS =/= ContextStatus.Off, "The [m|s]status.FS should not be Off when set dirty")
+    assert(reg.FS =/= ContextStatus.Off, "The [m|s]status.FS should not be Off when set dirty, please check decode")
     reg.FS := ContextStatus.Dirty
   }
 
   when (robCommit.vsDirty) {
-    assert(reg.VS =/= ContextStatus.Off, "The [m|s]status.VS should not be Off when set dirty")
+    assert(reg.VS =/= ContextStatus.Off, "The [m|s]status.VS should not be Off when set dirty, please check decode")
     reg.VS := ContextStatus.Dirty
   }
 
