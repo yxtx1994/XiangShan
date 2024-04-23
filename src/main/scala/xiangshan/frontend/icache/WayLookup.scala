@@ -146,7 +146,7 @@ class WayLookup(implicit p: Parameters) extends ICacheModule {
     ******************************************************************************
     */
   // disalbe read when entries(0) update
-  io.read.valid             := !empty && !hits(readPtr.value)
+  io.read.valid             := !empty
   io.read.bits.ptag         := entries(readPtr.value).ptag
   io.read.bits.waymask      := entries(readPtr.value).waymask
   io.read.bits.vSetIdx      := entries(readPtr.value).vSetIdx
