@@ -22,15 +22,15 @@ class VCVT(cfg: FuConfig)(implicit p: Parameters) extends VecPipedFuncUnit(cfg) 
   private val numVecModule = dataWidth / dataWidthOfDataModule
 
   // io alias
-  private val opcode = fuOpType(7, 0)
+  private val opcode = fuOpType(8, 0)
   private val sew = vsew
 
   private val isRtz = opcode(2) & opcode(1)
   private val isRod = opcode(2) & !opcode(1) & opcode(0)
   private val isFrm = !isRtz && !isRod
-  private val rm = Mux1H(
+  private val vfcvtRm = Mux1H(
     Seq(isRtz, isRod, isFrm),
-    Seq(1.U, 6.U, frm)
+    Seq(1.U, 6.U, rm)
   )
 
   private val lmul = vlmul // -3->3 => 1/8 ->8
@@ -67,6 +67,9 @@ class VCVT(cfg: FuConfig)(implicit p: Parameters) extends VecPipedFuncUnit(cfg) 
     dontTouch(output1H)
   }
   val outputWidth1H = output1H
+  val outIs32bits = RegNext(RegNext(outputWidth1H(2)))
+  val outIsInt = !outCtrl.fuOpType(6)
+  val outIsMvInst = outCtrl.fuOpType(8)
 
   val outEew = RegEnable(RegEnable(Mux1H(output1H, Seq(0,1,2,3).map(i => i.U)), fire), fireReg)
   private val needNoMask = outVecCtrl.fpu.isFpToVecInst
@@ -84,13 +87,14 @@ class VCVT(cfg: FuConfig)(implicit p: Parameters) extends VecPipedFuncUnit(cfg) 
    */
   vfcvt.uopIdx := vuopIdx(0)
   vfcvt.src := vs2Vec
-  vfcvt.opType := opcode
+  vfcvt.opType := opcode(7,0)
   vfcvt.sew := sew
-  vfcvt.rm := rm
+  vfcvt.rm := vfcvtRm
   vfcvt.outputWidth1H := outputWidth1H
   vfcvt.isWiden := isWidenCvt
   vfcvt.isNarrow := isNarrowCvt
   vfcvt.fire := fire
+  vfcvt.isFpToVecInst := vecCtrl.fpu.isFpToVecInst
   val vfcvtResult = vfcvt.io.result
   val vfcvtFflags = vfcvt.io.fflags
 
@@ -111,11 +115,13 @@ class VCVT(cfg: FuConfig)(implicit p: Parameters) extends VecPipedFuncUnit(cfg) 
   )
   val eNumMax1H = Mux(lmul.head(1).asBool, eNum1H >> ((~lmul.tail(1)).asUInt +1.U), eNum1H << lmul.tail(1)).asUInt(6, 0)
   val eNumMax = Mux1H(eNumMax1H, Seq(1,2,4,8,16,32,64).map(i => i.U)) //only for cvt intr, don't exist 128 in cvt
-  val eNumEffectIdx = Mux(vl > eNumMax, eNumMax, vl)
+  val vlForFflags = Mux(vecCtrl.fpu.isFpToVecInst, 1.U, vl)
+  val eNumEffectIdx = Mux(vlForFflags > eNumMax, eNumMax, vlForFflags)
 
   val eNum = Mux1H(eNum1H, Seq(1, 2, 4, 8).map(num =>num.U))
   val eStart = vuopIdx * eNum
-  val maskPart = srcMask >> eStart
+  val maskForFflags = Mux(vecCtrl.fpu.isFpToVecInst, allMaskTrue, srcMask)
+  val maskPart = maskForFflags >> eStart
   val mask =  Mux1H(eNum1H, Seq(1, 2, 4, 8).map(num => maskPart(num-1, 0)))
   val fflagsEn = Wire(Vec(4 * numVecModule, Bool()))
 
@@ -125,7 +131,7 @@ class VCVT(cfg: FuConfig)(implicit p: Parameters) extends VecPipedFuncUnit(cfg) 
   val fflagsAll = Wire(Vec(8, UInt(5.W)))
   fflagsAll := vfcvtFflags.asTypeOf(fflagsAll)
   val fflags = fflagsEnCycle2.zip(fflagsAll).map{case(en, fflag) => Mux(en, fflag, 0.U(5.W))}.reduce(_ | _)
-  io.out.bits.res.fflags.get := fflags
+  io.out.bits.res.fflags.get := Mux(outIsMvInst, 0.U, fflags)
 
 
   /**
@@ -155,7 +161,15 @@ class VCVT(cfg: FuConfig)(implicit p: Parameters) extends VecPipedFuncUnit(cfg) 
   mgu.io.in.info.dstMask := outVecCtrl.isDstMask
   mgu.io.in.isIndexedVls := false.B
 
-  io.out.bits.res.data := mgu.io.out.vd
+  // for scalar f2i cvt inst
+  val isFp2VecForInt = outVecCtrl.fpu.isFpToVecInst && outIs32bits && outIsInt
+  // for f2i mv inst
+  val result = Mux(outIsMvInst, RegNext(RegNext(vs2.tail(64))), mgu.io.out.vd)
+
+  io.out.bits.res.data := Mux(isFp2VecForInt,
+    Fill(32, result(31)) ## result(31, 0),
+    result
+  )
   io.out.bits.ctrl.exceptionVec.get(ExceptionNO.illegalInstr) := mgu.io.out.illegal
 }
 
@@ -169,6 +183,7 @@ class VectorCvtTopIO(vlen: Int, xlen: Int) extends Bundle{
   val outputWidth1H = Input(UInt(4.W))
   val isWiden = Input(Bool())
   val isNarrow = Input(Bool())
+  val isFpToVecInst = Input(Bool())
 
   val result = Output(UInt(vlen.W))
   val fflags = Output(UInt((vlen/16*5).W))
@@ -180,12 +195,12 @@ class VectorCvtTopIO(vlen: Int, xlen: Int) extends Bundle{
 class VectorCvtTop(vlen: Int, xlen: Int) extends Module{
   val io = IO(new VectorCvtTopIO(vlen, xlen))
 
-  val (fire, uopIdx, src, opType, sew, rm, outputWidth1H, isWiden, isNarrow) = (
-    io.fire, io.uopIdx, io.src, io.opType, io.sew, io.rm, io.outputWidth1H, io.isWiden, io.isNarrow
+  val (fire, uopIdx, src, opType, sew, rm, outputWidth1H, isWiden, isNarrow, isFpToVecInst) = (
+    io.fire, io.uopIdx, io.src, io.opType, io.sew, io.rm, io.outputWidth1H, io.isWiden, io.isNarrow, io.isFpToVecInst
   )
   val fireReg = GatedValidRegNext(fire)
 
-  val in0 = Mux(isWiden,
+  val in0 = Mux(isWiden && !isFpToVecInst,
     Mux(uopIdx, src(1).tail(32), src(0).tail(32)),
     src(0)
   )
@@ -201,6 +216,7 @@ class VectorCvtTop(vlen: Int, xlen: Int) extends Module{
   vectorCvt0.opType := opType
   vectorCvt0.sew := sew
   vectorCvt0.rm := rm
+  vectorCvt0.isFpToVecInst := isFpToVecInst
 
   val vectorCvt1 = Module(new VectorCvt(xlen))
   vectorCvt1.fire := fire
@@ -208,6 +224,7 @@ class VectorCvtTop(vlen: Int, xlen: Int) extends Module{
   vectorCvt1.opType := opType
   vectorCvt1.sew := sew
   vectorCvt1.rm := rm
+  vectorCvt1.isFpToVecInst := isFpToVecInst
 
   val isNarrowCycle2 = RegEnable(RegEnable(isNarrow, fire), fireReg)
   val outputWidth1HCycle2 = RegEnable(RegEnable(outputWidth1H, fire), fireReg)

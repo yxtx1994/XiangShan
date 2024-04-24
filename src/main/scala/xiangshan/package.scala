@@ -65,7 +65,8 @@ package object xiangshan {
   def FuOpTypeWidth = 9
   object FuOpType {
     def apply() = UInt(FuOpTypeWidth.W)
-    def X = BitPat("b00000000")
+    def X     = BitPat("b0_0000_0000")
+    def FMVXF = BitPat("b1_1000_0000") //for fmv_x_d & fmv_x_w
   }
 
   object VlduType {
@@ -120,13 +121,16 @@ package object xiangshan {
   object IF2VectorType {
     // use last 2 bits for vsew
     def iDup2Vec   = "b1_00".U
-    def fDup2Vec   = "b1_01".U
+    def fDup2Vec   = "b1_00".U
     def immDup2Vec = "b1_10".U
     def i2Vec      = "b0_00".U
     def f2Vec      = "b0_01".U
     def imm2Vec    = "b0_10".U
     def needDup(bits: UInt): Bool = bits(2)
     def isImm(bits: UInt): Bool = bits(1)
+    def isFmv(bits: UInt): Bool = bits(0)
+    def FMX_D_X    = "b0_01_11".U
+    def FMX_W_X    = "b0_01_10".U
   }
 
   object CommitType {
@@ -154,7 +158,7 @@ package object xiangshan {
   }
 
   object ExceptionVec {
-    val ExceptionVecSize = 16
+    val ExceptionVecSize = 24
     def apply() = Vec(ExceptionVecSize, Bool())
   }
 
@@ -222,6 +226,8 @@ package object xiangshan {
     def fence  = "b10000".U
     def sfence = "b10001".U
     def fencei = "b10010".U
+    def hfence_v = "b10011".U
+    def hfence_g = "b10100".U
     def nofence= "b00000".U
   }
 
@@ -488,6 +494,19 @@ package object xiangshan {
     def lbu      = "b0100".U
     def lhu      = "b0101".U
     def lwu      = "b0110".U
+    // hypervior load
+    // bit encoding: | hlvx 1 | hlv 1 | load 0 | is unsigned(1bit) | size(2bit) |
+    def hlvb = "b10000".U
+    def hlvh = "b10001".U
+    def hlvw = "b10010".U
+    def hlvd = "b10011".U
+    def hlvbu = "b10100".U
+    def hlvhu = "b10101".U
+    def hlvwu = "b10110".U
+    def hlvxhu = "b110101".U
+    def hlvxwu = "b110110".U
+    def isHlv(op: UInt): Bool = op(4)
+    def isHlvx(op: UInt): Bool = op(5)
 
     // Zicbop software prefetch
     // bit encoding: | prefetch 1 | 0 | prefetch type (2bit) |
@@ -504,6 +523,14 @@ package object xiangshan {
     def sh       = "b0001".U
     def sw       = "b0010".U
     def sd       = "b0011".U
+
+    //hypervisor store
+    // bit encoding: |hsv 1 | store 00 | size(2bit) |
+    def hsvb = "b10000".U
+    def hsvh = "b10001".U
+    def hsvw = "b10010".U
+    def hsvd = "b10011".U
+    def isHsv(op: UInt): Bool = op(4)
 
     // l1 cache op
     // bit encoding: | cbo_zero 01 | size(2bit) 11 |
@@ -730,22 +757,31 @@ package object xiangshan {
     def storeAccessFault    = 7
     def ecallU              = 8
     def ecallS              = 9
+    def ecallVS             = 10
     def ecallM              = 11
     def instrPageFault      = 12
     def loadPageFault       = 13
     // def singleStep          = 14
     def storePageFault      = 15
+    def instrGuestPageFault = 20
+    def loadGuestPageFault  = 21
+    def virtualInstr        = 22
+    def storeGuestPageFault = 23
     def priorities = Seq(
       breakPoint, // TODO: different BP has different priority
       instrPageFault,
+      instrGuestPageFault,
       instrAccessFault,
       illegalInstr,
+      virtualInstr,
       instrAddrMisaligned,
-      ecallM, ecallS, ecallU,
+      ecallM, ecallS, ecallVS, ecallU,
       storeAddrMisaligned,
       loadAddrMisaligned,
       storePageFault,
       loadPageFault,
+      storeGuestPageFault,
+      loadGuestPageFault,
       storeAccessFault,
       loadAccessFault
     )
@@ -754,7 +790,9 @@ package object xiangshan {
       instrAddrMisaligned,
       instrAccessFault,
       illegalInstr,
-      instrPageFault
+      instrPageFault,
+      instrGuestPageFault,
+      virtualInstr
     )
     def partialSelect(vec: Vec[Bool], select: Seq[Int]): Vec[Bool] = {
       val new_vec = Wire(ExceptionVec())

@@ -124,6 +124,7 @@ class mem_to_ooo(implicit p: Parameters) extends MemBlockBundle {
 
   val lsqio = new Bundle {
     val vaddr = Output(UInt(VAddrBits.W))
+    val gpaddr = Output(UInt(GPAddrBits.W))
     val mmio = Output(Vec(LoadPipelineWidth, Bool()))
     val uop = Output(Vec(LoadPipelineWidth, new DynInst))
     val lqCanAccept = Output(Bool())
@@ -135,6 +136,13 @@ class mem_to_ooo(implicit p: Parameters) extends MemBlockBundle {
   val writebackHyuLda = Vec(HyuCnt, DecoupledIO(new MemExuOutput))
   val writebackHyuSta = Vec(HyuCnt, DecoupledIO(new MemExuOutput))
   val writebackVldu = Vec(VlduCnt, DecoupledIO(new MemExuOutput(isVector = true)))
+  def writeBack: Seq[DecoupledIO[MemExuOutput]] = {
+    writebackSta ++
+      writebackHyuLda ++ writebackHyuSta ++
+      writebackLda ++
+      writebackVldu ++
+      writebackStd
+  }
 
   val ldaIqFeedback = Vec(LduCnt, new MemRSFeedbackIO)
   val staIqFeedback = Vec(StaCnt, new MemRSFeedbackIO)
@@ -239,7 +247,7 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
   with SdtrigExt
 {
   val io = IO(new Bundle {
-    val hartId = Input(UInt(8.W))
+    val hartId = Input(UInt(hartIdLen.W))
     val redirect = Flipped(ValidIO(new Redirect))
 
     val ooo_to_mem = new ooo_to_mem
@@ -266,7 +274,7 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
 
     // All the signals from/to frontend/backend to/from bus will go through MemBlock
     val externalInterrupt = Flipped(new ExternalInterruptIO)
-    val inner_hartId = Output(UInt(64.W))
+    val inner_hartId = Output(UInt(hartIdLen.W))
     val inner_reset_vector = Output(UInt(PAddrBits.W))
     val outer_reset_vector = Input(UInt(PAddrBits.W))
     val inner_cpu_halt = Input(Bool())
@@ -301,7 +309,7 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
   private val dcache = outer.dcache.module
   val uncache = outer.uncache.module
 
-  val delayedDcacheRefill = DelayNWithValid(dcache.io.lsu.lsq, 1)
+  //val delayedDcacheRefill = DelayNWithValid(dcache.io.lsu.lsq, 1)
 
   val csrCtrl = DelayN(io.ooo_to_mem.csrCtrl, 2)
   dcache.io.csr.distribute_csr <> csrCtrl.distribute_csr
@@ -313,7 +321,6 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
     io.error.valid := false.B
   }
 
-  println("Enable 3-load and 3-store: " + Enable3Load3Store)
   val loadUnits = Seq.fill(LduCnt)(Module(new LoadUnit))
   val storeUnits = Seq.fill(StaCnt)(Module(new StoreUnit))
   val stdExeUnits = Seq.fill(StdCnt)(Module(new MemExeUnit(backendParams.memSchdParams.get.issueBlockParams.find(_.StdCnt != 0).get.exuBlockParams.head)))
@@ -556,36 +563,37 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
   dtlb.map(_.sfence := sfence)
   dtlb.map(_.csr := tlbcsr)
   dtlb.map(_.flushPipe.map(a => a := false.B)) // non-block doesn't need
+  dtlb.map(_.redirect := io.redirect)
   if (refillBothTlb) {
     require(ldtlbParams.outReplace == sttlbParams.outReplace)
     require(ldtlbParams.outReplace == hytlbParams.outReplace)
     require(ldtlbParams.outReplace == pftlbParams.outReplace)
     require(ldtlbParams.outReplace)
 
-    val replace = Module(new TlbReplace(DTlbSize, ldtlbParams))
-    replace.io.apply_sep(dtlb.map(_.replace), ptwio.resp.bits.data.entry.tag)
+    val replace = Module(new TlbReplace(LduCnt + HyuCnt + 1 + StaCnt + 1, ldtlbParams))
+    replace.io.apply_sep(dtlb_ld.map(_.replace) ++ dtlb_st.map(_.replace) ++ dtlb_prefetch.map(_.replace), ptwio.resp.bits.data.s1.entry.tag)
   } else {
     // TODO: there will be bugs in TlbReplace when outReplace enable, since the order of Hyu is not right.
     if (ldtlbParams.outReplace) {
       val replace_ld = Module(new TlbReplace(LduCnt + 1, ldtlbParams))
-      replace_ld.io.apply_sep(dtlb_ld.map(_.replace), ptwio.resp.bits.data.entry.tag)
+      replace_ld.io.apply_sep(dtlb_ld.map(_.replace), ptwio.resp.bits.data.s1.entry.tag)
     }
     if (hytlbParams.outReplace) {
       val replace_hy = Module(new TlbReplace(HyuCnt, hytlbParams))
-      replace_hy.io.apply_sep(dtlb_ld.map(_.replace), ptwio.resp.bits.data.entry.tag)
+      replace_hy.io.apply_sep(dtlb_ld.map(_.replace), ptwio.resp.bits.data.s1.entry.tag)
     }
     if (sttlbParams.outReplace) {
       val replace_st = Module(new TlbReplace(StaCnt, sttlbParams))
-      replace_st.io.apply_sep(dtlb_st.map(_.replace), ptwio.resp.bits.data.entry.tag)
+      replace_st.io.apply_sep(dtlb_st.map(_.replace), ptwio.resp.bits.data.s1.entry.tag)
     }
     if (pftlbParams.outReplace) {
       val replace_pf = Module(new TlbReplace(1, pftlbParams))
-      replace_pf.io.apply_sep(dtlb_prefetch.map(_.replace), ptwio.resp.bits.data.entry.tag)
+      replace_pf.io.apply_sep(dtlb_prefetch.map(_.replace), ptwio.resp.bits.data.s1.entry.tag)
     }
   }
 
   val ptw_resp_next = RegEnable(ptwio.resp.bits, ptwio.resp.valid)
-  val ptw_resp_v = RegNext(ptwio.resp.valid && !(sfence.valid && tlbcsr.satp.changed), init = false.B)
+  val ptw_resp_v = RegNext(ptwio.resp.valid && !(sfence.valid && tlbcsr.satp.changed && tlbcsr.vsatp.changed && tlbcsr.hgatp.changed), init = false.B)
   ptwio.resp.ready := true.B
 
   val tlbreplay = WireInit(VecInit(Seq.fill(LdExuCnt)(false.B)))
@@ -594,7 +602,7 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
   dontTouch(tlbreplay)
   for (i <- 0 until LdExuCnt) {
     tlbreplay(i) := dtlb_ld(0).ptw.req(i).valid && ptw_resp_next.vector(0) && ptw_resp_v &&
-      ptw_resp_next.data.hit(dtlb_ld(0).ptw.req(i).bits.vpn, tlbcsr.satp.asid, allType = true, ignoreAsid = true)
+      ptw_resp_next.data.hit(dtlb_ld(0).ptw.req(i).bits.vpn, tlbcsr.satp.asid, tlbcsr.vsatp.asid, tlbcsr.hgatp.asid, allType = true, ignoreAsid = true)
   }
 
   dtlb.flatMap(a => a.ptw.req)
@@ -603,11 +611,10 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
       tlb.ready := ptwio.req(i).ready
       ptwio.req(i).bits := tlb.bits
     val vector_hit = if (refillBothTlb) Cat(ptw_resp_next.vector).orR
-      else if (i < TlbEndVec(dtlb_ld_idx)) Cat(ptw_resp_next.vector.slice(TlbStartVec(dtlb_ld_idx), TlbEndVec(dtlb_ld_idx))).orR
-      else if (i < TlbEndVec(dtlb_st_idx)) Cat(ptw_resp_next.vector.slice(TlbStartVec(dtlb_st_idx), TlbEndVec(dtlb_st_idx))).orR
-      else                                 Cat(ptw_resp_next.vector.slice(TlbStartVec(dtlb_pf_idx), TlbEndVec(dtlb_pf_idx))).orR
-    ptwio.req(i).valid := tlb.valid && !(ptw_resp_v && vector_hit &&
-      ptw_resp_next.data.hit(tlb.bits.vpn, tlbcsr.satp.asid, allType = true, ignoreAsid = true))
+      else if (i < (LduCnt + HyuCnt + 1)) Cat(ptw_resp_next.vector.take(LduCnt + HyuCnt + 1)).orR
+      else if (i < (LduCnt + HyuCnt + 1 + StaCnt)) Cat(ptw_resp_next.vector.drop(LduCnt + HyuCnt + 1).take(StaCnt)).orR
+      else Cat(ptw_resp_next.vector.drop(LduCnt + HyuCnt + 1 + StaCnt)).orR
+    ptwio.req(i).valid := tlb.valid && !(ptw_resp_v && vector_hit && ptw_resp_next.data.hit(tlb.bits.vpn, tlbcsr.satp.asid, tlbcsr.vsatp.asid, tlbcsr.hgatp.asid, allType = true, ignoreAsid = true))
   }
   dtlb.foreach(_.ptw.resp.bits := ptw_resp_next.data)
   if (refillBothTlb) {
@@ -617,6 +624,9 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
     dtlb_st.foreach(_.ptw.resp.valid := ptw_resp_v && Cat(ptw_resp_next.vector.slice(TlbStartVec(dtlb_st_idx), TlbEndVec(dtlb_st_idx))).orR)
     dtlb_prefetch.foreach(_.ptw.resp.valid := ptw_resp_v && Cat(ptw_resp_next.vector.slice(TlbStartVec(dtlb_pf_idx), TlbEndVec(dtlb_pf_idx))).orR)
   }
+  dtlb_ld.foreach(_.ptw.resp.bits.getGpa := Cat(ptw_resp_next.getGpa.take(LduCnt + HyuCnt + 1)).orR)
+  dtlb_st.foreach(_.ptw.resp.bits.getGpa := Cat(ptw_resp_next.getGpa.slice(LduCnt + HyuCnt + 1, LduCnt + HyuCnt + 1 + StaCnt)).orR)
+  dtlb_prefetch.foreach(_.ptw.resp.bits.getGpa := Cat(ptw_resp_next.getGpa.drop(LduCnt + HyuCnt + 1 + StaCnt)).orR)
 
   val dtlbRepeater  = PTWNewFilter(ldtlbParams.fenceDelay, ptwio, ptw.io.tlb(1), sfence, tlbcsr, l2tlbParams.dfilterSize)
   val itlbRepeater3 = PTWRepeaterNB(passReady = false, itlbParams.fenceDelay, io.fetch_to_mem.itlb, ptw.io.tlb(0), sfence, tlbcsr)
@@ -656,8 +666,8 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
     tdata(csrCtrl.mem_trigger.tUpdate.bits.addr) := csrCtrl.mem_trigger.tUpdate.bits.tdata
   }
 
-  val backendTriggerTimingVec = tdata.map(_.timing)
-  val backendTriggerChainVec = tdata.map(_.chain)
+  val backendTriggerTimingVec = VecInit(tdata.map(_.timing))
+  val backendTriggerChainVec = VecInit(tdata.map(_.chain))
 
   XSDebug(tEnable.asUInt.orR, "Debug Mode: At least one store trigger is enabled\n")
   for (j <- 0 until TriggerNum)
@@ -705,7 +715,7 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
     loadUnits(i).io.lsq.stld_nuke_query <> lsq.io.ldu.stld_nuke_query(i)
     loadUnits(i).io.csrCtrl       <> csrCtrl
     // dcache refill req
-    loadUnits(i).io.refill           <> delayedDcacheRefill
+  // loadUnits(i).io.refill           <> delayedDcacheRefill
     // dtlb
     loadUnits(i).io.tlb <> dtlb_reqs.take(LduCnt)(i)
     // pmp
@@ -768,7 +778,6 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
     lsq.io.l2_hint.bits.sourceId := l2_hint.bits.sourceId
     lsq.io.l2_hint.bits.isKeyword := l2_hint.bits.isKeyword
 
-
     lsq.io.tlb_hint <> dtlbRepeater.io.hint.get
 
     // alter writeback exception info
@@ -780,16 +789,8 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
     // --------------------------------
     // Load Triggers
     // --------------------------------
-    val frontendTriggerTimingVec = io.mem_to_ooo.writebackLda(i).bits.uop.trigger.frontendTiming
-    val frontendTriggerChainVec = io.mem_to_ooo.writebackLda(i).bits.uop.trigger.frontendChain
-    val frontendTriggerHitVec = io.mem_to_ooo.writebackLda(i).bits.uop.trigger.frontendHit
     val loadTriggerHitVec = Wire(Vec(TriggerNum, Bool()))
-
-    val triggerTimingVec = VecInit(backendTriggerTimingVec.zip(frontendTriggerTimingVec).map { case (b, f) => b || f })
-    val triggerChainVec = VecInit(backendTriggerChainVec.zip(frontendTriggerChainVec).map { case (b, f) => b || f })
-    val triggerHitVec = VecInit(loadTriggerHitVec.zip(frontendTriggerHitVec).map { case (b, f) => b || f })
-
-    val triggerCanFireVec = Wire(Vec(TriggerNum, Bool()))
+    val loadTriggerCanFireVec = Wire(Vec(TriggerNum, Bool()))
 
     for (j <- 0 until TriggerNum) {
       loadUnits(i).io.trigger(j).tdata2 := tdata(j).tdata2
@@ -798,11 +799,11 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
       // Just let load triggers that match data unavailable
       loadTriggerHitVec(j) := loadUnits(i).io.trigger(j).addrHit && !tdata(j).select
     }
-    TriggerCheckCanFire(TriggerNum, triggerCanFireVec, triggerHitVec, triggerTimingVec, triggerChainVec)
+    TriggerCheckCanFire(TriggerNum, loadTriggerCanFireVec, loadTriggerHitVec, backendTriggerTimingVec, backendTriggerChainVec)
     lsq.io.trigger(i) <> loadUnits(i).io.lsq.trigger
 
-    io.mem_to_ooo.writebackLda(i).bits.uop.trigger.backendHit := triggerHitVec
-    io.mem_to_ooo.writebackLda(i).bits.uop.trigger.backendCanFire := triggerCanFireVec
+    io.mem_to_ooo.writebackLda(i).bits.uop.trigger.backendHit := loadTriggerHitVec
+    io.mem_to_ooo.writebackLda(i).bits.uop.trigger.backendCanFire := loadTriggerCanFireVec
     XSDebug(io.mem_to_ooo.writebackLda(i).bits.uop.trigger.getBackendCanFire && io.mem_to_ooo.writebackLda(i).valid, p"Debug Mode: Load Inst No.${i}" +
       p"has trigger fire vec ${io.mem_to_ooo.writebackLda(i).bits.uop.trigger.backendCanFire}\n")
   }
@@ -840,7 +841,6 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
     hybridUnits(i).io.ldu_io.lsq.stld_nuke_query <> lsq.io.ldu.stld_nuke_query(LduCnt + i)
     hybridUnits(i).io.csrCtrl <> csrCtrl
     // dcache refill req
-    hybridUnits(i).io.ldu_io.refill <> delayedDcacheRefill
     hybridUnits(i).io.ldu_io.tlb_hint.id := dtlbRepeater.io.hint.get.req(LduCnt + i).id
     hybridUnits(i).io.ldu_io.tlb_hint.full := dtlbRepeater.io.hint.get.req(LduCnt + i).full ||
       tlbreplay_reg(LduCnt + i) || dtlb_ld0_tlbreplay_reg(LduCnt + i)
@@ -920,16 +920,8 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
     // --------------------------------
     // Load Triggers
     // --------------------------------
-    val frontendTriggerTimingVec = io.mem_to_ooo.writebackHyuLda(i).bits.uop.trigger.frontendTiming
-    val frontendTriggerChainVec = io.mem_to_ooo.writebackHyuLda(i).bits.uop.trigger.frontendChain
-    val frontendTriggerHitVec = io.mem_to_ooo.writebackHyuLda(i).bits.uop.trigger.frontendHit
     val loadTriggerHitVec = Wire(Vec(TriggerNum, Bool()))
-
-    val triggerTimingVec = VecInit(backendTriggerTimingVec.zip(frontendTriggerTimingVec).map { case (b, f) => b || f })
-    val triggerChainVec = VecInit(backendTriggerChainVec.zip(frontendTriggerChainVec).map { case (b, f) => b || f })
-    val triggerHitVec = VecInit(loadTriggerHitVec.zip(frontendTriggerHitVec).map { case (b, f) => b || f })
-
-    val triggerCanFireVec = Wire(Vec(TriggerNum, Bool()))
+    val loadTriggerCanFireVec = Wire(Vec(TriggerNum, Bool()))
 
     for (j <- 0 until TriggerNum) {
       hybridUnits(i).io.ldu_io.trigger(j).tdata2 := tdata(j).tdata2
@@ -938,10 +930,10 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
       // Just let load triggers that match data unavailable
       loadTriggerHitVec(j) := hybridUnits(i).io.ldu_io.trigger(j).addrHit && !tdata(j).select
     }
-    TriggerCheckCanFire(TriggerNum, triggerCanFireVec, triggerHitVec, triggerTimingVec, triggerChainVec)
+    TriggerCheckCanFire(TriggerNum, loadTriggerCanFireVec, loadTriggerHitVec, backendTriggerTimingVec, backendTriggerChainVec)
 
-    io.mem_to_ooo.writebackHyuLda(i).bits.uop.trigger.backendHit := triggerHitVec
-    io.mem_to_ooo.writebackHyuLda(i).bits.uop.trigger.backendCanFire := triggerCanFireVec
+    io.mem_to_ooo.writebackHyuLda(i).bits.uop.trigger.backendHit := loadTriggerHitVec
+    io.mem_to_ooo.writebackHyuLda(i).bits.uop.trigger.backendCanFire := loadTriggerCanFireVec
     XSDebug(io.mem_to_ooo.writebackHyuLda(i).bits.uop.trigger.getBackendCanFire && io.mem_to_ooo.writebackHyuLda(i).valid, p"Debug Mode: Hybrid Inst No.${i}" +
       p"has trigger fire vec ${io.mem_to_ooo.writebackHyuLda(i).bits.uop.trigger.backendCanFire}\n")
 
@@ -965,17 +957,8 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
     // Store Triggers
     // -------------------------
     val hyuOut = io.mem_to_ooo.writebackHyuSta(i)
-
-    val stFrontendTriggerTimingVec = hyuOut.bits.uop.trigger.frontendTiming
-    val stFrontendTriggerChainVec = hyuOut.bits.uop.trigger.frontendChain
-    val stFrontendTriggerHitVec = hyuOut.bits.uop.trigger.frontendHit
     val storeTriggerHitVec = WireInit(VecInit(Seq.fill(TriggerNum)(false.B)))
-
-    val stTriggerTimingVec = VecInit(backendTriggerTimingVec.zip(stFrontendTriggerTimingVec).map { case (b, f) => b || f })
-    val stTriggerChainVec = VecInit(backendTriggerChainVec.zip(stFrontendTriggerChainVec).map { case (b, f) => b || f })
-    val stTriggerHitVec = VecInit(storeTriggerHitVec.zip(stFrontendTriggerHitVec).map { case (b, f) => b || f })
-
-    val stTriggerCanFireVec = WireInit(VecInit(Seq.fill(TriggerNum)(false.B)))
+    val storeTriggerCanFireVec = WireInit(VecInit(Seq.fill(TriggerNum)(false.B)))
 
     when(hybridUnits(i).io.stout.fire &&
       FuType.isStore(hybridUnits(i).io.stout.bits.uop.fuType)) {
@@ -987,10 +970,10 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
           tEnable(j) && tdata(j).store
         )
       }
-      TriggerCheckCanFire(TriggerNum, stTriggerCanFireVec, stTriggerHitVec, stTriggerTimingVec, stTriggerChainVec)
+      TriggerCheckCanFire(TriggerNum, storeTriggerCanFireVec, storeTriggerHitVec, backendTriggerTimingVec, backendTriggerChainVec)
 
-      hyuOut.bits.uop.trigger.backendHit := stTriggerHitVec
-      hyuOut.bits.uop.trigger.backendCanFire := stTriggerCanFireVec
+      hyuOut.bits.uop.trigger.backendHit := storeTriggerHitVec
+      hyuOut.bits.uop.trigger.backendCanFire := storeTriggerCanFireVec
     }
 
   }
@@ -1089,16 +1072,8 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
     // -------------------------
     // Store Triggers
     // -------------------------
-    val frontendTriggerTimingVec = stOut(i).bits.uop.trigger.frontendTiming
-    val frontendTriggerChainVec = stOut(i).bits.uop.trigger.frontendChain
-    val frontendTriggerHitVec = stOut(i).bits.uop.trigger.frontendHit
     val storeTriggerHitVec = WireInit(VecInit(Seq.fill(TriggerNum)(false.B)))
-
-    val triggerTimingVec = VecInit(backendTriggerTimingVec.zip(frontendTriggerTimingVec).map { case (b, f) => b || f })
-    val triggerChainVec = VecInit(backendTriggerChainVec.zip(frontendTriggerChainVec).map { case (b, f) => b || f })
-    val triggerHitVec = VecInit(storeTriggerHitVec.zip(frontendTriggerHitVec).map { case (b, f) => b || f })
-
-    val triggerCanFireVec = WireInit(VecInit(Seq.fill(TriggerNum)(false.B)))
+    val storeTriggerCanFireVec = WireInit(VecInit(Seq.fill(TriggerNum)(false.B)))
 
     when(stOut(i).fire) {
       for (j <- 0 until TriggerNum) {
@@ -1109,10 +1084,10 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
           tEnable(j) && tdata(j).store
         )
       }
-      TriggerCheckCanFire(TriggerNum, triggerCanFireVec, triggerHitVec, triggerTimingVec, triggerChainVec)
+      TriggerCheckCanFire(TriggerNum, storeTriggerCanFireVec, storeTriggerHitVec, backendTriggerTimingVec, backendTriggerChainVec)
 
-      stOut(i).bits.uop.trigger.backendHit := triggerHitVec
-      stOut(i).bits.uop.trigger.backendCanFire := triggerCanFireVec
+      stOut(i).bits.uop.trigger.backendHit := storeTriggerHitVec
+      stOut(i).bits.uop.trigger.backendCanFire := storeTriggerCanFireVec
     }
   }
 
@@ -1239,7 +1214,7 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
   AddPipelineReg(uncacheReq, uncache.io.lsq.req, false.B)
   AddPipelineReg(uncache.io.lsq.resp, uncacheResp, false.B)
 
-  lsq.io.refill         := delayedDcacheRefill
+  //lsq.io.refill         := delayedDcacheRefill
   lsq.io.release        := dcache.io.lsu.release
   lsq.io.lqCancelCnt <> io.mem_to_ooo.lqCancelCnt
   lsq.io.sqCancelCnt <> io.mem_to_ooo.sqCancelCnt
@@ -1415,7 +1390,8 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
   }.elsewhen (atomicsUnit.io.exceptionAddr.valid) {
     atomicsException := true.B
   }
-  val atomicsExceptionAddress = RegEnable(atomicsUnit.io.exceptionAddr.bits, atomicsUnit.io.exceptionAddr.valid)
+  val atomicsExceptionAddress = RegEnable(atomicsUnit.io.exceptionAddr.bits.vaddr, atomicsUnit.io.exceptionAddr.valid)
+  val atomicsExceptionGPAddress = RegEnable(atomicsUnit.io.exceptionAddr.bits.gpaddr, atomicsUnit.io.exceptionAddr.valid)
   io.mem_to_ooo.lsqio.vaddr := GatedRegNext(Mux(
     atomicsException,
     atomicsExceptionAddress,
@@ -1425,7 +1401,14 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
       lsq.io.exceptionAddr.vaddr
     )
   ))
+
+  io.mem_to_ooo.writeBack.map(wb => {
+    wb.bits.uop.trigger.frontendHit := 0.U(TriggerNum.W).asBools
+    wb.bits.uop.trigger.frontendCanFire := 0.U(TriggerNum.W).asBools
+  })
+
   XSError(atomicsException && atomicsUnit.io.in.valid, "new instruction before exception triggers\n")
+  io.mem_to_ooo.lsqio.gpaddr := RegNext(Mux(atomicsException, atomicsExceptionGPAddress, lsq.io.exceptionAddr.gpaddr))
 
   io.memInfo.sqFull := RegNext(lsq.io.sqFull)
   io.memInfo.lqFull := RegNext(lsq.io.lqFull)
@@ -1446,7 +1429,7 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
   if (p(DebugOptionsKey).FPGAPlatform) {
     val resetTree = ResetGenNode(
       Seq(
-        ResetGenNode(Seq(ResetGenNode(Seq(CellNode(reset_io_frontend))))),
+        CellNode(reset_io_frontend),
         CellNode(reset_io_backend),
         ModuleNode(itlbRepeater3),
         ModuleNode(dtlbRepeater),

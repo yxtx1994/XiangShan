@@ -54,7 +54,7 @@ case class FuConfig (
   writeFflags   : Boolean = false,
   writeVxsat    : Boolean = false,
   dataBits      : Int = 64,
-  latency       : HasFuLatency = CertainLatency(0),
+  latency       : HasFuLatency = CertainLatency(0),// two field (base latency, extra latency(option))
   hasInputBuffer: (Boolean, Int, Boolean) = (false, 0, false),
   exceptionOut  : Seq[Int] = Seq(),
   hasLoadError  : Boolean = false,
@@ -63,6 +63,7 @@ case class FuConfig (
   trigger       : Boolean = false,
   needSrcFrm    : Boolean = false,
   needSrcVxrm   : Boolean = false,
+  writeVType    : Boolean = false,
   immType       : Set[UInt] = Set(),
   // vector
   vconfigWakeUp : Boolean = false,
@@ -96,14 +97,7 @@ case class FuConfig (
   def fuSel(uop: ExuInput): Bool = {
     // Don't add more shit here!!!
     // Todo: add new FuType to distinguish f2i, f2f
-    if (this.fuType == FuType.fmisc) {
-      this.name match {
-        case FuConfig.F2iCfg.name => (uop.fuType === FuType.fmisc.U) && uop.rfWen.get && uop.fuType === this.fuType.U
-        case FuConfig.F2fCfg.name => (uop.fuType === FuType.fmisc.U) && uop.fpu.get.fpWen && !uop.fpu.get.div && !uop.fpu.get.sqrt && uop.fuType === this.fuType.U
-      }
-    } else {
-      uop.fuType === this.fuType.U
-    }
+    uop.fuType === this.fuType.U
   }
 
   /**
@@ -172,6 +166,8 @@ case class FuConfig (
                             fuType == FuType.vfalu || fuType == FuType.vfma ||
                             fuType == FuType.vfdiv || fuType == FuType.vfcvt ||
                             fuType == FuType.vidiv
+
+  def needOg2: Boolean = isVecArith || fuType == FuType.fmisc || fuType == FuType.vsetfwf || fuType == FuType.f2v
 
   def isSta: Boolean = name.contains("sta")
 
@@ -251,6 +247,7 @@ object FuConfig {
     ),
     piped = true,
     writeVecRf = true,
+    writeFpRf = true,
     latency = CertainLatency(0),
     dataBits = 128,
     immType = Set(SelImm.IMM_OPIVIU, SelImm.IMM_OPIVIS),
@@ -279,7 +276,7 @@ object FuConfig {
     ),
     piped = true,
     writeIntRf = true,
-    exceptionOut = Seq(illegalInstr, breakPoint, ecallU, ecallS, ecallM),
+    exceptionOut = Seq(illegalInstr, virtualInstr, breakPoint, ecallU, ecallS, ecallVS, ecallM),
     flushPipe = true,
   )
 
@@ -329,7 +326,7 @@ object FuConfig {
     ),
     piped = true,
     latency = CertainLatency(0),
-    exceptionOut = Seq(illegalInstr),
+    exceptionOut = Seq(illegalInstr, virtualInstr),
     flushPipe = true
   )
 
@@ -355,6 +352,7 @@ object FuConfig {
     ),
     piped = true,
     writeVecRf = true,
+    writeVType = true,
     latency = CertainLatency(0),
     immType = Set(SelImm.IMM_VSETVLI, SelImm.IMM_VSETIVLI),
   )
@@ -368,6 +366,7 @@ object FuConfig {
     ),
     piped = true,
     writeVecRf = true,
+    writeVType = true,
     latency = CertainLatency(0),
     immType = Set(SelImm.IMM_VSETVLI, SelImm.IMM_VSETIVLI),
   )
@@ -456,7 +455,7 @@ object FuConfig {
     writeIntRf = true,
     writeFpRf = true,
     latency = UncertainLatency(3),
-    exceptionOut = Seq(loadAddrMisaligned, loadAccessFault, loadPageFault),
+    exceptionOut = Seq(loadAddrMisaligned, loadAccessFault, loadPageFault, loadGuestPageFault),
     flushPipe = true,
     replayInst = true,
     hasLoadError = true,
@@ -473,7 +472,7 @@ object FuConfig {
     ),
     piped = false,
     latency = UncertainLatency(),
-    exceptionOut = Seq(storeAddrMisaligned, storeAccessFault, storePageFault),
+    exceptionOut = Seq(storeAddrMisaligned, storeAccessFault, storePageFault, storeGuestPageFault),
     trigger = true,
     immType = Set(SelImm.IMM_S),
   )
@@ -501,7 +500,7 @@ object FuConfig {
     writeIntRf = true,
     writeFpRf = true,
     latency = UncertainLatency(3),
-    exceptionOut = Seq(loadAddrMisaligned, loadAccessFault, loadPageFault),
+    exceptionOut = Seq(loadAddrMisaligned, loadAccessFault, loadPageFault, loadGuestPageFault),
     flushPipe = true,
     replayInst = true,
     hasLoadError = true,
@@ -517,7 +516,7 @@ object FuConfig {
     ),
     piped = false,
     latency = UncertainLatency(),
-    exceptionOut = Seq(storeAddrMisaligned, storeAccessFault, storePageFault),
+    exceptionOut = Seq(storeAddrMisaligned, storeAccessFault, storePageFault, storeGuestPageFault),
     immType = Set(SelImm.IMM_S),
   )
 
@@ -528,7 +527,7 @@ object FuConfig {
     srcData = Seq(),
     piped = false,
     latency = UncertainLatency(),
-    exceptionOut = Seq(storeAddrMisaligned, storeAccessFault, storePageFault),
+    exceptionOut = Seq(storeAddrMisaligned, storeAccessFault, storePageFault, storeGuestPageFault),
     immType = Set(),
   )
 
@@ -619,7 +618,7 @@ object FuConfig {
     ),
     piped = true,
     writeVecRf = true,
-    latency = CertainLatency(1),
+    latency = CertainLatency(2),
     vconfigWakeUp = true,
     maskWakeUp = true,
     dataBits = 128,
@@ -637,7 +636,7 @@ object FuConfig {
     piped = true,
     writeIntRf = true,
     writeVecRf = true,
-    latency = CertainLatency(1),
+    latency = CertainLatency(2),
     vconfigWakeUp = true,
     maskWakeUp = true,
     dataBits = 128,
@@ -661,6 +660,7 @@ object FuConfig {
     maskWakeUp = true,
     dataBits = 128,
     exceptionOut = Seq(illegalInstr),
+    needSrcFrm = true,
   )
 
   val VfmaCfg = FuConfig (
@@ -679,6 +679,7 @@ object FuConfig {
     maskWakeUp = true,
     dataBits = 128,
     exceptionOut = Seq(illegalInstr),
+    needSrcFrm = true,
   )
 
   val VfdivCfg = FuConfig(
@@ -697,6 +698,7 @@ object FuConfig {
     maskWakeUp = true,
     dataBits = 128,
     exceptionOut = Seq(illegalInstr),
+    needSrcFrm = true,
   )
 
   val VfcvtCfg = FuConfig(
@@ -708,13 +710,15 @@ object FuConfig {
     ),
     piped = true,
     writeVecRf = true,
-    writeFpRf = false,
+    writeFpRf = true,
+    writeIntRf = true,
     writeFflags = true,
     latency = CertainLatency(2),
     vconfigWakeUp = true,
     maskWakeUp = true,
     dataBits = 128,
     exceptionOut = Seq(illegalInstr),
+    needSrcFrm = true,
   )
 
 
@@ -728,7 +732,7 @@ object FuConfig {
     piped = false, // Todo: check it
     writeVecRf = true,
     latency = UncertainLatency(),
-    exceptionOut = Seq(loadAddrMisaligned, loadAccessFault, loadPageFault),
+    exceptionOut = Seq(loadAddrMisaligned, loadAccessFault, loadPageFault, loadGuestPageFault),
     flushPipe = true,
     replayInst = true,
     hasLoadError = true,
@@ -747,7 +751,7 @@ object FuConfig {
     piped = false,
     writeVecRf = false,
     latency = UncertainLatency(),
-    exceptionOut = Seq(storeAddrMisaligned, storeAccessFault, storePageFault),
+    exceptionOut = Seq(storeAddrMisaligned, storeAccessFault, storePageFault, storeGuestPageFault),
     flushPipe = true,
     replayInst = true,
     hasLoadError = true,
@@ -763,7 +767,7 @@ object FuConfig {
   )
 
   def VecArithFuConfigs = Seq(
-    VialuCfg, VimacCfg, VppuCfg, VipuCfg, VfaluCfg, VfmaCfg
+    VialuCfg, VimacCfg, VppuCfg, VipuCfg, VfaluCfg, VfmaCfg, VfcvtCfg
   )
 }
 

@@ -50,7 +50,7 @@ class BaseConfig(n: Int) extends Config((site, here, up) => {
   case ExportDebug => DebugAttachParams(protocols = Set(JTAG))
   case DebugModuleKey => Some(XSDebugModuleParams(site(XLen)))
   case JtagDTMKey => JtagDTMKey
-  case MaxHartIdBits => 2
+  case MaxHartIdBits => log2Up(n)
   case EnableJtag => true.B
 })
 
@@ -65,7 +65,7 @@ class MinimalConfig(n: Int = 1) extends Config(
       p => p.copy(
         DecodeWidth = 6,
         RenameWidth = 6,
-        CommitWidth = 6,
+        RobCommitWidth = 8,
         FetchWidth = 4,
         VirtualLoadQueueSize = 24,
         LoadQueueRARSize = 16,
@@ -101,7 +101,7 @@ class MinimalConfig(n: Int = 1) extends Config(
         ),
         vfPreg = VfPregParams(
           numEntries = 160,
-          numRead = Some(14),
+          numRead = None,
           numWrite = None,
         ),
         icacheParameters = ICacheParameters(
@@ -271,6 +271,8 @@ class WithNKBL2
         echoField = Seq(huancun.DirtyField()),
         prefetch = Some(coupledL2.prefetch.PrefetchReceiverParams()),
         enablePerf = !site(DebugOptionsKey).FPGAPlatform,
+        enableRollingDB = site(DebugOptionsKey).EnableRollingDB,
+        enableMonitor = site(DebugOptionsKey).AlwaysBasicDB,
         elaboratedTopDown = !site(DebugOptionsKey).FPGAPlatform
       )),
       L2NBanks = banks

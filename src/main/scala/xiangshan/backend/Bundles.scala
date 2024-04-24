@@ -151,7 +151,6 @@ object Bundles {
     val ftqOffset       = UInt(log2Up(PredictWidth).W)
     // passed from DecodedInst
     val srcType         = Vec(numSrc, SrcType())
-    val lsrc            = Vec(numSrc, UInt(6.W))
     val ldest           = UInt(6.W)
     val fuType          = FuType()
     val fuOpType        = FuOpType()
@@ -185,6 +184,7 @@ object Bundles {
     val robIdx          = new RobPtr
     val instrSize       = UInt(log2Ceil(RenameWidth + 1).W)
     val dirtyFs         = Bool()
+    val dirtyVs         = Bool()
 
     val eliminatedMove  = Bool()
     // Take snapshot at this CFI inst
@@ -218,6 +218,10 @@ object Bundles {
     def isSvinvalBegin(flush: Bool) = FuType.isFence(fuType) && fuOpType === FenceOpType.nofence && !flush
     def isSvinval(flush: Bool) = FuType.isFence(fuType) && fuOpType === FenceOpType.sfence && !flush
     def isSvinvalEnd(flush: Bool) = FuType.isFence(fuType) && fuOpType === FenceOpType.nofence && flush
+
+    def isHls: Bool = {
+      fuType === FuType.ldu.U && LSUOpType.isHlv(fuOpType) || fuType === FuType.stu.U && LSUOpType.isHsv(fuOpType)
+    }
 
     def srcIsReady: Vec[Bool] = {
       VecInit(this.srcType.zip(this.srcState).map {
@@ -696,14 +700,16 @@ class IssueQueueIQWakeUpBundle(
     val pdest = UInt(params.wbPregIdxWidth.W)
   }
 
-  class ExceptionInfo(implicit p: Parameters) extends Bundle {
+  class ExceptionInfo(implicit p: Parameters) extends XSBundle {
     val pc = UInt(VAddrData().dataWidth.W)
     val instr = UInt(32.W)
     val commitType = CommitType()
     val exceptionVec = ExceptionVec()
+    val gpaddr = UInt(GPAddrBits.W)
     val singleStep = Bool()
     val crossPageIPFFix = Bool()
     val isInterrupt = Bool()
+    val isHls = Bool()
     val vls = Bool()
     val trigger  = new TriggerCf
   }

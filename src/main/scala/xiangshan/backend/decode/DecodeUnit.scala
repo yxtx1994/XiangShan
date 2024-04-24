@@ -23,7 +23,7 @@ import freechips.rocketchip.rocket.Instructions._
 import freechips.rocketchip.util.uintToBitPat
 import utility._
 import utils._
-import xiangshan.ExceptionNO.illegalInstr
+import xiangshan.ExceptionNO.{illegalInstr, virtualInstr}
 import xiangshan._
 import xiangshan.backend.fu.FuType
 import xiangshan.backend.Bundles.{DecodedInst, DynInst, StaticInst}
@@ -307,15 +307,8 @@ object FpDecode extends DecodeConstants{
     FSW     -> FDecode(SrcType.reg, SrcType.fp,  SrcType.X, FuType.stu, LSUOpType.sw, selImm = SelImm.IMM_S          ),
     FSD     -> FDecode(SrcType.reg, SrcType.fp,  SrcType.X, FuType.stu, LSUOpType.sd, selImm = SelImm.IMM_S          ),
 
-    FMV_X_D -> FDecode(SrcType.fp , SrcType.imm, SrcType.X, FuType.fmisc, FuOpType.X, xWen = T, canRobCompress = T),
-    FMV_X_W -> FDecode(SrcType.fp , SrcType.imm, SrcType.X, FuType.fmisc, FuOpType.X, xWen = T, canRobCompress = T),
-
-    FMV_D_X -> FDecode(SrcType.reg, SrcType.imm, SrcType.X, FuType.i2f,   FuOpType.X, fWen = T, canRobCompress = T),
-    FMV_W_X -> FDecode(SrcType.reg, SrcType.imm, SrcType.X, FuType.i2f,   FuOpType.X, fWen = T, canRobCompress = T),
-
-    // FP to FP
-    FCVT_S_D -> FDecode(SrcType.fp, SrcType.imm, SrcType.X, FuType.fmisc, FuOpType.X, fWen = T, canRobCompress = T),
-    FCVT_D_S -> FDecode(SrcType.fp, SrcType.imm, SrcType.X, FuType.fmisc, FuOpType.X, fWen = T, canRobCompress = T),
+    FMV_D_X -> FDecode(SrcType.reg, SrcType.imm, SrcType.X, FuType.i2v, IF2VectorType.FMX_D_X, fWen = T, canRobCompress = T),
+    FMV_W_X -> FDecode(SrcType.reg, SrcType.imm, SrcType.X, FuType.i2v, IF2VectorType.FMX_W_X, fWen = T, canRobCompress = T),
 
     // Int to FP
     FCVT_S_W  -> FDecode(SrcType.reg, SrcType.imm, SrcType.X, FuType.i2f, FuOpType.X, fWen = T, canRobCompress = T),
@@ -327,17 +320,6 @@ object FpDecode extends DecodeConstants{
     FCVT_D_WU -> FDecode(SrcType.reg, SrcType.imm, SrcType.X, FuType.i2f, FuOpType.X, fWen = T, canRobCompress = T),
     FCVT_D_L  -> FDecode(SrcType.reg, SrcType.imm, SrcType.X, FuType.i2f, FuOpType.X, fWen = T, canRobCompress = T),
     FCVT_D_LU -> FDecode(SrcType.reg, SrcType.imm, SrcType.X, FuType.i2f, FuOpType.X, fWen = T, canRobCompress = T),
-
-    // FP to Int
-    FCVT_W_S  -> FDecode(SrcType.fp , SrcType.imm, SrcType.X, FuType.fmisc, FuOpType.X, xWen = T, canRobCompress = T),
-    FCVT_WU_S -> FDecode(SrcType.fp , SrcType.imm, SrcType.X, FuType.fmisc, FuOpType.X, xWen = T, canRobCompress = T),
-    FCVT_L_S  -> FDecode(SrcType.fp , SrcType.imm, SrcType.X, FuType.fmisc, FuOpType.X, xWen = T, canRobCompress = T),
-    FCVT_LU_S -> FDecode(SrcType.fp , SrcType.imm, SrcType.X, FuType.fmisc, FuOpType.X, xWen = T, canRobCompress = T),
-
-    FCVT_W_D  -> FDecode(SrcType.fp , SrcType.imm, SrcType.X, FuType.fmisc, FuOpType.X, xWen = T, canRobCompress = T),
-    FCVT_WU_D -> FDecode(SrcType.fp , SrcType.imm, SrcType.X, FuType.fmisc, FuOpType.X, xWen = T, canRobCompress = T),
-    FCVT_L_D  -> FDecode(SrcType.fp , SrcType.imm, SrcType.X, FuType.fmisc, FuOpType.X, xWen = T, canRobCompress = T),
-    FCVT_LU_D -> FDecode(SrcType.fp , SrcType.imm, SrcType.X, FuType.fmisc, FuOpType.X, xWen = T, canRobCompress = T),
 
   )
 }
@@ -447,6 +429,31 @@ object CBODecode extends DecodeConstants {
   )
 }
 
+/*
+ * Hypervisor decode
+ */
+object HypervisorDecode extends DecodeConstants {
+  override val decodeArray: Array[(BitPat, XSDecodeBase)] = Array(
+    HFENCE_GVMA -> XSDecode(SrcType.reg, SrcType.reg, SrcType.X, FuType.fence, FenceOpType.hfence_g, SelImm.X, noSpec = T, blockBack = T, flushPipe = T),
+    HFENCE_VVMA -> XSDecode(SrcType.reg, SrcType.reg, SrcType.X, FuType.fence, FenceOpType.hfence_v, SelImm.X, noSpec = T, blockBack = T, flushPipe = T),
+    HINVAL_GVMA -> XSDecode(SrcType.reg, SrcType.reg, SrcType.X, FuType.fence, FenceOpType.hfence_g, SelImm.X),
+    HINVAL_VVMA -> XSDecode(SrcType.reg, SrcType.reg, SrcType.X, FuType.fence, FenceOpType.hfence_v, SelImm.X),
+    HLV_B       -> XSDecode(SrcType.reg, SrcType.X,   SrcType.X, FuType.ldu,   LSUOpType.hlvb,       SelImm.X, xWen = T),
+    HLV_BU      -> XSDecode(SrcType.reg, SrcType.X,   SrcType.X, FuType.ldu,   LSUOpType.hlvbu,      SelImm.X, xWen = T),
+    HLV_D       -> XSDecode(SrcType.reg, SrcType.X,   SrcType.X, FuType.ldu,   LSUOpType.hlvd,       SelImm.X, xWen = T),
+    HLV_H       -> XSDecode(SrcType.reg, SrcType.X,   SrcType.X, FuType.ldu,   LSUOpType.hlvh,       SelImm.X, xWen = T),
+    HLV_HU      -> XSDecode(SrcType.reg, SrcType.X,   SrcType.X, FuType.ldu,   LSUOpType.hlvhu,      SelImm.X, xWen = T),
+    HLV_W       -> XSDecode(SrcType.reg, SrcType.X,   SrcType.X, FuType.ldu,   LSUOpType.hlvw,       SelImm.X, xWen = T),
+    HLV_WU      -> XSDecode(SrcType.reg, SrcType.X,   SrcType.X, FuType.ldu,   LSUOpType.hlvwu,      SelImm.X, xWen = T),
+    HLVX_HU     -> XSDecode(SrcType.reg, SrcType.X,   SrcType.X, FuType.ldu,   LSUOpType.hlvxhu,     SelImm.X, xWen = T),
+    HLVX_WU     -> XSDecode(SrcType.reg, SrcType.X,   SrcType.X, FuType.ldu,   LSUOpType.hlvxwu,     SelImm.X, xWen = T),
+    HSV_B       -> XSDecode(SrcType.reg, SrcType.reg, SrcType.X, FuType.stu,   LSUOpType.hsvb,       SelImm.X),
+    HSV_D       -> XSDecode(SrcType.reg, SrcType.reg, SrcType.X, FuType.stu,   LSUOpType.hsvd,       SelImm.X),
+    HSV_H       -> XSDecode(SrcType.reg, SrcType.reg, SrcType.X, FuType.stu,   LSUOpType.hsvh,       SelImm.X),
+    HSV_W       -> XSDecode(SrcType.reg, SrcType.reg, SrcType.X, FuType.stu,   LSUOpType.hsvw,       SelImm.X),
+  )
+}
+
 /**
  * XiangShan Trap Decode constants
  */
@@ -457,7 +464,7 @@ object XSTrapDecode extends DecodeConstants {
   )
 }
 
-abstract class Imm(val len: Int) extends Bundle {
+abstract class Imm(val len: Int) {
   def toImm32(minBits: UInt): UInt = do_toImm32(minBits(len - 1, 0))
   def do_toImm32(minBits: UInt): UInt
   def minBitsFromInstr(instr: UInt): UInt
@@ -664,6 +671,7 @@ class DecodeUnit(implicit p: Parameters) extends XSModule with DecodeUnitConstan
     BDecode.table ++
     CBODecode.table ++
     SvinvalDecode.table ++
+    HypervisorDecode.table ++
     VecDecoder.table
 
   require(decode_table.map(_._2.length == 15).reduce(_ && _), "Decode tables have different column size")
@@ -706,8 +714,6 @@ class DecodeUnit(implicit p: Parameters) extends XSModule with DecodeUnitConstan
   decodedInst.lsrc(2) := Mux(isFMA, inst.FS3, inst.VD)
   decodedInst.lsrc(3) := v0Idx.U
   decodedInst.lsrc(4) := vconfigIdx.U
-  decodedInst.srcType(3) := Mux(inst.VM.asBool, SrcType.DC, SrcType.vp) // mask src
-  decodedInst.srcType(4) := SrcType.vp // vconfig
 
   // read dest location
   decodedInst.ldest := inst.RD
@@ -724,9 +730,25 @@ class DecodeUnit(implicit p: Parameters) extends XSModule with DecodeUnitConstan
     val sinval = BitPat("b0001011_?????_?????_000_00000_1110011") === ctrl_flow.instr
     val w_inval = BitPat("b0001100_00000_00000_000_00000_1110011") === ctrl_flow.instr
     val inval_ir = BitPat("b0001100_00001_00000_000_00000_1110011") === ctrl_flow.instr
-    val svinval_ii = sinval || w_inval || inval_ir
+    val hinval_gvma = HINVAL_GVMA === ctrl_flow.instr
+    val hinval_vvma = HINVAL_VVMA === ctrl_flow.instr
+    val svinval_ii = sinval || w_inval || inval_ir || hinval_gvma || hinval_vvma
     decodedInst.exceptionVec(illegalInstr) := base_ii || svinval_ii
     decodedInst.flushPipe := false.B
+  }
+
+  when(io.csrCtrl.virtMode){
+    // Todo: optimize EX_VI decode
+    // vs/vu attempting to exec hyperinst will raise virtual instruction
+    decodedInst.exceptionVec(virtualInstr) := ctrl_flow.instr === HLV_B || ctrl_flow.instr === HLV_BU ||
+      ctrl_flow.instr === HLV_H   || ctrl_flow.instr === HLV_HU ||
+      ctrl_flow.instr === HLVX_HU || ctrl_flow.instr === HLV_W  ||
+      ctrl_flow.instr === HLVX_WU || ctrl_flow.instr === HLV_WU ||
+      ctrl_flow.instr === HLV_D   || ctrl_flow.instr === HSV_B  ||
+      ctrl_flow.instr === HSV_H   || ctrl_flow.instr === HSV_W  ||
+      ctrl_flow.instr === HSV_D   || ctrl_flow.instr === HFENCE_VVMA ||
+      ctrl_flow.instr === HFENCE_GVMA || ctrl_flow.instr === HINVAL_GVMA ||
+      ctrl_flow.instr === HINVAL_VVMA
   }
 
   // fix frflags
@@ -834,6 +856,9 @@ class DecodeUnit(implicit p: Parameters) extends XSModule with DecodeUnitConstan
   }
 
   decodedInst.vlsInstr := isVls
+
+  decodedInst.srcType(3) := Mux(inst.VM === 0.U && !isFpToVecInst, SrcType.vp, SrcType.DC) // mask src
+  decodedInst.srcType(4) := Mux(!isFpToVecInst, SrcType.vp, SrcType.DC) // vconfig
 
   val uopInfoGen = Module(new UopInfoGen)
   uopInfoGen.io.in.preInfo.typeOfSplit := decodedInst.uopSplitType
