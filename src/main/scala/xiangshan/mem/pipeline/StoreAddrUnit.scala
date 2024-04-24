@@ -24,6 +24,7 @@ import utility._
 import xiangshan.ExceptionNO._
 import xiangshan._
 import xiangshan.backend.Bundles.{MemExuInput, MemExuOutput}
+import xiangshan.backend.fu._
 import xiangshan.backend.fu.PMPRespBundle
 import xiangshan.backend.fu.FuConfig._
 import xiangshan.backend.fu.FuType._
@@ -217,7 +218,7 @@ class StoreAddrUnit(implicit p: Parameters) extends XSModule with HasDCacheParam
   val s1_exception = ExceptionNO.selectByFu(s1_out.uop.exceptionVec, StaCfg).asUInt.orR
   val s1_isvec     = RegEnable(s0_out.isvec, false.B, s0_fire)
   val s1_isLastElem = RegEnable(s0_isLastElem, false.B, s0_fire)
-  val s1_amo       = FuType.storeIsAMO(s1_in.uop.ctrl.fuType)
+  val s1_amo       = FuType.storeIsAMO(s1_in.uop.fuType)
   s1_kill := s1_in.uop.robIdx.needFlush(io.redirect) || s1_tlb_miss || s1_amo
 
   s1_ready := true.B
