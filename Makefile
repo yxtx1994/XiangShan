@@ -16,10 +16,18 @@
 
 BUILD_DIR = ./build
 
+ifeq ($(NOC),)
 TOP = XSTop
+else
+TOP = XSNocTop
+endif
 SIM_TOP = SimTop
 
+ifeq ($(NOC),)
 FPGATOP = top.TopMain
+else
+FPGATOP = top.NocTopMain
+endif
 SIMTOP  = top.SimTop
 
 TOP_V = $(BUILD_DIR)/$(TOP).v
