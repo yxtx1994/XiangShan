@@ -211,6 +211,13 @@ pldm-run:
 pldm-debug:
 	$(MAKE) -C ./difftest pldm-debug SIM_TOP=SimTop DESIGN_DIR=$(NOOP_HOME) NUM_CORES=$(NUM_CORES)
 
+# jar and lib for soc integration
+jar: 
+	mill -i xiangshan[$(CHISEL_VERSION)].assembly
+
+difftest-so: sim-verilog
+	$(MAKE) -C ./difftest difftest-so SIM_TOP=SimTop DESIGN_DIR=$(NOOP_HOME) NUM_CORES=$(NUM_CORES)
+
 include Makefile.test
 
 .PHONY: verilog sim-verilog emu clean help init bump bsp $(REF_SO)
