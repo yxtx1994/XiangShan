@@ -28,11 +28,11 @@ trait Unprivileged { self: NewCSR with MachineLevel with SupervisorLevel =>
     this.wfn(reg)(Seq(wAliasFflags, wAliasFfm))
 
     when (robCommit.fflags.valid) {
-      reg.NX := robCommit.fflags.bits(0) | reg.NX
-      reg.UF := robCommit.fflags.bits(1) | reg.UF
-      reg.OF := robCommit.fflags.bits(2) | reg.OF
-      reg.DZ := robCommit.fflags.bits(3) | reg.DZ
-      reg.NV := robCommit.fflags.bits(4) | reg.NV
+      reg.NX := reg.NX || robCommit.fflags.bits(0)
+      reg.UF := reg.UF || robCommit.fflags.bits(1)
+      reg.OF := reg.OF || robCommit.fflags.bits(2)
+      reg.DZ := reg.DZ || robCommit.fflags.bits(3)
+      reg.NV := reg.NV || robCommit.fflags.bits(4)
     }
 
     // read connection
@@ -46,8 +46,8 @@ trait Unprivileged { self: NewCSR with MachineLevel with SupervisorLevel =>
   }) with HasRobCommitBundle {
     // Todo make The use of vstart values greater than the largest element index for the current SEW setting is reserved.
     // Not trap
-    when (wen && io.in.wdata < VLEN.U) {
-      reg.vstart := io.in.wdata
+    when (wen && w.wdata < VLEN.U) {
+      reg.vstart := w.wdata(VlWidth - 2, 0)
     }.elsewhen (robCommit.vstart.valid) {
       reg.vstart := robCommit.vstart.bits
     }

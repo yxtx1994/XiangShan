@@ -7,7 +7,7 @@ import org.chipsalliance.cde.config.Parameters
 import xiangshan.backend.fu.NewCSR.CSRDefines.{CSRROField => RO, CSRRWField => RW, CSRWARLField => WARL, _}
 import xiangshan.backend.fu.NewCSR.CSRFunc._
 import xiangshan.backend.fu.fpu.Bundles.Fflags
-import xiangshan.backend.fu.vector.Bundles.{Vl, Vxsat}
+import xiangshan.backend.fu.vector.Bundles.{Vl, Vstart, Vxsat}
 
 object CSRBundles {
   class XtvecBundle extends CSRBundle {
@@ -111,6 +111,6 @@ object CSRBundles {
     val vsDirty = Bool()
     val vtype   = ValidIO(new CSRVTypeBundle)
     val vl      = ValidIO(Vl())
-    val vstart  = ValidIO(Vl())
+    val vstart  = ValidIO(Vstart())
   }
 }

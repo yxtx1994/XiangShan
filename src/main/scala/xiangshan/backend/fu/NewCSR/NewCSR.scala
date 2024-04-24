@@ -8,7 +8,7 @@ import xiangshan.backend.fu.NewCSR.CSRBundles.{PrivState, RobCommitCSR}
 import xiangshan.backend.fu.NewCSR.CSRDefines.{ContextStatus, PrivMode, VirtMode}
 import xiangshan.backend.fu.NewCSR.CSREvents.{CSREvents, DretEventSinkBundle, EventUpdatePrivStateOutput, MretEventSinkBundle, SretEventSinkBundle, TrapEntryEventInput, TrapEntryHSEventSinkBundle, TrapEntryMEventSinkBundle, TrapEntryVSEventSinkBundle}
 import xiangshan.backend.fu.fpu.Bundles.Frm
-import xiangshan.backend.fu.vector.Bundles.{Vl, Vxrm, Vxsat}
+import xiangshan.backend.fu.vector.Bundles.{Vl, Vstart, Vxrm, Vxsat}
 import xiangshan.{XSCoreParamsKey, XSTileKey}
 import freechips.rocketchip.rocket.CSRs
 
@@ -103,7 +103,7 @@ class NewCSR(implicit val p: Parameters) extends Module
       }
       // vec
       val vecState = new Bundle {
-        val vstart = Vl()
+        val vstart = Vstart()
         val vxsat = Vxsat()
         val vxrm = Vxrm()
         val vcsr = UInt(XLEN.W)
