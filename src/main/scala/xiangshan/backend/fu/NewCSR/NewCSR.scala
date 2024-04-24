@@ -251,8 +251,23 @@ class NewCSR(implicit val p: Parameters) extends Module
   permitMod.io.in.mret := isMret
   permitMod.io.in.sret := isSret
 
-  permitMod.io.in.status.tsr := mstatus.rdata.TSR
-  permitMod.io.in.status.vtsr := hstatus.rdata.VTSR
+  permitMod.io.in.status.tsr := mstatus.rdata.TSR.asBool
+  permitMod.io.in.status.vtsr := hstatus.rdata.VTSR.asBool
+
+  miregiprios.foreach { mod =>
+    mod.w.wen := (addr === mireg.addr.U) && (miselect.regOut.ALL.asUInt === mod.addr.U)
+    mod.w.wdata := wdata
+  }
+
+  siregiprios.foreach { mod =>
+    mod.w.wen := (addr === sireg.addr.U) && (siselect.regOut.ALL.asUInt === mod.addr.U)
+    mod.w.wdata := wdata
+  }
+
+  vsiregiprios.foreach { mod =>
+    mod.w.wen := (addr === vsireg.addr.U) && (vsiselect.regOut.ALL.asUInt === mod.addr.U)
+    mod.w.wdata := wdata
+  }
 
   csrMods.foreach { mod =>
     mod match {
@@ -347,10 +362,10 @@ class NewCSR(implicit val p: Parameters) extends Module
       case _ =>
     }
     mod match {
-      case m: HasInterruptFilterBundle =>
-        m.mtopi  := intrMod.io.out.mtopi
-        m.stopi  := intrMod.io.out.stopi
-        m.vstopi := intrMod.io.out.vstopi
+      case m: HasInterruptFilterSink =>
+        m.topIR.mtopi  := intrMod.io.out.mtopi
+        m.topIR.stopi  := intrMod.io.out.stopi
+        m.topIR.vstopi := intrMod.io.out.vstopi
       case _ =>
     }
     mod match {
@@ -366,10 +381,6 @@ class NewCSR(implicit val p: Parameters) extends Module
   }
 
   csrMods.foreach { mod =>
-    mod.commonIn.status := mstatus.mstatus
-    mod.commonIn.prvm := PRVM
-    mod.commonIn.v := V
-    mod.commonIn.hstatus := hstatus.rdata
     println(s"${mod.modName}: ")
     println(mod.dumpFields)
   }
