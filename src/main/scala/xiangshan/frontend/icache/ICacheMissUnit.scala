@@ -102,10 +102,16 @@ class LookUpMSHR(implicit p: Parameters) extends ICacheBundle {
 
 
 class MSHRResp(implicit p: Parameters) extends ICacheBundle {
-  val req_info = new ICacheMissReq
-  val id       = UInt(log2Ceil(nFetchMshr + nPrefetchEntries).W)
+  val blkPaddr  = UInt((PAddrBits - blockOffBits).W)
+  val vSetIdx   = UInt(idxBits.W)
+  val waymask   = UInt(log2Ceil(nWays).W)
 }
 
+
+class MSHRAcquire(edge: TLEdgeOut)(implicit p: Parameters) extends ICacheBundle {
+  val acquire = new TLBundleA(edge.bundle)
+  val vSetIdx = UInt(idxBits.W)
+}
 
 class ICacheMSHR(edge: TLEdgeOut, isFetch: Boolean, ID: Int)(implicit p: Parameters) extends ICacheMissUnitModule {
   val io = IO(new Bundle {
@@ -113,9 +119,10 @@ class ICacheMSHR(edge: TLEdgeOut, isFetch: Boolean, ID: Int)(implicit p: Paramet
     val flush       = Input(Bool())
     val invalid     = Input(Bool())
     val req         = Flipped(DecoupledIO(new ICacheMissReq))
-    val acquire     = DecoupledIO(new TLBundleA(edge.bundle))
+    val acquire     = DecoupledIO(new MSHRAcquire(edge))
     val lookUps     = Flipped(Vec(2, new LookUpMSHR))
-    val resp        = ValidIO(new ICacheMissReq)
+    val resp        = ValidIO(new MSHRResp)
+    val victimWay   = Input(UInt(log2Ceil(nWays).W))
   })
 
   val valid     = RegInit(Bool(), false.B)
@@ -127,6 +134,7 @@ class ICacheMSHR(edge: TLEdgeOut, isFetch: Boolean, ID: Int)(implicit p: Paramet
 
   val blkPaddr  = RegInit(UInt((PAddrBits - blockOffBits).W), 0.U)
   val vSetIdx   = RegInit(UInt(idxBits.W), 0.U)
+  val waymask   = RegInit(UInt(log2Ceil(nWays).W), 0.U)
 
   // look up and return result at the same cycle
   val hits = io.lookUps.map(lookup => valid && !fencei && !flush && (lookup.info.bits.vSetIdx === vSetIdx) && 
@@ -168,10 +176,14 @@ class ICacheMSHR(edge: TLEdgeOut, isFetch: Boolean, ID: Int)(implicit p: Paramet
     toAddress   = Cat(blkPaddr, 0.U(blockOffBits.W)),
     lgSize      = (log2Up(cacheParams.blockBytes)).U
   )._2
-  io.acquire.bits := getBlock
-  io.acquire.bits.user.lift(ReqSourceKey).foreach(_ := MemReqSource.CPUInst.id.U)
+  io.acquire.bits.acquire := getBlock
+  io.acquire.bits.acquire.user.lift(ReqSourceKey).foreach(_ := MemReqSource.CPUInst.id.U)
+  io.acquire.bits.vSetIdx := vSetIdx
+
+  // get victim way when acquire fire
   when(io.acquire.fire) {
-    issue := true.B
+    issue   := true.B
+    waymask := io.victimWay
   }
 
   // invalid request when grant finish
@@ -183,6 +195,7 @@ class ICacheMSHR(edge: TLEdgeOut, isFetch: Boolean, ID: Int)(implicit p: Paramet
   io.resp.valid         := valid && (!flush && !fencei)
   io.resp.bits.blkPaddr := blkPaddr
   io.resp.bits.vSetIdx  := vSetIdx
+  io.resp.bits.waymask  := waymask
 }
 
 class ICacheMissBundle(edge: TLEdgeOut)(implicit p: Parameters) extends ICacheBundle{
@@ -234,8 +247,8 @@ class ICacheMissUnit(edge: TLEdgeOut)(implicit p: Parameters) extends ICacheMiss
 
   val fetchDemux    = Module(new Demultiplexer(new ICacheMissReq, nFetchMshr))
   val prefetchDemux = Module(new Demultiplexer(new ICacheMissReq, nPrefetchMshr))
-  val prefetchArb   = Module(new MuxBundle(new TLBundleA(edge.bundle), nPrefetchMshr))
-  val acquireArb    = Module(new Arbiter(new TLBundleA(edge.bundle), nFetchMshr + 1))
+  val prefetchArb   = Module(new MuxBundle(new MSHRAcquire(edge), nPrefetchMshr))
+  val acquireArb    = Module(new Arbiter(new MSHRAcquire(edge), nFetchMshr + 1))
   
   // To avoid duplicate request reception.
   val fetchHit, prefetchHit   = Wire(Bool())
@@ -245,8 +258,12 @@ class ICacheMissUnit(edge: TLEdgeOut)(implicit p: Parameters) extends ICacheMiss
   prefetchDemux.io.in         <> io.prefetch_req
   prefetchDemux.io.in.valid   := io.prefetch_req.valid && !prefetchHit
   io.prefetch_req.ready       := prefetchDemux.io.in.ready || prefetchHit
-  io.mem_acquire              <> acquireArb.io.out
   acquireArb.io.in.last       <> prefetchArb.io.out
+
+  // mem_acquire connect
+  io.mem_acquire.valid        := acquireArb.io.out.valid
+  io.mem_acquire.bits         := acquireArb.io.out.bits.acquire
+  acquireArb.io.out.ready     := io.mem_acquire.ready
 
   val fetchMSHRs = (0 until nFetchMshr).map { i =>
     val mshr = Module(new ICacheMSHR(edge, true, i))
@@ -257,6 +274,7 @@ class ICacheMissUnit(edge: TLEdgeOut)(implicit p: Parameters) extends ICacheMiss
     mshr.io.lookUps(0).info.bits  := io.fetch_req.bits
     mshr.io.lookUps(1).info.valid := io.prefetch_req.valid
     mshr.io.lookUps(1).info.bits  := io.prefetch_req.bits
+    mshr.io.victimWay             := io.victim.way
     acquireArb.io.in(i) <> mshr.io.acquire
     mshr
   }
@@ -270,6 +288,7 @@ class ICacheMissUnit(edge: TLEdgeOut)(implicit p: Parameters) extends ICacheMiss
     mshr.io.lookUps(0).info.bits  := io.fetch_req.bits
     mshr.io.lookUps(1).info.valid := io.prefetch_req.valid
     mshr.io.lookUps(1).info.bits  := io.prefetch_req.bits
+    mshr.io.victimWay             := io.victim.way
     prefetchArb.io.in(i) <> mshr.io.acquire
     mshr
   }
@@ -352,11 +371,12 @@ class ICacheMissUnit(edge: TLEdgeOut)(implicit p: Parameters) extends ICacheMiss
   val allMSHRs_resp = VecInit(allMSHRs.map(mshr => mshr.io.resp))
   val mshr_resp = allMSHRs_resp(id_r)
 
-  // get waymask from replacer
-  val write_sram_valid = mshr_resp.valid && last_fire_r && !io.flush && !io.fencei && !corrupt_r
-  io.victim.vSetIdx.valid := write_sram_valid
-  io.victim.vSetIdx.bits  := mshr_resp.bits.vSetIdx
-  val waymask = UIntToOH(io.victim.way)
+  // get waymask from replacer when acquire fire
+  io.victim.vSetIdx.valid := acquireArb.io.out.valid
+  io.victim.vSetIdx.bits  := acquireArb.io.out.bits.vSetIdx
+  val waymask = UIntToOH(mshr_resp.bits.waymask)
+  val fetch_resp_valid = mshr_resp.valid && last_fire_r && !io.flush && !io.fencei
+  val write_sram_valid = fetch_resp_valid && !corrupt_r
 
   // write SRAM
   io.meta_write.bits.generate(tag     = getPhyTagFromBlk(mshr_resp.bits.blkPaddr),
@@ -367,12 +387,12 @@ class ICacheMissUnit(edge: TLEdgeOut)(implicit p: Parameters) extends ICacheMiss
                               idx     = mshr_resp.bits.vSetIdx,
                               waymask = waymask,
                               bankIdx = mshr_resp.bits.vSetIdx(0))
-   
+
   io.meta_write.valid := write_sram_valid
   io.data_write.valid := write_sram_valid
 
   // response fetch
-  io.fetch_resp.valid         := mshr_resp.valid && last_fire_r && !io.flush && !io.fencei
+  io.fetch_resp.valid         := fetch_resp_valid
   io.fetch_resp.bits.blkPaddr := mshr_resp.bits.blkPaddr
   io.fetch_resp.bits.vSetIdx  := mshr_resp.bits.vSetIdx
   io.fetch_resp.bits.waymask  := waymask
