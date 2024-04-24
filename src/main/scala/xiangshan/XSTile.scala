@@ -23,7 +23,6 @@ import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.interrupts._
 import freechips.rocketchip.tile.{BusErrorUnit, BusErrorUnitParams, BusErrors}
 import freechips.rocketchip.tilelink._
-import coupledL2.{CoupledL2, L2ParamKey}
 import device.MsiInfoBundle
 import freechips.rocketchip.amba.axi4._
 import system.HasSoCParameter
