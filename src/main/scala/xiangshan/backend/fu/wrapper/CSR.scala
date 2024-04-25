@@ -81,7 +81,7 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
   csrMod.io.fromRob.trap.valid := csrIn.exception.valid
   csrMod.io.fromRob.trap.bits.pc := csrIn.exception.bits.pc
   csrMod.io.fromRob.trap.bits.instr := csrIn.exception.bits.instr
-  csrMod.io.fromRob.trap.bits.trapVec := csrIn.exception.bits.exceptionVec
+  csrMod.io.fromRob.trap.bits.trapVec := csrIn.exception.bits.exceptionVec.asUInt
   csrMod.io.fromRob.trap.bits.singleStep := csrIn.exception.bits.singleStep
   csrMod.io.fromRob.trap.bits.crossPageIPFFix := csrIn.exception.bits.crossPageIPFFix
   csrMod.io.fromRob.trap.bits.isInterrupt := csrIn.exception.bits.isInterrupt
