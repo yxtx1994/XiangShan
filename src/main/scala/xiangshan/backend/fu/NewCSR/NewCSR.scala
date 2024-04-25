@@ -83,8 +83,6 @@ class NewCSR(implicit val p: Parameters) extends Module
     val sret = Input(Bool())
     val dret = Input(Bool())
     val wfi  = Input(Bool())
-    // debug interrupt
-    val debug = Input(Bool())
 
     val out = Output(new Bundle {
       val EX_II = Bool()
@@ -304,12 +302,7 @@ class NewCSR(implicit val p: Parameters) extends Module
     }
     mod match {
       case m: HasExternalInterruptBundle =>
-        m.platformIRP.MEIP := platformIRP.MEIP
-        m.platformIRP.MTIP := platformIRP.MTIP
-        m.platformIRP.MSIP := platformIRP.MSIP
-        m.platformIRP.SEIP := platformIRP.SEIP
-        m.platformIRP.VSEIP := false.B // Todo
-        m.platformIRP.VSTIP := false.B // Todo
+        m.platformIRP := platformIRP
       case _ =>
     }
     mod match {
@@ -490,7 +483,7 @@ class NewCSR(implicit val p: Parameters) extends Module
   val debugIntrEnable = RegInit(true.B) // debug interrupt will be handle only when debugIntrEnable
   debugMode := dretEvent.out.debugMode
   debugIntrEnable := dretEvent.out.debugIntrEnable
-  val debugIntr =  io.debug & debugIntrEnable
+  val debugIntr = platformIRP.debug && debugIntrEnable
 
   // fence
   // csr access check, special case

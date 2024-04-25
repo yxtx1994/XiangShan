@@ -400,6 +400,8 @@ trait HasExternalInterruptBundle {
     val SEIP  = Input(Bool())
     val VSEIP = Input(Bool())
     val VSTIP = Input(Bool())
+    // debug interrupt from debug module
+    val debug = Input(Bool())
   })
 }
 
