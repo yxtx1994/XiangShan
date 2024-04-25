@@ -210,6 +210,11 @@ class NewCSR(implicit val p: Parameters) extends Module
   val entryPrivState = trapHandleMod.io.out.entryPrivState
 
     // interrupt
+  val iprioMod = Module(new IprioModule)
+  iprioMod.io.in.miselect := miselect.rdata.asUInt
+  iprioMod.io.in.siselect := siselect.rdata.asUInt
+  iprioMod.io.in.vsiselect := vsiselect.rdata.asUInt
+
   val intrMod = Module(new InterruptFilter)
   intrMod.io.in.mstatusMIE := mstatus.rdata.MIE.asBool
   intrMod.io.in.sstatusSIE := mstatus.rdata.SIE.asBool
@@ -222,7 +227,14 @@ class NewCSR(implicit val p: Parameters) extends Module
   intrMod.io.in.hip := hip.rdata.asUInt
   intrMod.io.in.hie := hie.rdata.asUInt
   intrMod.io.in.hideleg := hideleg.rdata.asUInt
-  intrMod.io.in.iprios := 1.U
+  intrMod.io.in.hvictl := hvictl.rdata.asUInt
+  intrMod.io.in.hstatus := hstatus.rdata.asUInt
+  intrMod.io.in.mtopei := mtopei.rdata.asUInt
+  intrMod.io.in.stopei := stopei.rdata.asUInt
+  intrMod.io.in.vstopei := vstopei.rdata.asUInt
+  intrMod.io.in.hviprio1 := hviprio1.rdata.asUInt
+  intrMod.io.in.hviprio2 := hviprio2.rdata.asUInt
+  intrMod.io.in.iprios := iprioMod.io.out.iprios
   // val disableInterrupt = debugMode || (dcsr.rdata.STEP.asBool && !dcsr.rdata.STEPIE.asBool)
   // val intrVec = Cat(debugIntr && !debugMode, mie.rdata.asUInt(11, 0) & mip.rdata.asUInt & intrVecEnable.asUInt) // Todo: asUInt(11,0) is ok?
 
@@ -342,12 +354,16 @@ class NewCSR(implicit val p: Parameters) extends Module
     }
     mod match {
       case m: HasInterruptFilterBundle =>
-        m.topIn.mtopi.valid  := intrMod.io.out.mtopi.valid
-        m.topIn.stopi.valid  := intrMod.io.out.stopi.valid
-        m.topIn.vstopi.valid := intrMod.io.out.vstopi.valid
-        m.topIn.mtopi.bits   := intrMod.io.out.mtopi.bits
-        m.topIn.stopi.bits   := intrMod.io.out.stopi.bits
-        m.topIn.vstopi.bits  := intrMod.io.out.vstopi.bits
+        m.mtopi  := intrMod.io.out.mtopi
+        m.stopi  := intrMod.io.out.stopi
+        m.vstopi := intrMod.io.out.vstopi
+      case _ =>
+    }
+    mod match {
+      case m: HasISelectBundle =>
+        m.miselect := miselect.regOut
+        m.siselect := siselect.regOut
+        m.vsiselect := vsiselect.regOut
       case _ =>
     }
   }
@@ -518,6 +534,7 @@ class NewCSR(implicit val p: Parameters) extends Module
   io.out.wfi_event := debugIntr || (mie.rdata.asUInt(11, 0) & mip.rdata.asUInt).orR
   io.out.debugMode := debugMode
   io.out.disableSfence := tvmNotPermit || PRVM === PrivMode.U
+  io.out.singleStepFlag := dcsr.rdata.STEP.asBool && !debugMode
 
   // Todo: record the last address to avoid xireg is different with xiselect
   toAIA.addr.valid := isCSRAccess && Seq(miselect, siselect, vsiselect).map(
