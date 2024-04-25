@@ -11,11 +11,6 @@ trait CSRAIA { self: NewCSR with HypervisorLevel =>
   val miselect = Module(new CSRModule("Miselevt", new MISelectBundle))
     .setAddr(0x350)
 
-  val iprios: Seq[CSRModule[_]] = Range(0, 0xF, 2).map(num =>
-    Module(new CSRModule(s"Iprio$num"))
-    .setAddr(0x30 + num)
-  )
-
   val mireg = Module(new CSRModule("Mireg"))
     .setAddr(0x351)
 
@@ -26,10 +21,8 @@ trait CSRAIA { self: NewCSR with HypervisorLevel =>
     .setAddr(0x35C)
 
   val mtopi = Module(new CSRModule("Mtopi", new TopIBundle) with HasInterruptFilterBundle {
-    when (topIn.mtopi.valid) {
-      rdata.IID := topIn.mtopi.bits.IID
-      rdata.IPRIO := topIn.mtopi.bits.IPRIO
-    }
+    rdata.IID := topIn.mtopi.IID
+    rdata.IPRIO := topIn.mtopi.IPRIO
   })
     .setAddr(0xFB0)
 
@@ -46,10 +39,8 @@ trait CSRAIA { self: NewCSR with HypervisorLevel =>
     .setAddr(0x15C)
 
   val stopi = Module(new CSRModule("Stopi", new TopIBundle) with HasInterruptFilterBundle {
-    when(topIn.stopi.valid) {
-      rdata.IID := topIn.stopi.bits.IID
-      rdata.IPRIO := topIn.stopi.bits.IPRIO
-    }
+    rdata.IID := topIn.stopi.IID
+    rdata.IPRIO := topIn.stopi.IPRIO
   })
     .setAddr(0xDB0)
 
@@ -66,9 +57,7 @@ trait CSRAIA { self: NewCSR with HypervisorLevel =>
     .setAddr(0x25C)
 
   val vstopi = Module(new CSRModule("VStopi", new TopIBundle) with HasInterruptFilterBundle {
-    when(topIn.vstopi.valid) {
-      rdata := topIn.vstopi.bits
-    }
+    rdata := topIn.vstopi
   })
     .setAddr(0xEB0)
 
@@ -96,7 +85,7 @@ trait CSRAIA { self: NewCSR with HypervisorLevel =>
   )
 }
 
-class ISelectField(final val maxValue: Int, reserved: Seq[Range], majorInterrupt: Seq[Range]) extends CSREnum with WARLApply {
+class ISelectField(final val maxValue: Int, reserved: Seq[Range]) extends CSREnum with WARLApply {
   override def isLegal(enum: CSREnumType): Bool = {
     !reserved.map(range => enum.asUInt >= range.start.U && enum.asUInt <= range.end.U).reduce(_ || _)
   }
@@ -109,8 +98,6 @@ object VSISelectField extends ISelectField(
     Range.inclusive(0x040, 0x06F),
     Range.inclusive(0x100, 0x1FF),
   ),
-  majorInterrupt = Seq( // todo: vs
-  )
 )
 
 object MISelectField extends ISelectField(
@@ -118,9 +105,6 @@ object MISelectField extends ISelectField(
   reserved = Seq(
     Range.inclusive(0x00, 0x2F),
     Range.inclusive(0x40, 0x6F),
-  ),
-  majorInterrupt = Seq(
-    Range.inclusive(0x30, 0x3E, 2),
   ),
 )
 
@@ -130,9 +114,6 @@ object SISelectField extends ISelectField(
     Range.inclusive(0x00, 0x2F),
     Range.inclusive(0x40, 0x6F),
   ),
-  majorInterrupt = Seq(
-    Range.inclusive(0x30, 0x3E, 2)
-  )
 )
 
 class VSISelectBundle extends CSRBundle {
@@ -193,8 +174,14 @@ trait HasAIABundle { self: CSRModule[_] =>
 
 trait HasInterruptFilterBundle { self: CSRModule[_] =>
   val topIn = IO(new Bundle {
-    val mtopi = Input(ValidIO(new TopIBundle))
-    val stopi = Input(ValidIO(new TopIBundle))
-    val vstopi = Input(ValidIO(new TopIBundle))
+    val mtopi = Input(new TopIBundle)
+    val stopi = Input(new TopIBundle)
+    val vstopi = Input(new TopIBundle)
   })
+}
+
+trait HasISelectBundle { self: CSRModule[_] =>
+  val miselect = IO(Input(new MISelectBundle))
+  val siselect = IO(Input(new SISelectBundle))
+  val vsiselect = IO(Input(new VSISelectBundle))
 }
