@@ -927,7 +927,6 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   val ftq_redirect_rdata = Wire(Vec(FtqRedirectAheadNum, new Ftq_Redirect_SRAMEntry))
   val ftb_redirect_rdata = Wire(Vec(FtqRedirectAheadNum, new FTBEntry_FtqMem))
   for (i <- redirectReadStart until FtqRedirectAheadNum) {
-<<<<<<< HEAD
     ftq_redirect_mem.io.ren.get(i + redirectReadStart) := ftqIdxAhead(i).valid
     ftq_redirect_mem.io.raddr(i + redirectReadStart) := ftqIdxAhead(i).bits.value
     ftb_entry_mem.io.ren.get(i + redirectReadStart) := ftqIdxAhead(i).valid
@@ -937,19 +936,6 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   ftq_redirect_mem.io.raddr(redirectReadStart) := Mux(aheadValid, ftqIdxAhead(0).bits.value, backendRedirect.bits.ftqIdx.value)
   ftb_entry_mem.io.ren.get(redirectReadStart) := Mux(aheadValid, ftqIdxAhead(0).valid, backendRedirect.valid)
   ftb_entry_mem.io.raddr(redirectReadStart) := Mux(aheadValid, ftqIdxAhead(0).bits.value, backendRedirect.bits.ftqIdx.value)
-=======
-    ftq_redirect_sram.io.ren(i + redirectReadStart)   := ftqIdxAhead(i).valid
-    ftq_redirect_sram.io.raddr(i + redirectReadStart) := ftqIdxAhead(i).bits.value
-    ftb_entry_mem.io.ren.get(i + redirectReadStart)   := ftqIdxAhead(i).valid
-    ftb_entry_mem.io.raddr(i + redirectReadStart)     := ftqIdxAhead(i).bits.value
-  }
-  ftq_redirect_sram.io.ren(redirectReadStart)   := Mux(aheadValid, ftqIdxAhead(0).valid,      backendRedirect.valid)
-  ftq_redirect_sram.io.raddr(redirectReadStart) := Mux(aheadValid, ftqIdxAhead(0).bits.value,
-                                                        backendRedirect.bits.ftqIdx.value)
-  ftb_entry_mem.io.ren.get(redirectReadStart)   := Mux(aheadValid, ftqIdxAhead(0).valid,      backendRedirect.valid)
-  ftb_entry_mem.io.raddr(redirectReadStart)     := Mux(aheadValid, ftqIdxAhead(0).bits.value,
-                                                        backendRedirect.bits.ftqIdx.value)
->>>>>>> master
 
   for (i <- 0 until FtqRedirectAheadNum) {
     ftq_redirect_rdata(i) := ftq_redirect_mem.io.rdata(i + redirectReadStart)
@@ -1007,13 +993,8 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   val ifuRedirectToBpu = WireInit(ifuRedirectReg)
   ifuFlush := fromIfuRedirect.valid || ifuRedirectToBpu.valid
 
-<<<<<<< HEAD
   ftq_redirect_mem.io.ren.get.head := fromIfuRedirect.valid
   ftq_redirect_mem.io.raddr.head := fromIfuRedirect.bits.ftqIdx.value
-=======
-  ftq_redirect_sram.io.ren.head   := fromIfuRedirect.valid
-  ftq_redirect_sram.io.raddr.head := fromIfuRedirect.bits.ftqIdx.value
->>>>>>> master
 
   val toBpuCfi = ifuRedirectToBpu.bits.cfiUpdate
   toBpuCfi.fromFtqRedirectSram(ftq_redirect_mem.io.rdata.head)
@@ -1219,12 +1200,8 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   //      s === c_invalid || s === c_commited
   //    })).andR
   canCommit := commPtr =/= ifuWbPtr && !may_have_stall_from_bpu &&
-<<<<<<< HEAD
-    (isAfter(robCommPtr, commPtr) || PriorityMuxDefault(notInvalidSeq.zip(commitStateQueueReg(commPtr.value).reverse), c_invalid) === c_commited)
-=======
     (isAfter(robCommPtr, commPtr) ||
       PriorityMuxDefault(notInvalidSeq.zip(commitStateQueueReg(commPtr.value).reverse), c_invalid) === c_commited)
->>>>>>> master
 
   val mmioReadPtr = io.mmioCommitRead.mmioFtqPtr
   val mmioLastCommit = isBefore(commPtr, mmioReadPtr) && (isAfter(ifuPtr,mmioReadPtr)  ||  mmioReadPtr ===   ifuPtr) &&
@@ -1245,15 +1222,10 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   val commit_spec_meta = ftq_redirect_mem.io.rdata.last
   ftq_meta_1r_sram.io.ren(0) := canCommit
   ftq_meta_1r_sram.io.raddr(0) := commPtr.value
-<<<<<<< HEAD
-  val commit_meta = ftq_meta_1r_sram.io.rdata(0).meta
-  val commit_ftb_entry = ftq_meta_1r_sram.io.rdata(0).ftb_entry
-=======
   val commit_meta = ftq_meta_1r_sram.io.rdata(0)
   ftb_entry_mem.io.ren.get.last := canCommit
   ftb_entry_mem.io.raddr.last := commPtr.value
   val commit_ftb_entry = ftb_entry_mem.io.rdata.last
->>>>>>> master
 
   // need one cycle to read mem and srams
   val do_commit_ptr = RegEnable(commPtr, canCommit)
