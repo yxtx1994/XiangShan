@@ -71,8 +71,6 @@ class RobCSRIO(implicit p: Parameters) extends XSBundle {
   val perfinfo   = new Bundle {
     val retiredInstr = Output(UInt(3.W))
   }
-
-  val vcsrFlag   = Output(Bool())
 }
 
 class RobLsqIO(implicit p: Parameters) extends XSBundle {
@@ -903,16 +901,6 @@ class RobImp(override val wrapper: Rob)(implicit p: Parameters, params: BackendP
   io.csr.fflags := RegNext(fflags)
   io.csr.dirty_fs := RegNext(dirty_fs)
   io.csr.vxsat := RegNext(vxsat)
-
-  // sync v csr to csr
-  // for difftest
-  if(env.AlwaysBasicDiff || env.EnableDifftest) {
-    val isDiffWriteVconfigVec = io.diffCommits.get.commitValid.zip(io.diffCommits.get.info).map { case (valid, info) => valid && info.ldest === VCONFIG_IDX.U && info.vecWen }.reverse
-    io.csr.vcsrFlag := RegNext(io.diffCommits.get.isCommit && Cat(isDiffWriteVconfigVec).orR)
-  }
-  else{
-    io.csr.vcsrFlag := false.B
-  }
 
   // commit load/store to lsq
   val ldCommitVec = VecInit((0 until CommitWidth).map(i => io.commits.commitValid(i) && io.commits.info(i).commitType === CommitType.LOAD))
