@@ -2,15 +2,18 @@ package xiangshan.backend.fu.NewCSR
 
 import chisel3._
 import chisel3.util._
+import difftest._
+import freechips.rocketchip.rocket.CSRs
 import org.chipsalliance.cde.config.Parameters
 import top.{ArgParser, Generator}
+import utility.{SignExt, ZeroExt}
+import utils.OptionWrapper
 import xiangshan.backend.fu.NewCSR.CSRBundles.{CSRCustomState, PrivState, RobCommitCSR}
-import xiangshan.backend.fu.NewCSR.CSRDefines.{ContextStatus, PrivMode, VirtMode}
+import xiangshan.backend.fu.NewCSR.CSRDefines.{ContextStatus, PrivMode, SatpMode, VirtMode}
 import xiangshan.backend.fu.NewCSR.CSREvents.{CSREvents, DretEventSinkBundle, EventUpdatePrivStateOutput, MretEventSinkBundle, SretEventSinkBundle, TrapEntryEventInput, TrapEntryHSEventSinkBundle, TrapEntryMEventSinkBundle, TrapEntryVSEventSinkBundle}
 import xiangshan.backend.fu.fpu.Bundles.Frm
 import xiangshan.backend.fu.vector.Bundles.{Vl, Vstart, Vxrm, Vxsat}
-import xiangshan.{XSCoreParamsKey, XSTileKey}
-import freechips.rocketchip.rocket.CSRs
+import xiangshan.{HasXSParameter, XSCoreParamsKey, XSTileKey}
 
 object CSRConfig {
   final val GEILEN = 63
@@ -52,6 +55,7 @@ class NewCSR(implicit val p: Parameters) extends Module
   with CSREvents
   with DebugLevel
   with CSRCustom
+  with HasXSParameter
 {
 
   import CSRConfig._
@@ -129,6 +133,9 @@ class NewCSR(implicit val p: Parameters) extends Module
       val imode = UInt(2.W)
       val dmode = UInt(2.W)
     })
+    val inSimOnly = OptionWrapper(env.AlwaysBasicDiff || env.EnableDifftest, Input(new Bundle {
+      val hartId = UInt(8.W)
+    }))
   })
 
   val toAIA   = IO(Output(new CSRToAIABundle))
@@ -154,6 +161,9 @@ class NewCSR(implicit val p: Parameters) extends Module
   val PRVM = RegInit(PrivMode(0), PrivMode.M)
   val V = RegInit(VirtMode(0), VirtMode.Off)
   val debugMode = RegInit(false.B)
+  private val privState = Wire(new PrivState)
+  privState.PRVM := PRVM
+  privState.V := V
 
   val permitMod = Module(new CSRPermitModule)
 
@@ -616,6 +626,69 @@ class NewCSR(implicit val p: Parameters) extends Module
   io.tlb.imode := PRVM.asUInt
   io.tlb.dmode := Mux((debugMode && dcsr.rdata.MPRVEN.asBool || !debugMode) && mstatus.rdata.MPRV.asBool, mstatus.rdata.MPP.asUInt, PRVM.asUInt)
 
+
+  // Always instantiate basic difftest modules.
+  if (env.AlwaysBasicDiff || env.EnableDifftest) {
+    val hartId = io.inSimOnly.get.hartId
+    val trapValid = io.fromRob.trap.valid
+    val trapNO = trapHandleMod.io.out.causeNO.ExceptionCode.asUInt
+    val interrupt = trapHandleMod.io.out.causeNO.Interrupt.asBool
+    val interruptNO = Mux(interrupt, trapNO, 0.U)
+    val exceptionNO = Mux(!interrupt, trapNO, 0.U)
+    val ivmHS = privState.isModeHS && satp.rdata.MODE =/= SatpMode.Bare
+    val ivmVS = privState.isModeVS && vsatp.rdata.MODE =/= SatpMode.Bare
+    // When enable virtual memory, the higher bit should fill with the msb of address of Sv39/Sv48/Sv57
+    val exceptionPC = Mux(ivmHS || ivmVS, SignExt(trapPC, XLEN), ZeroExt(trapPC, XLEN))
+
+    val diffArchEvent = DifftestModule(new DiffArchEvent, delay = 3, dontCare = true)
+    diffArchEvent.coreid := hartId
+    diffArchEvent.valid := trapValid
+    diffArchEvent.interrupt := interruptNO
+    diffArchEvent.exception := exceptionNO
+    diffArchEvent.exceptionPC := exceptionPC
+    if (env.EnableDifftest) {
+      diffArchEvent.exceptionInst := io.fromRob.trap.bits.instr
+    }
+
+    val diffCSRState = DifftestModule(new DiffCSRState)
+    diffCSRState.coreid         := hartId
+    diffCSRState.priviledgeMode := privState.PRVM.asUInt
+    diffCSRState.mstatus        := mstatus.rdata.asUInt
+    diffCSRState.sstatus        := mstatus.sstatus.asUInt
+    diffCSRState.mepc           := mepc.rdata.asUInt
+    diffCSRState.sepc           := sepc.rdata.asUInt
+    diffCSRState.mtval          := mtval.rdata.asUInt
+    diffCSRState.stval          := stval.rdata.asUInt
+    diffCSRState.mtvec          := mtvec.rdata.asUInt
+    diffCSRState.stvec          := stvec.rdata.asUInt
+    diffCSRState.mcause         := mcause.rdata.asUInt
+    diffCSRState.scause         := scause.rdata.asUInt
+    diffCSRState.satp           := satp.rdata.asUInt
+    diffCSRState.mip            := mip.regOut.asUInt
+    diffCSRState.mie            := mie.rdata.asUInt
+    diffCSRState.mscratch       := mscratch.rdata.asUInt
+    diffCSRState.sscratch       := sscratch.rdata.asUInt
+    diffCSRState.mideleg        := mideleg.rdata.asUInt
+    diffCSRState.medeleg        := medeleg.rdata.asUInt
+
+    val diffDebugMode = DifftestModule(new DiffDebugMode)
+    diffDebugMode.coreid    := hartId
+    diffDebugMode.debugMode := debugMode
+    diffDebugMode.dcsr      := dcsr.rdata.asUInt
+    diffDebugMode.dpc       := dpc.rdata.asUInt
+    diffDebugMode.dscratch0 := dscratch0.rdata.asUInt
+    diffDebugMode.dscratch1 := dscratch1.rdata.asUInt
+
+    val diffVecCSRState = DifftestModule(new DiffVecCSRState)
+    diffVecCSRState.coreid := hartId
+    diffVecCSRState.vstart := vstart.rdata.asUInt
+    diffVecCSRState.vxsat := vcsr.vxsat.asUInt
+    diffVecCSRState.vxrm := vcsr.vxrm.asUInt
+    diffVecCSRState.vcsr := vcsr.rdata.asUInt
+    diffVecCSRState.vl := vl.rdata.asUInt
+    diffVecCSRState.vtype := vtype.rdata.asUInt
+    diffVecCSRState.vlenb := vlenb.rdata.asUInt
+  }
 }
 
 trait SupervisorMachineAliasConnect { self: NewCSR with MachineLevel with SupervisorLevel =>

@@ -119,6 +119,8 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
   csrMod.platformIRP.VSTIP := false.B // Todo
   csrMod.platformIRP.debug := csrIn.externalInterrupt.debug
 
+  csrMod.io.inSimOnly.foreach(_.hartId := io.csrin.get.hartId)
+
   private val imsic = Module(new IMSIC)
   imsic.i.hartId := io.csrin.get.hartId
   imsic.i.setIpNumValidVec2 := io.csrin.get.setIpNumValidVec2
