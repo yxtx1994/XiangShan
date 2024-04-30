@@ -23,7 +23,8 @@ import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.interrupts._
 import freechips.rocketchip.tile.{BusErrorUnit, BusErrorUnitParams, BusErrors}
 import freechips.rocketchip.tilelink._
-import coupledL2.{L2ParamKey, CoupledL2}
+import coupledL2.{CoupledL2, L2ParamKey}
+import device.MsiInfoBundle
 import system.HasSoCParameter
 import top.BusPerfMonitor
 import utility.{DelayN, ResetGen, TLClientsMerger, TLEdgeBuffer, TLLogger}
@@ -91,8 +92,7 @@ class XSTile()(implicit p: Parameters) extends LazyModule
   class XSTileImp(wrapper: LazyModule) extends LazyModuleImp(wrapper) {
     val io = IO(new Bundle {
       val hartId = Input(UInt(64.W))
-      val setIpNumValidVec2 = Input(UInt(SetIpNumValidSize.W))
-      val setIpNum = Input(UInt(log2Up(NumIRSrc).W))
+      val msiInfo = Input(ValidIO(new MsiInfoBundle))
       val reset_vector = Input(UInt(PAddrBits.W))
       val cpu_halt = Output(Bool())
       val debugTopDown = new Bundle {
@@ -102,16 +102,14 @@ class XSTile()(implicit p: Parameters) extends LazyModule
     })
 
     dontTouch(io.hartId)
-    dontTouch(io.setIpNumValidVec2)
-    dontTouch(io.setIpNum)
+    dontTouch(io.msiInfo)
 
     val core_soft_rst = core_reset_sink.in.head._1 // unused
 
     l2top.module.hartId.fromTile := io.hartId
     core.module.io.hartId := l2top.module.hartId.toCore
     core.module.io.reset_vector := l2top.module.reset_vector.toCore
-    core.module.io.setIpNumValidVec2 := io.setIpNumValidVec2
-    core.module.io.setIpNum := io.setIpNum
+    core.module.io.msiInfo := io.msiInfo
     l2top.module.reset_vector.fromTile := io.reset_vector
     l2top.module.cpu_halt.fromCore := core.module.io.cpu_halt
     io.cpu_halt := l2top.module.cpu_halt.toTile
