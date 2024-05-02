@@ -67,8 +67,8 @@ class CSRModule[T <: CSRBundle](
     }
   }
 
-  def dumpFields = {
-    this.bundle.getFields.mkString("\n")
+  def dumpFields: String = {
+    this.reg.getFields.map(_.dumpName).mkString("\n")
   }
 
   var addr = 0

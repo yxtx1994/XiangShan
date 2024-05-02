@@ -91,5 +91,6 @@ object NewCSRMain extends App {
     new NewCSR,
     firtoolOpts
   )
+
   println("done")
 }
