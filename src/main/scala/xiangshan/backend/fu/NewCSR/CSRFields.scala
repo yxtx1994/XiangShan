@@ -174,8 +174,8 @@ class CSREnumType(
     this := this.factory(that)
   }
 
-  override def toString(): String = {
-    s"${rwType} [$msb, $lsb] reset($init)"
+  def dumpName = {
+    s"${chisel3.reflect.DataMirror.queryNameGuess(this)} ${rwType} [$msb, $lsb] reset($init)"
   }
 }
 
