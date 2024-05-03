@@ -27,7 +27,7 @@ import device._
 import org.chipsalliance.cde.config._
 import freechips.rocketchip.amba.axi4._
 import freechips.rocketchip.devices.debug._
-import freechips.rocketchip.devices.tilelink._
+import freechips.rocketchip.devices.tilelink.{PLICConsts, _}
 import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.interrupts._
 import freechips.rocketchip.jtag._
@@ -70,6 +70,7 @@ class XSNocTop()(implicit p: Parameters) extends LazyModule
 
   val l3_xbar = TLXbar()
   val clint_xbar = TLXbar()
+  val plic_xbar = TLXbar()
   val debugModule_xbar = TLXbar()
 
   val clintErrorDevice = LazyModule(new TLError(
@@ -100,6 +101,47 @@ class XSNocTop()(implicit p: Parameters) extends LazyModule
     clintNode
   val clintIO = InModuleBody {
     clintNode.makeIOs()
+  }
+
+  class IntSourceNodeToModule(val num: Int)(implicit p: Parameters) extends LazyModule {
+    val sourceNode = IntSourceNode(IntSourcePortSimple(num, ports = 1, sources = 1))
+    class IntSourceNodeToModuleImp(wrapper: LazyModule) extends LazyModuleImp(wrapper) {
+      val in = IO(Input(Vec(num, Bool())))
+      in.zip(sourceNode.out.head._1).foreach{ case (i, s) => s := i }
+    }
+    lazy val module = new IntSourceNodeToModuleImp(this)
+  }
+  val plicErrorDevice = LazyModule(new TLError(
+    params = DevNullParams(
+      address = AddressSet(0x0, 0xfffffffffL).subtract(AddressSet(0x3c000000L, PLICConsts.size(PLICConsts.maxMaxHarts) - 1)),
+      maxAtomic = 8,
+      maxTransfer = 64),
+    beatBytes = 8
+  ))
+  val plic = LazyModule(new TLPLIC(PLICParams(0x3c000000L), 8))
+  val plicSource = LazyModule(new IntSourceNodeToModule(NrExtIntr))
+  val plicNode = AXI4MasterNode(Seq(AXI4MasterPortParameters(
+    Seq(AXI4MasterParameters(
+      name = "plic",
+      id = IdRange(0, 1 << idBits)
+    ))
+  )))
+
+  plic.intnode := plicSource.sourceNode
+  plic.node := TLBuffer() := plic_xbar
+  plicErrorDevice.node := TLBuffer() := plic_xbar
+  plic_xbar :=
+    TLFIFOFixer() :=
+    TLWidthWidget(8) :=
+    AXI4ToTL() :=
+    AXI4UserYanker(Some(1)) :=
+    AXI4Fragmenter() :=
+    AXI4Buffer() :=
+    AXI4Buffer() :=
+    AXI4IdIndexer(1) :=
+    plicNode
+  val plicIO = InModuleBody {
+    plicNode.makeIOs()
   }
 
   val debugModuleErrorDevice = LazyModule(new TLError(
@@ -186,20 +228,11 @@ class XSNocTop()(implicit p: Parameters) extends LazyModule
     case None => None
   }
 
-  val fakePlicIntNode: IntNexusNode = IntNexusNode(
-    sourceFn = { _ => IntSourcePortParameters(Seq(IntSourceParameters(1))) },
-    sinkFn   = { _ => IntSinkPortParameters(Seq(IntSinkParameters())) },
-    outputRequiresInput = false,
-    inputRequiresOutput = false)
   for (i <- 0 until NumCores) {
     core_with_l2(i).clint_int_node := clint.intnode
-    core_with_l2(i).plic_int_node :*= fakePlicIntNode
+    core_with_l2(i).plic_int_node :*= plic.intnode
     core_with_l2(i).debug_int_node := debugModule.debug.dmOuter.dmOuter.intnode
-    val intNode = IntSinkNode(IntSinkPortSimple(1, 1))
-    intNode := IntBuffer() := core_with_l2(i).beu_int_source
-    val beu_int_source = InModuleBody {
-      intNode.makeIOs()
-    }
+    plic.intnode := IntBuffer() := core_with_l2(i).beu_int_source
     memblock_pf_recv_nodes(i).map(recv => {
       println(s"Connecting Core_${i}'s L1 pf source to L3!")
       recv := core_with_l2(i).core_l3_pf_port.get
@@ -239,6 +272,15 @@ class XSNocTop()(implicit p: Parameters) extends LazyModule
     val reset_sync = withClockAndReset(io.clock.asClock, io.reset) { ResetGen() }
     val jtag_reset_sync = withClockAndReset(io.systemjtag.jtag.TCK, io.systemjtag.reset) { ResetGen() }
 
+    require(plicSource.module.in.length == io.extIntrs.getWidth)
+    withClockAndReset(plic.module.clock, plic.module.reset) {
+      for ((plic_in, interrupt) <- plicSource.module.in.zip(io.extIntrs.asBools)) {
+        val ext_intr_sync = RegInit(0.U(3.W))
+        ext_intr_sync := Cat(ext_intr_sync(1, 0), interrupt)
+        plic_in := ext_intr_sync(2)
+      }
+    }
+
     // override LazyRawModuleImp's clock and reset
     childClock := io.clock.asClock
     childReset := reset_sync
@@ -272,8 +314,6 @@ class XSNocTop()(implicit p: Parameters) extends LazyModule
       node.out.head._1 := false.B.asAsyncReset
     }
 
-    fakePlicIntNode.out.unzip._1.foreach(_.foreach(_ := false.B))
-
     core_with_l2.foreach(_.module.io.debugTopDown.l3MissMatch := false.B)
 
     debugModule.module.io.resetCtrl.hartIsInReset := core_with_l2.map(_.module.reset.asBool)
@@ -296,7 +336,7 @@ class XSNocTop()(implicit p: Parameters) extends LazyModule
     withClockAndReset(io.clock.asClock, reset_sync) {
       // Modules are reset one by one
       // reset ----> SYNC --> {SoCMisc, L3 Cache, Cores}
-      val resetChain = Seq(Seq(clint.module, errorDevice.module) ++ core_with_l2.map(_.module))
+      val resetChain = Seq(Seq(clint.module, plic.module, errorDevice.module) ++ core_with_l2.map(_.module))
       ResetGen(resetChain, reset_sync, !debugOpts.FPGAPlatform)
     }
 
