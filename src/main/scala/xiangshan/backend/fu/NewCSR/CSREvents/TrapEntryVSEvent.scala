@@ -2,11 +2,12 @@ package xiangshan.backend.fu.NewCSR.CSREvents
 
 import chisel3._
 import chisel3.util._
+import org.chipsalliance.cde.config.Parameters
 import utility.{SignExt, ZeroExt}
-import xiangshan.ExceptionNO
+import xiangshan.{ExceptionNO, HasXSParameter}
 import xiangshan.ExceptionNO._
 import xiangshan.backend.fu.NewCSR.CSRBundles.{CauseBundle, OneFieldBundle, PrivState}
-import xiangshan.backend.fu.NewCSR.CSRConfig.{VaddrWidth, XLEN}
+import xiangshan.backend.fu.NewCSR.CSRConfig.{VaddrMaxWidth, XLEN}
 import xiangshan.backend.fu.NewCSR.CSRDefines.SatpMode
 import xiangshan.backend.fu.NewCSR._
 import xiangshan.backend.fu.util.CSRConst
@@ -29,16 +30,15 @@ class TrapEntryVSEventOutput extends Bundle with EventUpdatePrivStateOutput with
   }
 }
 
-class TrapEntryVSEventInput extends Bundle {
+class TrapEntryVSEventInput(implicit val p: Parameters) extends Bundle with HasXSParameter {
   val vsstatus = Input(new SstatusBundle)
-  val trapPc = Input(UInt(VaddrWidth.W))
+  val trapPc = Input(UInt(VaddrMaxWidth.W))
   val privState = Input(new PrivState)
   val isInterrupt = Input(Bool())
   val trapVec = Input(UInt(64.W))
   val isCrossPageIPF = Input(Bool())
-  val trapMemVaddr = Input(UInt(VaddrWidth.W))
-  val trapMemGPA = Input(UInt(VaddrWidth.W)) // Todo: use guest physical address width
-  val trapMemGVA = Input(UInt(VaddrWidth.W))
+  val memExceptionVAddr = Input(UInt(VAddrBits.W))
+  val memExceptionGPAddr = Input(UInt(GPAddrBits.W))
   // always current privilege
   val iMode = Input(new PrivState())
   // take MRPV into consideration
@@ -46,7 +46,7 @@ class TrapEntryVSEventInput extends Bundle {
   val vsatp = Input(new SatpBundle)
 }
 
-class TrapEntryVSEventModule extends Module with CSREventBase {
+class TrapEntryVSEventModule(implicit val p: Parameters) extends Module with CSREventBase {
   val in = IO(new TrapEntryVSEventInput)
   val out = IO(new TrapEntryVSEventOutput)
 
@@ -57,6 +57,8 @@ class TrapEntryVSEventModule extends Module with CSREventBase {
   private val current = in
 
   private val trapPC = Wire(UInt(XLEN.W))
+  private val trapMemVA = SignExt(in.memExceptionVAddr, XLEN)
+  private val trapMemGPA = SignExt(in.memExceptionGPAddr, XLEN)
   private val ivmVS = !current.iMode.isModeVS && current.vsatp.MODE =/= SatpMode.Bare
   // When enable virtual memory, the higher bit should fill with the msb of address of Sv39/Sv48/Sv57
   trapPC := Mux(ivmVS, SignExt(in.trapPc, XLEN), ZeroExt(in.trapPc, XLEN))
@@ -94,8 +96,8 @@ class TrapEntryVSEventModule extends Module with CSREventBase {
   private val tval = Mux1H(Seq(
     (tvalFillPc                     ) -> trapPC,
     (tvalFillPcPlus2                ) -> (trapPC + 2.U),
-    (tvalFillMemVaddr && !memIsVirt ) -> in.trapMemVaddr,
-    (tvalFillMemVaddr &&  memIsVirt ) -> in.trapMemGVA,
+    (tvalFillMemVaddr && !memIsVirt ) -> trapMemVA,
+    (tvalFillMemVaddr &&  memIsVirt ) -> trapMemVA,
   ))
 
   out := DontCare
