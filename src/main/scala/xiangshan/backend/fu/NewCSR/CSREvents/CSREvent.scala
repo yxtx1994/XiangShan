@@ -2,8 +2,9 @@ package xiangshan.backend.fu.NewCSR.CSREvents
 
 import chisel3._
 import chisel3.util._
+import org.chipsalliance.cde.config.Parameters
 import utility.{SignExt, ZeroExt}
-import xiangshan.ExceptionNO
+import xiangshan.{ExceptionNO, HasXSParameter}
 import xiangshan.ExceptionNO._
 import xiangshan.backend.fu.NewCSR.CSRBundles.{CauseBundle, OneFieldBundle, PrivState}
 import xiangshan.backend.fu.NewCSR.CSRConfig._
@@ -53,9 +54,9 @@ trait CSREventBase {
   val out: Bundle
 }
 
-class TrapEntryEventInput extends Bundle {
+class TrapEntryEventInput(implicit val p: Parameters) extends Bundle with HasXSParameter {
   val causeNO = Input(new CauseBundle)
-  val trapPc = Input(UInt(VaddrWidth.W))
+  val trapPc = Input(UInt(VaddrMaxWidth.W))
   val isCrossPageIPF = Input(Bool())
 
   // always current privilege
@@ -71,7 +72,6 @@ class TrapEntryEventInput extends Bundle {
   val satp = Input(new SatpBundle)
   val vsatp = Input(new SatpBundle)
   // from mem
-  val trapMemVaddr = Input(UInt(VaddrWidth.W))
-  val trapMemGPA = Input(UInt(VaddrWidth.W)) // Todo: use guest physical address width
-  val trapMemGVA = Input(UInt(VaddrWidth.W))
+  val memExceptionVAddr = Input(UInt(VAddrBits.W))
+  val memExceptionGPAddr = Input(UInt(GPAddrBits.W))
 }
