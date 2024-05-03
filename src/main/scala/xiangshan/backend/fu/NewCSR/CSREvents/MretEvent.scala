@@ -6,7 +6,7 @@ import utility.{SignExt, ZeroExt}
 import xiangshan.ExceptionNO
 import xiangshan.ExceptionNO._
 import xiangshan.backend.fu.NewCSR.CSRBundles.{CauseBundle, OneFieldBundle, PrivState}
-import xiangshan.backend.fu.NewCSR.CSRConfig.{VaddrWidth, XLEN}
+import xiangshan.backend.fu.NewCSR.CSRConfig.{VaddrMaxWidth, XLEN}
 import xiangshan.backend.fu.NewCSR.CSRDefines.{PrivMode, SatpMode}
 import xiangshan.backend.fu.NewCSR._
 import xiangshan.backend.fu.util.CSRConst
