@@ -6,7 +6,7 @@ import org.chipsalliance.cde.config.Parameters
 import top.{ArgParser, Generator}
 import xiangshan.{HasXSParameter, XSCoreParamsKey, XSTileKey}
 import xiangshan.backend.fu.NewCSR.CSRDefines.{PrivMode, VirtMode}
-import xiangshan.backend.fu.NewCSR.CSREvents.{CSREvents, EventUpdatePrivStateOutput, MretEventSinkBundle, SretEventSinkBundle, TrapEntryHSEventSinkBundle, TrapEntryMEventSinkBundle, TrapEntryVSEventSinkBundle}
+import xiangshan.backend.fu.NewCSR.CSREvents.{CSREvents, EventUpdatePrivStateOutput, MretEventSinkBundle, SretEventSinkBundle, TrapEntryEventInput, TrapEntryHSEventSinkBundle, TrapEntryMEventSinkBundle, TrapEntryVSEventSinkBundle}
 
 object CSRConfig {
   final val GEILEN = 63
@@ -194,63 +194,32 @@ class NewCSR(implicit val p: Parameters) extends Module
   }
 
   trapEntryMEvent.valid := trapToM
-  trapEntryMEvent.in match {
-    case in =>
-      in.mstatus := mstatus.regOut
-      in.trapPc := io.trap.bits.tpc
-      in.privState.PRVM := PRVM
-      in.privState.V := V
-      in.isInterrupt := io.trap.bits.isInterrupt
-      in.trapVec := io.trap.bits.trapVec
-      in.isCrossPageIPF := io.trap.bits.isCrossPageIPF
-      in.memExceptionVAddr := io.fromMem.excpVA
-      in.memExceptionGPAddr := io.fromMem.excpGPA
-      in.iMode.PRVM := PRVM
-      in.iMode.V := V
-      in.dMode.PRVM := Mux(mstatus.rdata.MPRV.asBool, mstatus.rdata.MPP, PRVM)
-      in.dMode.V := Mux(mstatus.rdata.MPRV.asBool, mstatus.rdata.MPV, V)
-      in.satp := satp.rdata
-      in.vsatp := vsatp.rdata
-  }
-
   trapEntryHSEvent.valid := trapToHS
-  trapEntryHSEvent.in match {
-    case in =>
-      in.sstatus := mstatus.sstatus
-      in.hstatus := hstatus.regOut
+  trapEntryVSEvent.valid := trapToVS
+
+  Seq(trapEntryMEvent, trapEntryHSEvent, trapEntryVSEvent).foreach { mod =>
+    mod.in match { case in: TrapEntryEventInput =>
+      in.causeNO := DontCare
       in.trapPc := io.trap.bits.tpc
-      in.privState.PRVM := PRVM
-      in.privState.V := V
-      in.isInterrupt := io.trap.bits.isInterrupt
-      in.trapVec := io.trap.bits.trapVec
       in.isCrossPageIPF := io.trap.bits.isCrossPageIPF
-      in.memExceptionVAddr := io.fromMem.excpVA
-      in.memExceptionGPAddr := io.fromMem.excpGPA
+
       in.iMode.PRVM := PRVM
       in.iMode.V := V
       in.dMode.PRVM := Mux(mstatus.rdata.MPRV.asBool, mstatus.rdata.MPP, PRVM)
       in.dMode.V := Mux(mstatus.rdata.MPRV.asBool, mstatus.rdata.MPV, V)
+
+      in.privState.PRVM := PRVM
+      in.privState.V := V
+      in.mstatus := mstatus.regOut
+      in.hstatus := hstatus.regOut
+      in.sstatus := mstatus.sstatus
+      in.vsstatus := vsstatus.regOut
       in.satp := satp.rdata
       in.vsatp := vsatp.rdata
-  }
 
-  trapEntryVSEvent.valid := trapToVS
-  trapEntryVSEvent.in match {
-    case in =>
-      in.vsstatus := vsstatus.regOut
-      in.trapPc := io.trap.bits.tpc
-      in.privState.PRVM := PRVM
-      in.privState.V := V
-      in.isInterrupt := io.trap.bits.isInterrupt
-      in.trapVec := io.trap.bits.trapVec
-      in.isCrossPageIPF := io.trap.bits.isCrossPageIPF
       in.memExceptionVAddr := io.fromMem.excpVA
       in.memExceptionGPAddr := io.fromMem.excpGPA
-      in.iMode.PRVM := PRVM
-      in.iMode.V := V
-      in.dMode.PRVM := Mux(mstatus.rdata.MPRV.asBool, mstatus.rdata.MPP, PRVM)
-      in.dMode.V := Mux(mstatus.rdata.MPRV.asBool, mstatus.rdata.MPV, V)
-      in.vsatp := vsatp.rdata
+    }
   }
 
   mretEvent.valid := isMret
