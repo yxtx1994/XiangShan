@@ -2,7 +2,9 @@ package xiangshan.backend.fu.NewCSR
 
 import chisel3._
 import chisel3.util._
+import org.chipsalliance.cde.config.Parameters
 import top.{ArgParser, Generator}
+import xiangshan.{HasXSParameter, XSCoreParamsKey, XSTileKey}
 import xiangshan.backend.fu.NewCSR.CSRDefines.{PrivMode, VirtMode}
 import xiangshan.backend.fu.NewCSR.CSREvents.{CSREvents, EventUpdatePrivStateOutput, MretEventSinkBundle, SretEventSinkBundle, TrapEntryHSEventSinkBundle, TrapEntryMEventSinkBundle, TrapEntryVSEventSinkBundle}
 
@@ -19,12 +21,13 @@ object CSRConfig {
 
   final val VMIDMAX = 14 // the max value of VMIDLEN defined by spec
 
-  final val VaddrWidth = 39 // only Sv39
+  final val VaddrMaxWidth = 41 // only Sv39 and Sv39x4
 
   final val XLEN = 64 // Todo: use XSParams
 }
 
-class NewCSR extends Module
+class NewCSR(implicit val p: Parameters) extends Module
+  with HasXSParameter
   with MachineLevel
   with SupervisorLevel
   with HypervisorLevel
@@ -48,22 +51,21 @@ class NewCSR extends Module
     val trap = Flipped(ValidIO(new Bundle {
       val toPRVM          = PrivMode()
       val toV             = VirtMode()
-      val tpc             = UInt(VaddrWidth.W)
+      val tpc             = UInt(VaddrMaxWidth.W)
       val isInterrupt     = Bool()
       val trapVec         = UInt(64.W)
       val isCrossPageIPF  = Bool()
     }))
     val fromMem = Input(new Bundle {
-      val excpVaddr = UInt(VaddrWidth.W)
-      val excpGVA = UInt(VaddrWidth.W)
-      val excpGPA = UInt(VaddrWidth.W) // Todo: use guest physical address width
+      val excpVA  = UInt(VaddrMaxWidth.W)
+      val excpGPA = UInt(VaddrMaxWidth.W) // Todo: use guest physical address width
     })
     val tret = Flipped(ValidIO(new Bundle {
       val toPRVM = PrivMode()
       val toV = VirtMode()
     }))
     val out = new Bundle {
-      val targetPc = UInt(VaddrWidth.W)
+      val targetPc = UInt(VaddrMaxWidth.W)
     }
   })
 
@@ -190,9 +192,8 @@ class NewCSR extends Module
       in.isInterrupt := io.trap.bits.isInterrupt
       in.trapVec := io.trap.bits.trapVec
       in.isCrossPageIPF := io.trap.bits.isCrossPageIPF
-      in.trapMemVaddr := io.fromMem.excpVaddr
-      in.trapMemGVA := io.fromMem.excpGVA
-      in.trapMemGPA := io.fromMem.excpGPA
+      in.memExceptionVAddr := io.fromMem.excpVA
+      in.memExceptionGPAddr := io.fromMem.excpGPA
       in.iMode.PRVM := PRVM
       in.iMode.V := V
       in.dMode.PRVM := Mux(mstatus.rdata.MPRV.asBool, mstatus.rdata.MPP, PRVM)
@@ -212,9 +213,8 @@ class NewCSR extends Module
       in.isInterrupt := io.trap.bits.isInterrupt
       in.trapVec := io.trap.bits.trapVec
       in.isCrossPageIPF := io.trap.bits.isCrossPageIPF
-      in.trapMemVaddr := io.fromMem.excpVaddr
-      in.trapMemGVA := io.fromMem.excpGVA
-      in.trapMemGPA := io.fromMem.excpGPA
+      in.memExceptionVAddr := io.fromMem.excpVA
+      in.memExceptionGPAddr := io.fromMem.excpGPA
       in.iMode.PRVM := PRVM
       in.iMode.V := V
       in.dMode.PRVM := Mux(mstatus.rdata.MPRV.asBool, mstatus.rdata.MPP, PRVM)
@@ -233,9 +233,8 @@ class NewCSR extends Module
       in.isInterrupt := io.trap.bits.isInterrupt
       in.trapVec := io.trap.bits.trapVec
       in.isCrossPageIPF := io.trap.bits.isCrossPageIPF
-      in.trapMemVaddr := io.fromMem.excpVaddr
-      in.trapMemGVA := io.fromMem.excpGVA
-      in.trapMemGPA := io.fromMem.excpGPA
+      in.memExceptionVAddr := io.fromMem.excpVA
+      in.memExceptionGPAddr := io.fromMem.excpGPA
       in.iMode.PRVM := PRVM
       in.iMode.V := V
       in.dMode.PRVM := Mux(mstatus.rdata.MPRV.asBool, mstatus.rdata.MPP, PRVM)
@@ -295,9 +294,14 @@ object NewCSRMain extends App {
   val (config, firrtlOpts, firtoolOpts) = ArgParser.parse(
     args :+ "--disable-always-basic-diff" :+ "--dump-fir" :+ "--fpga-platform" :+ "--target" :+ "verilog")
 
+  val defaultConfig = config.alterPartial({
+    // Get XSCoreParams and pass it to the "small module"
+    case XSCoreParamsKey => config(XSTileKey).head
+  })
+
   Generator.execute(
     firrtlOpts :+ "--full-stacktrace" :+ "--target-dir" :+ "backend",
-    new NewCSR,
+    new NewCSR()(defaultConfig),
     firtoolOpts
   )
 
