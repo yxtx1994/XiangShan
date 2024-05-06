@@ -196,9 +196,6 @@ class XSTop()(implicit p: Parameters) extends BaseXSSoc() with HasSoCParameter
 
     val msiInfo = WireInit(0.U.asTypeOf(ValidIO(new MsiInfoBundle)))
 
-    val SetIpNumValidVec2 = WireInit(0.U(SetIpNumValidSize.W))
-    val setIpNum = WireInit(0.U(log2Up(NumIRSrc).W))
-
     for ((core, i) <- core_with_l2.zipWithIndex) {
       core.module.io.hartId := i.U
       core.module.io.msiInfo := msiInfo
