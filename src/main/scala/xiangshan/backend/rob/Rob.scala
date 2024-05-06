@@ -614,10 +614,6 @@ class RobImp(override val wrapper: Rob)(implicit p: Parameters, params: BackendP
       debug_lsTopdownInfo(enqIndex) := LsTopdownInfo.init
       debug_lqIdxValid(enqIndex) := false.B
       debug_lsIssued(enqIndex) := false.B
-
-      when (enqUop.blockBackward) {
-        hasBlockBackward := true.B
-      }
       when (enqUop.waitForward) {
         hasWaitForward := true.B
       }
@@ -644,6 +640,14 @@ class RobImp(override val wrapper: Rob)(implicit p: Parameters, params: BackendP
       vls(enqIndex) := enqUop.vlsInstr
     }
   }
+
+  for (i <- 0 until RenameWidth) {
+    val enqUop = io.enq.req(i)
+    when(enqUop.valid && enqUop.bits.blockBackward && io.enq.canAccept) {
+      hasBlockBackward := true.B
+    }
+  }
+
   val dispatchNum = Mux(io.enq.canAccept, PopCount(io.enq.req.map(req => req.valid && req.bits.firstUop)), 0.U)
   io.enq.isEmpty   := RegNext(isEmpty && !VecInit(io.enq.req.map(_.valid)).asUInt.orR)
 
