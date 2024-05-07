@@ -433,7 +433,7 @@ case class XSCoreParameters
       ),
       WakeUpConfig(
         Seq("VFEX0", "VFEX1", "VFEX2") ->
-        Seq("VFEX0", "VFEX1", "VFEX2")
+        Seq("VFEX0", "VFEX1", "VFEX2", "VFEX3")
       ),
     ).flatten
   }
