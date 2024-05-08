@@ -396,7 +396,8 @@ class VSegmentUnit (implicit p: Parameters) extends VLSUModule
    * */
 
   io.sbuffer.bits                  := DontCare
-  io.sbuffer.valid                 := state === s_send_data
+  io.sbuffer.valid                 := state === s_send_data && segmentActive
+  io.sbuffer.bits.vecValid         := state === s_send_data && segmentActive
   io.sbuffer.bits.mask             := wmask
   io.sbuffer.bits.data             := flowData
   io.sbuffer.bits.vaddr            := vaddr
