@@ -318,7 +318,7 @@ class VSegmentUnit (implicit p: Parameters) extends VLSUModule
   /**
    * merge data for load
    */
-  val cacheData = io.rdcache.resp.bits.data
+  val cacheData = io.rdcache.resp.bits.data_delayed
   val pickData  = rdataVecHelper(alignedType(1,0), cacheData)
   val mergedData = mergeDataWithElemIdx(
     oldData = data(splitPtr.value),
