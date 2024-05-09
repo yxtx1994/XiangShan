@@ -41,6 +41,8 @@ object CSRConfig {
   // at compile time. The log2Up function cannot be used as meta-programming function, so we use litral value here
   // log2Up(128 + 1), hold 0~128
   final val VlWidth = 8
+
+  final val PMPOffBits = 2
 }
 
 class NewCSR(implicit val p: Parameters) extends Module
@@ -56,6 +58,7 @@ class NewCSR(implicit val p: Parameters) extends Module
   with DebugLevel
   with CSRCustom
   with HasXSParameter
+  with CSRPMP
 {
 
   import CSRConfig._
@@ -182,7 +185,8 @@ class NewCSR(implicit val p: Parameters) extends Module
     unprivilegedCSRMap ++
     debugCSRMap ++
     aiaCSRMap ++
-    customCSRMap
+    customCSRMap ++
+    pmpCSRMap
 
   val csrMods =
     machineLevelCSRMods ++
@@ -192,7 +196,8 @@ class NewCSR(implicit val p: Parameters) extends Module
     unprivilegedCSRMods ++
     debugCSRMods ++
     aiaCSRMods ++
-    customCSRMods
+    customCSRMods ++
+    pmpCSRMods
 
   var csrOutMap =
     machineLevelCSROutMap ++
@@ -202,7 +207,8 @@ class NewCSR(implicit val p: Parameters) extends Module
     unprivilegedCSROutMap ++
     debugCSROutMap ++
     aiaCSROutMap ++
-    customCSROutMap
+    customCSROutMap ++
+    pmpCSROutMap
 
   val trapHandleMod = Module(new TrapHandleModule)
 
@@ -221,7 +227,7 @@ class NewCSR(implicit val p: Parameters) extends Module
 
   val entryPrivState = trapHandleMod.io.out.entryPrivState
 
-    // interrupt
+  // interrupt
   val intrMod = Module(new InterruptFilter)
   intrMod.io.in.privState.PRVM := PRVM
   intrMod.io.in.privState.V := V
@@ -249,6 +255,14 @@ class NewCSR(implicit val p: Parameters) extends Module
   intrMod.io.in.hsiprios := Cat(siregiprios.map(_.rdata.asInstanceOf[CSRBundle].asUInt).reverse)
   // val disableInterrupt = debugMode || (dcsr.rdata.STEP.asBool && !dcsr.rdata.STEPIE.asBool)
   // val intrVec = Cat(debugIntr && !debugMode, mie.rdata.asUInt(11, 0) & mip.rdata.asUInt & intrVecEnable.asUInt) // Todo: asUInt(11,0) is ok?
+
+  // PMP
+  val pmpEntryMod = Module(new PMPEntryHandleModule)
+  pmpEntryMod.io.in.pmpCfg  := Cat(pmpcfg.map(_.rdata.asInstanceOf[CSRBundle].asUInt).reverse)
+  pmpEntryMod.io.in.pmpAddr := Cat(pmpaddr.map(_.rdata.asInstanceOf[CSRBundle].asUInt).reverse)
+  pmpEntryMod.io.in.wen   := wen
+  pmpEntryMod.io.in.addr  := addr
+  pmpEntryMod.io.in.wdata := wdata
 
   for ((id, (wBundle, _)) <- csrRwMap) {
     wBundle.wen := wenLegal && addr === id.U
@@ -280,6 +294,11 @@ class NewCSR(implicit val p: Parameters) extends Module
   siregiprios.foreach { mod =>
     mod.w.wen := (addr === sireg.addr.U) && (siselect.regOut.ALL.asUInt === mod.addr.U)
     mod.w.wdata := wdata
+  }
+
+  cfgs.foreach { mod =>
+    mod.w.wen   := wen && Mux1H(pmpcfg.map(cfg => (addr === cfg.addr.U) -> true.B))
+    mod.w.wdata := Mux1H(pmpcfg.map(cfg => (addr === cfg.addr.U) -> pmpEntryMod.io.out.pmpCfgWData)) // has some problem
   }
 
   csrMods.foreach { mod =>
@@ -384,6 +403,12 @@ class NewCSR(implicit val p: Parameters) extends Module
         m.siselect := siselect.regOut
         m.mireg := mireg.regOut.asUInt
         m.sireg := sireg.regOut.asUInt
+      case _ =>
+    }
+    mod match {
+      case m: HasPMPAddrSink =>
+        m.pmpAddrs.addrRData := pmpEntryMod.io.out.pmpAddrRData
+        m.pmpAddrs.addrWData := pmpEntryMod.io.out.pmpAddrWData
       case _ =>
     }
   }
