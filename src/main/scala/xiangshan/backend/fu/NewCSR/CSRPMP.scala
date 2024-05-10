@@ -26,13 +26,8 @@ trait CSRPMP { self: NewCSR =>
 
   val pmpaddr: Seq[CSRModule[_]] = Range(0, p(PMParameKey).NumPMP).map(num =>
     Module(new CSRModule(s"Pmpaddr$num", new PMPAddrBundle) with HasPMPAddrSink {
-      // write condition
-      when (w.wen) {
-        reg.ADDRESS := pmpAddrs.addrWData(num).asUInt(31, 0)
-      }
-
       // read condition
-      rdata := pmpAddrs.addrRData(num).asUInt(31, 0)
+      rdata := addrRData(num)
     })
       .setAddr(0x3B0 + num)
   )
@@ -103,8 +98,5 @@ trait HasPMPCfgRSink { self: CSRModule[_] =>
 }
 
 trait HasPMPAddrSink { self: CSRModule[_] =>
-  val pmpAddrs = IO(Input(new Bundle {
-    val addrRData = Vec(p(PMParameKey).NumPMP, UInt(64.W))
-    val addrWData = Vec(p(PMParameKey).NumPMP, UInt(64.W))
-  }))
+  val addrRData = IO(Input(Vec(p(PMParameKey).NumPMP, UInt(64.W))))
 }
