@@ -20,15 +20,16 @@ class PMPEntryHandleModule(implicit p: Parameters) extends PMPModule {
   val pmpCfg   = io.in.pmpCfg
   val pmpAddr  = io.in.pmpAddr
 
+  val ren   = io.in.ren
   val wen   = io.in.wen
   val addr  = io.in.addr
   val wdata = io.in.wdata
 
   val pmpCfgs  = WireInit(pmpCfg).asTypeOf(Vec(p(PMParameKey).NumPMP, new PMPCfgBundle))
   val pmpAddrs = WireInit(pmpAddr).asTypeOf(Vec(p(PMParameKey).NumPMP, new PMPAddrBundle))
-  val pmpMask  = WireInit(VecInit(Seq.fill(p(PMParameKey).NumPMP)(0.U(PMPAddrBits.W))))
+  val pmpMask  = RegInit(VecInit(Seq.fill(p(PMParameKey).NumPMP)(0.U(PMPAddrBits.W))))
 
-  val pmpEntry = Reg(Vec(p(PMParameKey).NumPMP, new PMPEntry))
+  val pmpEntry = Wire(Vec(p(PMParameKey).NumPMP, new PMPEntry))
   for (i <- pmpEntry.indices) {
     pmpEntry(i).gen(pmpCfgs(i), pmpAddrs(i), pmpMask(i))
   }
@@ -36,7 +37,7 @@ class PMPEntryHandleModule(implicit p: Parameters) extends PMPModule {
   // write pmpCfg
   val cfgVec = WireInit(VecInit(Seq.fill(8)(0.U.asTypeOf(new PMPCfgBundle))))
   for (i <- 0 until (p(PMParameKey).NumPMP/8+1) by 2) {
-    when (addr === (0x3A0 + i).U) {
+    when (wen && (addr === (0x3A0 + i).U)) {
       for (j <- cfgVec.indices) {
         val cfgOldTmp = pmpEntry(8*i/2+j).cfg
         val cfgNewTmp = wdata(8*(j+1)-1, 8*j).asTypeOf(new PMPCfgBundle)
@@ -48,7 +49,7 @@ class PMPEntryHandleModule(implicit p: Parameters) extends PMPModule {
             cfgVec(j).A := Cat(cfgNewTmp.A.asUInt(1), cfgNewTmp.A.asUInt.orR)
           }
           when (PMPCfgAField.isNa4OrNapot(cfgVec(j))) {
-            pmpEntry(8*i/2+j).mask := pmpEntry(8*i/2+j).matchMask(cfgVec(j), pmpEntry(8*i/2+j).addr)
+            pmpMask(8*i/2+j) := pmpEntry(8*i/2+j).matchMask(cfgVec(j), pmpEntry(8*i/2+j).addr.ADDRESS.asUInt)
           }
         }
       }
@@ -57,20 +58,28 @@ class PMPEntryHandleModule(implicit p: Parameters) extends PMPModule {
 
   io.out.pmpCfgWData := cfgVec.asUInt
 
-  // write pmpAddr
-  val pmpAddrW = WireInit(VecInit(Seq.fill(p(PMParameKey).NumPMP)(0.U(64.W))))
-  for (i <- 0 until p(PMParameKey).NumPMP) {
-    if (i != (p(PMParameKey).NumPMP - 1)) {
-      pmpAddrW(i) := pmpEntry(i).writeAddr(pmpEntry(i + 1).cfg, pmpEntry(i).addr, pmpEntry(i).mask)
-    } else {
-      pmpAddrW(i) := pmpEntry(i).writeAddr(pmpEntry(i).addr, pmpEntry(i).mask)
-    }
-  }
-
-  // read pmpAddr
+  val pmpAddrW = Wire(Vec(p(PMParameKey).NumPMP, UInt(64.W)))
   val pmpAddrR = Wire(Vec(p(PMParameKey).NumPMP, UInt(64.W)))
+
   for (i <- 0 until p(PMParameKey).NumPMP) {
-    pmpAddrR(i) := pmpEntry(i).readAddr(pmpEntry(i).cfg, pmpEntry(i).addr.ADDRESS.asUInt)
+    pmpAddrW(i) := pmpEntry(i).addr.asUInt
+    pmpAddrR(i) := pmpEntry(i).addr.asUInt
+    // write pmpAddr
+    when (wen && (addr === (0x3B0 + i).U)) {
+      if (i != (p(PMParameKey).NumPMP - 1)) {
+        val addrNextLocked: Bool = PMPCfgLField.addrLocked(pmpEntry(i).cfg, pmpEntry(i + 1).cfg)
+        pmpMask(i) := Mux(!addrNextLocked, pmpEntry(i).matchMask(wdata), pmpEntry(i).mask)
+        pmpAddrW(i) := Mux(!addrNextLocked, wdata, pmpEntry(i).addr.asUInt)
+      } else {
+        val addrLocked: Bool = PMPCfgLField.addrLocked(pmpEntry(i).cfg)
+        pmpMask(i) := Mux(!addrLocked, pmpEntry(i).matchMask(wdata), pmpEntry(i).mask)
+        pmpAddrW(i) := Mux(!addrLocked, wdata, pmpEntry(i).addr.asUInt)
+      }
+    }
+    // read pmpAddr
+    when(ren && (addr === (0x3B0 + i).U)) {
+      pmpAddrR(i) := pmpEntry(i).readAddr(pmpEntry(i).cfg, pmpEntry(i).addr.asUInt)
+    }
   }
 
   io.out.pmpAddrWData := pmpAddrW
@@ -81,6 +90,7 @@ class PMPEntryHandleModule(implicit p: Parameters) extends PMPModule {
 class PMPEntryHandleIOBundle(implicit p: Parameters) extends PMPBundle {
   val in = Input(new Bundle {
     val wen   = Bool()
+    val ren   = Bool()
     val addr  = UInt(12.W)
     val wdata = UInt(64.W)
     val pmpCfg  = UInt((NumPMP/8*PMXLEN).W)
@@ -95,8 +105,8 @@ class PMPEntryHandleIOBundle(implicit p: Parameters) extends PMPBundle {
 }
 
 trait PMPReadWrite extends PMPConst {
-  def matchMask(cfg: PMPCfgBundle, paddr: PMPAddrBundle): UInt = {
-    val matchMaskCAddr = Cat(paddr.ADDRESS.asUInt, cfg.A.asUInt(0)) | (((1 << PlatformGrain) - 1) >> PMPOffBits).U((paddr.getWidth + 1).W)
+  def matchMask(cfg: PMPCfgBundle, paddr: UInt): UInt = {
+    val matchMaskCAddr = Cat(paddr, cfg.A.asUInt(0)) | (((1 << PlatformGrain) - 1) >> PMPOffBits).U((paddr.getWidth + 1).W)
     Cat(matchMaskCAddr & (~(matchMaskCAddr + 1.U)).asUInt, ((1 << PMPOffBits) - 1).U(PMPOffBits.W))
   }
 
@@ -161,19 +171,7 @@ class PMPEntry(implicit p: Parameters) extends PMPBundle with PMPReadWrite {
   }
 
   // generate match mask to help match in napot mode
-  def matchMask(paddr: PMPAddrBundle): UInt = {
+  def matchMask(paddr: UInt): UInt = {
     matchMask(cfg, paddr)
-  }
-
-  def writeAddr(next: PMPCfgBundle, paddr: PMPAddrBundle, mask: UInt): UInt = {
-    val addrLocked: Bool = PMPCfgLField.addrLocked(cfg, next)
-    mask := Mux(!addrLocked, matchMask(paddr), mask)
-    Mux(!addrLocked, paddr.ADDRESS.asUInt, addr.ADDRESS.asUInt)
-  }
-
-  def writeAddr(paddr: PMPAddrBundle, mask: UInt): UInt = {
-    val addrLocked: Bool = PMPCfgLField.addrLocked(cfg)
-    mask := Mux(!addrLocked, matchMask(paddr), mask)
-    Mux(!addrLocked, paddr.ADDRESS.asUInt, addr.ADDRESS.asUInt)
   }
 }
