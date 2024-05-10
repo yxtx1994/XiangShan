@@ -268,8 +268,9 @@ class NewCSR(implicit val p: Parameters) extends Module
 
   // PMP
   val pmpEntryMod = Module(new PMPEntryHandleModule)
-  pmpEntryMod.io.in.pmpCfg  := Cat(pmpcfg.map(_.rdata.asInstanceOf[CSRBundle].asUInt).reverse)
-  pmpEntryMod.io.in.pmpAddr := Cat(pmpaddr.map(_.rdata.asInstanceOf[CSRBundle].asUInt).reverse)
+  pmpEntryMod.io.in.pmpCfg  := Cat(pmpcfg.map(_.regOut.asInstanceOf[CSRBundle].asUInt).reverse)
+  pmpEntryMod.io.in.pmpAddr := Cat(pmpaddr.map(_.regOut.asInstanceOf[CSRBundle].asUInt).reverse)
+  pmpEntryMod.io.in.ren   := ren
   pmpEntryMod.io.in.wen   := wen
   pmpEntryMod.io.in.addr  := addr
   pmpEntryMod.io.in.wdata := wdata
@@ -311,6 +312,11 @@ class NewCSR(implicit val p: Parameters) extends Module
   cfgs.zipWithIndex.foreach { case (mod, i) =>
     mod.w.wen := wen && (addr === (0x3A0 + i / 8 * 2).U)
     mod.w.wdata := pmpEntryMod.io.out.pmpCfgWData(8*((i%8)+1)-1,8*(i%8))
+  }
+
+  pmpaddr.zipWithIndex.foreach{ case(mod, i) =>
+    mod.w.wen := wen && (addr === (0x3B0 + i).U)
+    mod.w.wdata := pmpEntryMod.io.out.pmpAddrWData(i)
   }
 
   csrMods.foreach { mod =>
@@ -419,8 +425,7 @@ class NewCSR(implicit val p: Parameters) extends Module
     }
     mod match {
       case m: HasPMPAddrSink =>
-        m.pmpAddrs.addrRData := pmpEntryMod.io.out.pmpAddrRData
-        m.pmpAddrs.addrWData := pmpEntryMod.io.out.pmpAddrWData
+        m.addrRData := pmpEntryMod.io.out.pmpAddrRData
       case _ =>
     }
   }
