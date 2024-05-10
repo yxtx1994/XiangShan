@@ -308,9 +308,9 @@ class NewCSR(implicit val p: Parameters) extends Module
 
   mhartid.hartid := this.io.fromTop.hartId
   
-  cfgs.foreach { mod =>
-    mod.w.wen   := wen && Mux1H(pmpcfg.map(cfg => (addr === cfg.addr.U) -> true.B))
-    mod.w.wdata := Mux1H(pmpcfg.map(cfg => (addr === cfg.addr.U) -> pmpEntryMod.io.out.pmpCfgWData)) // has some problem
+  cfgs.zipWithIndex.foreach { case (mod, i) =>
+    mod.w.wen := wen && (addr === (0x3A0 + i / 8 * 2).U)
+    mod.w.wdata := pmpEntryMod.io.out.pmpCfgWData(8*((i%8)+1)-1,8*(i%8))
   }
 
   csrMods.foreach { mod =>
