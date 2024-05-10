@@ -7,6 +7,7 @@ import xiangshan.backend.fu.NewCSR.CSRDefines.{CSRWARLField => WARL}
 import xiangshan.backend.fu.NewCSR.CSRFunc._
 import xiangshan.PMParameKey
 import freechips.rocketchip.tile.XLen
+import CSRConfig._
 
 import scala.collection.immutable.SeqMap
 
@@ -90,7 +91,7 @@ object PMPCfgAField extends CSREnum with WARLApply {
 }
 
 class PMPAddrBundle extends CSRBundle {
-  val ADDRESS  = WARL(31,  0, wNoFilter).withReset(false.B)
+  val ADDRESS  = WARL(PMPAddrBits-1,  0, wNoFilter).withReset(false.B)
 }
 
 trait HasPMPCfgRSink { self: CSRModule[_] =>
