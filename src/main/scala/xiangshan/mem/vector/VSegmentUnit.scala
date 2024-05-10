@@ -360,7 +360,7 @@ class VSegmentUnit (implicit p: Parameters) extends VLSUModule
     alignedType = alignedType
   )
   val flowData  = genVWdata(splitData, alignedType) // TODO: connect vstd, pass vector data
-  val wmask     = genVWmask(vaddr, alignedType(1, 0)) & mask(segmentIdx)
+  val wmask     = genVWmask(vaddr, alignedType(1, 0)) & Fill(VLENB, segmentActive)
 
   /**
    * rdcache req, write request don't need to query dcache, because we write element to sbuffer
