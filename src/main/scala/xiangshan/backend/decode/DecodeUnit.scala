@@ -839,8 +839,12 @@ class DecodeUnit(implicit p: Parameters) extends XSModule with DecodeUnitConstan
   io.deq.decodedInst.fuType := Mux1H(Seq(
     (!FuType.FuTypeOrR(decodedInst.fuType, FuType.vldu, FuType.vstu)                   ) -> decodedInst.fuType,
     ( FuType.FuTypeOrR(decodedInst.fuType, FuType.vldu, FuType.vstu) && inst.NF === 0.U) -> decodedInst.fuType,
-    ( FuType.FuTypeOrR(decodedInst.fuType, FuType.vstu)              && inst.NF =/= 0.U) -> FuType.vsegstu.U,
-    ( FuType.FuTypeOrR(decodedInst.fuType, FuType.vldu)              && inst.NF =/= 0.U) -> FuType.vsegldu.U,
+    // MOP === b00 && SUMOP === b00000: unit-stride store only
+    // MOP =/= b00                    : strided and indexed store
+    ( FuType.FuTypeOrR(decodedInst.fuType, FuType.vstu)              && inst.NF =/= 0.U && (inst.MOP === "b00".U && inst.SUMOP === BitPat("b00000") || inst.MOP =/= "b00".U)) -> FuType.vsegstu.U,
+    // MOP === b00 && LUMOP === b?0000: unit-stride load and fault-only-first unit-stride load
+    // MOP =/= b00                    : strided and indexed load
+    ( FuType.FuTypeOrR(decodedInst.fuType, FuType.vldu)              && inst.NF =/= 0.U && (inst.MOP === "b00".U && inst.LUMOP === BitPat("b?0000") || inst.MOP =/= "b00".U)) -> FuType.vsegldu.U,
   ))
   //-------------------------------------------------------------
   // Debug Info
