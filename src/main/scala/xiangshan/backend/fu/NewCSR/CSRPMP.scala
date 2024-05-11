@@ -15,14 +15,21 @@ trait CSRPMP { self: NewCSR =>
   val pmpcfg: Seq[CSRModule[_]] = Range(0, p(PMParameKey).NumPMP/8+1, 2).map(num =>
     Module(new CSRModule(s"Pmpcfg$num") with HasPMPCfgRSink {
       // read condition
-      rdata := cfgRData(num/2)
+      rdata := cfgRData(64*(num/2+1)-1, 64*num/2)
     })
       .setAddr(0x3A0 + num)
   )
 
   // every pmpcfg has 8 cfgs
   val cfgs: Seq[CSRModule[_]] = Range(0, p(PMParameKey).NumPMP).map(num =>
-    Module(new CSRModule(s"Pmp$num"+"cfg", new PMPCfgBundle))
+    Module(new CSRModule(s"Pmp$num"+"cfg", new PMPCfgBundle) {
+      when (w.wen && (!(!w.wdata(0).asBool && w.wdata(1).asBool))) {  // when R=0 W=1, reserved
+        reg.W := w.wdata(1).asBool
+      }.otherwise {
+        reg.W := reg.W
+      }
+      reg.A := Mux(wen, Mux(w.wdata(4, 3) === 2.U, 3.U, w.wdata(4, 3).asUInt), reg.A.asUInt) // no support Na4
+    })
   )
 
   val pmpaddr: Seq[CSRModule[_]] = Range(0, p(PMParameKey).NumPMP).map(num =>
@@ -48,7 +55,7 @@ trait CSRPMP { self: NewCSR =>
   pmpCSRMods.foreach { mod =>
     mod match {
       case m: HasPMPCfgRSink =>
-        m.cfgRData := pmpCfgRead.asTypeOf(m.cfgRData)
+        m.cfgRData := pmpCfgRead
       case _ =>
     }
   }
@@ -95,7 +102,7 @@ class PMPAddrBundle extends CSRBundle {
 }
 
 trait HasPMPCfgRSink { self: CSRModule[_] =>
-  val cfgRData = IO(Input(Vec(p(PMParameKey).NumPMP/8, UInt(p(XLen).W))))
+  val cfgRData = IO(Input(UInt((p(PMParameKey).NumPMP/8 * p(XLen)).W)))
 }
 
 trait HasPMPAddrSink { self: CSRModule[_] =>
