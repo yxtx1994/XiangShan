@@ -62,23 +62,23 @@ class PMPEntryHandleModule(implicit p: Parameters) extends PMPModule {
   val pmpAddrR = Wire(Vec(p(PMParameKey).NumPMP, UInt(64.W)))
 
   for (i <- 0 until p(PMParameKey).NumPMP) {
-    pmpAddrW(i) := pmpEntry(i).addr.asUInt
-    pmpAddrR(i) := pmpEntry(i).addr.asUInt
+    pmpAddrW(i) := pmpEntry(i).addr.ADDRESS.asUInt
+    pmpAddrR(i) := pmpEntry(i).addr.ADDRESS.asUInt
     // write pmpAddr
     when (wen && (addr === (0x3B0 + i).U)) {
       if (i != (p(PMParameKey).NumPMP - 1)) {
         val addrNextLocked: Bool = PMPCfgLField.addrLocked(pmpEntry(i).cfg, pmpEntry(i + 1).cfg)
         pmpMask(i) := Mux(!addrNextLocked, pmpEntry(i).matchMask(wdata), pmpEntry(i).mask)
-        pmpAddrW(i) := Mux(!addrNextLocked, wdata, pmpEntry(i).addr.asUInt)
+        pmpAddrW(i) := Mux(!addrNextLocked, wdata, pmpEntry(i).addr.ADDRESS.asUInt)
       } else {
         val addrLocked: Bool = PMPCfgLField.addrLocked(pmpEntry(i).cfg)
         pmpMask(i) := Mux(!addrLocked, pmpEntry(i).matchMask(wdata), pmpEntry(i).mask)
-        pmpAddrW(i) := Mux(!addrLocked, wdata, pmpEntry(i).addr.asUInt)
+        pmpAddrW(i) := Mux(!addrLocked, wdata, pmpEntry(i).addr.ADDRESS.asUInt)
       }
     }
     // read pmpAddr
     when(ren && (addr === (0x3B0 + i).U)) {
-      pmpAddrR(i) := pmpEntry(i).readAddr(pmpEntry(i).cfg, pmpEntry(i).addr.asUInt)
+      pmpAddrR(i) := pmpEntry(i).readAddr(pmpEntry(i).cfg, pmpEntry(i).addr.ADDRESS.asUInt)
     }
   }
 
