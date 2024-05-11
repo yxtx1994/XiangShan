@@ -94,7 +94,7 @@ class PMPEntryHandleIOBundle(implicit p: Parameters) extends PMPBundle {
     val addr  = UInt(12.W)
     val wdata = UInt(64.W)
     val pmpCfg  = UInt((NumPMP/8*PMXLEN).W)
-    val pmpAddr = UInt((NumPMP*64).W)
+    val pmpAddr = UInt((NumPMP*(PMPAddrBits - PMPOffBits)).W)
   })
 
   val out = Output(new Bundle {
