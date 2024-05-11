@@ -107,7 +107,7 @@ class FauFTB(implicit p: Parameters) extends BasePredictor with FauFTBParams {
   val s0_hit_oh = VecInit(ways.map(_.io.s0_resp_hit)).asUInt
   val s0_hit_data = Mux1H(s0_hit_oh, ways.map(_.io.s0_resp))
   io.out.s0_uftbHit := s0_hit_oh.orR
-  io.out.s0_uftbHasIndirect := s0_hit_data.jmpValid
+  io.out.s0_useITTAGE := s0_hit_data.jmpValid && !s0_hit_data.biased.last
 
 
   // s1 pred req
@@ -124,7 +124,7 @@ class FauFTB(implicit p: Parameters) extends BasePredictor with FauFTBParams {
     fp.hit := DontCare
     fp.fromFtbEntry(e, s1_pc_dup(0))
     for (i <- 0 until numBr) {
-      fp.br_taken_mask(i) := c(i)(1) || e.always_taken(i)
+      fp.br_taken_mask(i) := c(i)(1) || e.biased(i)
     }
   }
   val s1_hit_full_pred = Mux1H(s1_hit_oh, s1_possible_full_preds)
@@ -156,7 +156,7 @@ class FauFTB(implicit p: Parameters) extends BasePredictor with FauFTBParams {
   val u_s0_hit = u_s0_hit_oh.orR
   val u_s0_br_update_valids =
     VecInit((0 until numBr).map(w =>
-      u.bits.ftb_entry.brValids(w) && u.valid && !u.bits.ftb_entry.always_taken(w) &&
+      u.bits.ftb_entry.brValids(w) && u.valid && !u.bits.ftb_entry.biased(w) &&
       !(PriorityEncoder(u.bits.br_taken_mask) < w.U)))
 
   // s1

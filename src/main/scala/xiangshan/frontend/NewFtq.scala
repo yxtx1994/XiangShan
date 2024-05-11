@@ -277,7 +277,7 @@ class FTBEntryGen(implicit p: Parameters) extends XSModule with HasBackendRedire
     init_br_slot.valid := true.B
     init_br_slot.offset := io.cfiIndex.bits
     init_br_slot.setLowerStatByTarget(io.start_addr, io.target, numBr == 1)
-    init_entry.always_taken(0) := true.B // set to always taken on init
+    init_entry.biased(0) := true.B // set to always taken on init
   }
 
   // case jmp
@@ -285,6 +285,7 @@ class FTBEntryGen(implicit p: Parameters) extends XSModule with HasBackendRedire
     init_entry.tailSlot.offset := pd.jmpOffset
     init_entry.tailSlot.valid := new_jmp_is_jal || new_jmp_is_jalr
     init_entry.tailSlot.setLowerStatByTarget(io.start_addr, Mux(cfi_is_jalr, io.target, pd.jalTarget), isShare=false)
+    init_entry.biased(1) := true.B
   }
 
   val jmpPft = getLower(io.start_addr) +& pd.jmpOffset +& Mux(pd.rvcMask(pd.jmpOffset), 1.U, 2.U)
@@ -321,9 +322,9 @@ class FTBEntryGen(implicit p: Parameters) extends XSModule with HasBackendRedire
       slot.valid := true.B
       slot.offset := new_br_offset
       slot.setLowerStatByTarget(io.start_addr, io.target, i == numBr-1)
-      old_entry_modified.always_taken(i) := true.B
+      old_entry_modified.biased(i) := true.B
     }.elsewhen (new_br_offset > oe.allSlotsForBr(i).offset) {
-      old_entry_modified.always_taken(i) := false.B
+      old_entry_modified.biased(i) := false.B
       // all other fields remain unchanged
     }.otherwise {
       // case i == 0, remain unchanged
@@ -331,7 +332,7 @@ class FTBEntryGen(implicit p: Parameters) extends XSModule with HasBackendRedire
         val noNeedToMoveFromFormerSlot = (i == numBr-1).B && !oe.brSlots.last.valid
         when (!noNeedToMoveFromFormerSlot) {
           slot.fromAnotherSlot(oe.allSlotsForBr(i-1))
-          old_entry_modified.always_taken(i) := oe.always_taken(i)
+          old_entry_modified.biased(i) := oe.biased(i)
         }
       }
     }
@@ -364,15 +365,15 @@ class FTBEntryGen(implicit p: Parameters) extends XSModule with HasBackendRedire
   val jalr_target_modified = cfi_is_jalr && (old_target =/= io.target) && old_tail_is_jmp // TODO: pass full jalr target
   when (jalr_target_modified) {
     old_entry_jmp_target_modified.setByJmpTarget(io.start_addr, io.target)
-    old_entry_jmp_target_modified.always_taken := 0.U.asTypeOf(Vec(numBr, Bool()))
+    old_entry_jmp_target_modified.biased.last := false.B
   }
 
   val old_entry_always_taken = WireInit(oe)
   val always_taken_modified_vec = Wire(Vec(numBr, Bool())) // whether modified or not
   for (i <- 0 until numBr) {
-    old_entry_always_taken.always_taken(i) :=
-      oe.always_taken(i) && io.cfiIndex.valid && oe.brValids(i) && io.cfiIndex.bits === oe.brOffset(i)
-    always_taken_modified_vec(i) := oe.always_taken(i) && !old_entry_always_taken.always_taken(i)
+    old_entry_always_taken.biased(i) :=
+      oe.biased(i) && io.cfiIndex.valid && oe.brValids(i) && io.cfiIndex.bits === oe.brOffset(i)
+    always_taken_modified_vec(i) := oe.biased(i) && !old_entry_always_taken.biased(i)
   }
   val always_taken_modified = always_taken_modified_vec.reduce(_||_)
 

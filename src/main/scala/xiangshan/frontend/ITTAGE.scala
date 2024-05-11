@@ -363,7 +363,7 @@ class ITTage(implicit p: Parameters) extends BaseITTage {
   val tickCtr = RegInit(0.U(TickWidth.W))
 
   // uftb miss or hasIndirect
-  val s0_isIndirect = !io.in.bits.resp_in(0).s0_uftbHit || io.in.bits.resp_in(0).s0_uftbHasIndirect
+  val s0_useITTAGE = !io.in.bits.resp_in(0).s0_uftbHit || io.in.bits.resp_in(0).s0_useITTAGE
 
   // Keep the table responses to process in s2
 
@@ -438,7 +438,7 @@ class ITTage(implicit p: Parameters) extends BaseITTage {
 
   // Predict
   tables.map { t => {
-      t.io.req.valid := io.s0_fire(3) && s0_isIndirect
+      t.io.req.valid := io.s0_fire(3) && s0_useITTAGE
       t.io.req.bits.pc := s0_pc_dup(3)
       t.io.req.bits.folded_hist := io.in.bits.folded_hist(3)
     }
