@@ -26,17 +26,10 @@ import utility._
 
 class ICacheReadBundle(implicit p: Parameters) extends ICacheBundle
 {
-  val isDoubleLine  = Bool()
   val vSetIdx       = Vec(2,UInt(log2Ceil(nSets).W))
-  val waymask       = Vec(2,Vec(nWays, Bool()))
-
-  def port_0_read_0 =  !vSetIdx(0)(0)
-  def port_0_read_1 =   vSetIdx(0)(0)
-  def port_1_read_0 =  !vSetIdx(1)(0) && isDoubleLine
-  def port_1_read_1 =   vSetIdx(1)(0) && isDoubleLine
-
-  def read_bank_0 = port_0_read_0 || port_1_read_0
-  def read_bank_1 =  port_0_read_1 || port_1_read_1
+  val wayMask       = Vec(2,Vec(nWays, Bool()))
+  val blkOffset     = UInt(log2Ceil(blockBytes).W)
+  val isDoubleLine  = Bool()
 }
 
 
@@ -83,8 +76,8 @@ class ICacheDataWriteBundle(implicit p: Parameters) extends ICacheBundle
 
 class ICacheDataRespBundle(implicit p: Parameters) extends ICacheBundle
 {
-  val datas   = Vec(nBanks, UInt((blockBits/2).W))
-  val errors  = Vec(nBanks, Bool())
+  val datas   = Vec(ICacheDataBanks, UInt(ICacheDataBits.W))
+  val codes   = Vec(ICacheDataBanks, UInt(ICacheCodeBits.W))
 }
 
 class ICacheMetaReadBundle(implicit p: Parameters) extends ICacheBundle

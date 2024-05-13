@@ -77,13 +77,23 @@ case class ICacheParameters(
 
 trait HasICacheParameters extends HasL1CacheParameters with HasInstrMMIOConst with HasIFUConst{
   val cacheParams = icacheParameters
-  val dataCodeUnit = 16
-  val dataCodeUnitNum  = blockBits/cacheParams.nBanks/dataCodeUnit
+
+  val DataCodeUnit = 64
+  val ICacheDataBanks = 8
+  val ICacheDataSRAMWidth = 66
+  val partWayNum = 4
+
+  require((ICacheDataBanks >= 2) && isPow2(ICacheDataBanks))
+
+  val ICacheDataBits  = blockBits / ICacheDataBanks
+  val ICacheCodeBits  = math.ceil(ICacheDataBits / DataCodeUnit).toInt
+  val ICacheEntryBits = ICacheDataBits + ICacheCodeBits
+  // TODO: fix 32 hard code (fetch width)
+  val ICacheBankVisitNum    = 32 * 8 / ICacheDataBits + 1
+
+  require(ICacheDataSRAMWidth >= ICacheEntryBits)
 
   def highestIdxBit = log2Ceil(nSets) - 1
-  def encDataUnitBits   = cacheParams.dataCode.width(dataCodeUnit)
-  def dataCodeBits      = encDataUnitBits - dataCodeUnit
-  def dataCodeEntryBits = dataCodeBits * dataCodeUnitNum
 
   val ICacheSets = cacheParams.nSets
   val ICacheWays = cacheParams.nWays
@@ -97,9 +107,6 @@ trait HasICacheParameters extends HasL1CacheParameters with HasInstrMMIOConst wi
   val ICacheTagOffset = ICacheAboveIndexOffset min ICacheSameVPAddrLength
 
   def PortNumber = 2
-
-  def partWayNum = nWays
-  def pWay = nWays/partWayNum
 
   def enableICachePrefetch      = cacheParams.enableICachePrefetch
   def prefetchToL1        = cacheParams.prefetchToL1
@@ -147,6 +154,26 @@ trait HasICacheParameters extends HasL1CacheParameters with HasInstrMMIOConst wi
 
   def InitQueue[T <: Data](entry: T, size: Int): Vec[T] ={
     return RegInit(VecInit(Seq.fill(size)(0.U.asTypeOf(entry.cloneType))))
+  }
+
+  def encode(data: UInt): UInt = {
+    val datas = data.asTypeOf(Vec(ICacheCodeBits, UInt((ICacheDataBits / ICacheCodeBits).W)))
+    val codes = VecInit(datas.map(cacheParams.dataCode.encode(_) >> (ICacheDataBits / ICacheCodeBits)))
+    codes.asTypeOf(UInt(ICacheCodeBits.W))
+  }
+
+  def getBankSel(blkOffset: UInt):Vec[UInt] = {
+    val bankIdxLow  = Cat(0.U(1.W), blkOffset) >> log2Ceil(blockBytes/ICacheDataBanks)
+    val bankIdxHigh = (Cat(0.U(1.W), blkOffset) + 32.U) >> log2Ceil(blockBytes/ICacheDataBanks)
+    val bankSel = VecInit((0 until ICacheDataBanks * 2).map(i => (i.U >= bankIdxLow) && (i.U <= bankIdxHigh)))
+    assert(PopCount(bankSel) === ICacheBankVisitNum.U, "The number of bank visits must be %d, but bankSel=0x%x", ICacheBankVisitNum.U, bankSel.asUInt)
+    bankSel.asTypeOf(UInt((ICacheDataBanks * 2).W)).asTypeOf(Vec(2, UInt(ICacheDataBanks.W)))
+  }
+
+  def getLineSel(blkOffset: UInt)(implicit p: Parameters): Vec[Bool] = {
+    val bankIdxLow  = blkOffset >> log2Ceil(blockBytes/ICacheDataBanks)
+    val lineSel = VecInit((0 until ICacheDataBanks).map(i => i.U < bankIdxLow))
+    lineSel
   }
 
   def getBlkAddr(addr: UInt) = addr >> blockOffBits
@@ -301,102 +328,74 @@ class ICacheMetaArray()(implicit p: Parameters) extends ICacheArray
   }
 }
 
-
+// Vec(2,Vec(nWays, Bool()))
 
 class ICacheDataArray(implicit p: Parameters) extends ICacheArray
 {
-  require(nBanks == 2)
-  val dataBits = blockBits / nBanks
-  val codeBits = dataCodeEntryBits
-  val dataEntryBits = dataBits + codeBits
-  
-  def getECCFromEncUnit(encUnit: UInt) = {
-    require(encUnit.getWidth == encDataUnitBits)
-    if (encDataUnitBits == dataCodeUnit) {
-      0.U.asTypeOf(UInt(1.W))
-    } else {
-      encUnit(encDataUnitBits - 1, dataCodeUnit)
-    }
-  }
-
-  def getECCFromBlock(cacheblock: UInt) = {
-    // require(cacheblock.getWidth == blockBits)
-    VecInit((0 until dataCodeUnitNum).map { w =>
-      val unit = cacheblock(dataCodeUnit * (w + 1) - 1, dataCodeUnit * w)
-      getECCFromEncUnit(cacheParams.dataCode.encode(unit))
-    })
-  }
-
   class ICacheDataEntry(implicit p: Parameters) extends ICacheBundle {
-    val data = UInt(dataBits.W)
-    val code = UInt(codeBits.W)
-
-    def decode()(implicit p: Parameters) = {
-      val datas = this.data.asTypeOf(Vec(dataCodeUnitNum, UInt(dataCodeUnit.W)))
-      val codes = this.code.asTypeOf(Vec(dataCodeUnitNum, UInt(dataCodeBits.W)))
-      val full = VecInit((0 until dataCodeUnitNum).map(i => Cat(codes(i), datas(i))))
-      val errors = VecInit(full.map(cacheParams.dataCode.decode(_).error))
-      val error = errors.reduce(_||_)
-      error
-    }
+    val data = UInt(ICacheDataBits.W)
+    val code = UInt(ICacheCodeBits.W)
   }
 
   object ICacheDataEntry {
     def apply(data: UInt)(implicit p: Parameters) = {
-      require(data.getWidth == dataBits)
+      require(data.getWidth == ICacheDataBits)
       val entry = Wire(new ICacheDataEntry)
       entry.data := data
-      entry.code := getECCFromBlock(data).asUInt
+      entry.code := encode(data)
       entry
     }
   }
 
   val io=IO{new Bundle{
     val write    = Flipped(DecoupledIO(new ICacheDataWriteBundle))
-    val read     = Flipped(Vec(nWays, DecoupledIO(new ICacheReadBundle)))
+    // TODO: fix hard code
+    val read     = Flipped(Vec(4, DecoupledIO(new ICacheReadBundle)))
     val readResp = Output(new ICacheDataRespBundle)
   }}
-
-  dontTouch(io)
 
   /**
     ******************************************************************************
     * data array
     ******************************************************************************
     */
-  val data_no_code = io.write.bits.data.asTypeOf(Vec(nBanks, UInt(dataBits.W)))
-  // encode
-  val write_data_bits = data_no_code.map(ICacheDataEntry(_).asUInt)
-  
+  val writeDatas   = io.write.bits.data.asTypeOf(Vec(ICacheDataBanks, UInt(ICacheDataBits.W)))
+  val writeEntries = writeDatas.map(ICacheDataEntry(_).asUInt)
+
+  val bankSel = getBankSel(io.read(0).bits.blkOffset)
+  val lineSel = getLineSel(io.read(0).bits.blkOffset)
+  val waymasks = io.read(0).bits.wayMask
+  val masks = Wire(Vec(nWays, Vec(ICacheDataBanks, Bool())))
+  (0 until nWays).foreach{way =>
+    (0 until ICacheDataBanks).foreach{bank =>
+      masks(way)(bank) := Mux(lineSel(bank), waymasks(1)(way) && bankSel(1)(bank).asBool,
+                                             waymasks(0)(way) && bankSel(0)(bank).asBool)
+    }
+  }
+
   val dataArrays = (0 until nWays).map{ way =>
-    (0 until nBanks).map { bank =>
-      val sramBank = Module(new SRAMTemplate(
-        UInt(dataEntryBits.W),
+    (0 until ICacheDataBanks).map { bank =>
+      val sramBank = Module(new SRAMTemplateWithFixedWidth(
+        UInt(ICacheEntryBits.W),
         set=nSets,
+        width=ICacheDataSRAMWidth,
         shouldReset = true,
         holdRead = true,
         singlePort = true
       ))
-      // SRAM read logic
-      if (bank == 1) {
-        sramBank.io.r.req.bits.apply(setIdx= io.read(way).bits.vSetIdx(0))
-        sramBank.io.r.req.valid := io.read(way).valid && io.read(way).bits.waymask(0)(way)
-      } else {
-        // read low of startline if cross cacheline
-        val setIdx = Mux(io.read(way).bits.isDoubleLine, io.read(way).bits.vSetIdx(1), io.read(way).bits.vSetIdx(0))
-        val mask   = Mux(io.read(way).bits.isDoubleLine, io.read(way).bits.waymask(1), io.read(way).bits.waymask(0))
-        sramBank.io.r.req.bits.apply(setIdx= setIdx)
-        sramBank.io.r.req.valid := io.read(way).valid && mask(way)
-      }
 
-      // SRAM write logic
-      val waymask = io.write.bits.waymask.asTypeOf(Vec(nWays, Bool()))(way)
-      // waymask is invalid when way of SRAMTemplate is 1
-      sramBank.io.w.req.valid := io.write.valid && waymask.asUInt.orR
+      // read
+      sramBank.io.r.req.valid := io.read(bank % 4).valid && masks(way)(bank)
+      sramBank.io.r.req.bits.apply(setIdx=Mux(lineSel(bank),
+                                              io.read(bank % 4).bits.vSetIdx(1),
+                                              io.read(bank % 4).bits.vSetIdx(0)))
+      // write
+      sramBank.io.w.req.valid := io.write.valid && io.write.bits.waymask(way).asBool
       sramBank.io.w.req.bits.apply(
-        data    = write_data_bits(bank),
+        data    = writeEntries(bank),
         setIdx  = io.write.bits.virIdx,
-        waymask = waymask.asUInt
+        // waymask is invalid when way of SRAMTemplate <= 1
+        waymask = 0.U
       )
       sramBank
     }
@@ -407,28 +406,25 @@ class ICacheDataArray(implicit p: Parameters) extends ICacheArray
     * read logic
     ******************************************************************************
     */
-  val isDoubleLineReg = RegEnable(io.read.last.bits.isDoubleLine, io.read.last.fire)
-  val read_data_with_code  = Wire(Vec(nBanks, UInt(dataEntryBits.W)))
-  // get bank waymask
-  val read_waymask_temp = VecInit(Seq(Mux(io.read.last.bits.isDoubleLine, io.read.last.bits.waymask(1), io.read.last.bits.waymask(0)),
-                                      io.read.last.bits.waymask(0)))
-  val read_waymask = RegEnable(read_waymask_temp, io.read.last.fire)
-                                
-  val read_bank_data  = (0 until nBanks).map(i => Mux1H(read_waymask(i).asUInt, dataArrays.map(bankArrays => bankArrays(i).io.r.resp.asUInt)))
-  read_data_with_code(0) := Mux(isDoubleLineReg, read_bank_data(1), read_bank_data(0))
-  read_data_with_code(1) := Mux(isDoubleLineReg, read_bank_data(0), read_bank_data(1))
+  val masksReg          = RegEnable(masks, io.read(0).valid)
+  val readDataWithCode  = (0 until ICacheDataBanks).map(bank =>
+                            Mux1H(VecInit(masksReg.map(_(bank))).asTypeOf(UInt(nWays.W)),
+                                  dataArrays.map(_(bank).io.r.resp.asUInt)))
+  val readEntries       = readDataWithCode.map(_.asTypeOf(new ICacheDataEntry()))
+  val readDatas         = VecInit(readEntries.map(_.data))
+  val readCodes         = VecInit(readEntries.map(_.code))
 
-  val read_data_entry = read_data_with_code.map(_.asTypeOf(new ICacheDataEntry()))
-  val read_datas      = read_data_entry.map(_.data)
-  val read_errors     = read_data_entry.map(_.decode())
+  if (ICacheECCForceError) {
+    readCodes.foreach(_ := 0.U) // force ecc to fail
+  }
 
   /**
     ******************************************************************************
     * IO
     ******************************************************************************
     */
-  io.readResp.datas   := read_datas
-  io.readResp.errors  := read_errors
+  io.readResp.datas   := readDatas
+  io.readResp.codes   := readCodes
   io.write.ready      := true.B
   io.read.foreach( _.ready := !io.write.valid)
 }
@@ -509,7 +505,8 @@ class ICacheImp(outer: ICache) extends LazyModuleImp(outer) with HasICacheParame
   println("ICache:")
   println("  ICacheSets: "          + cacheParams.nSets)
   println("  ICacheWays: "          + cacheParams.nWays)
-  println("  ICacheBanks: "         + PortNumber)
+  println("  TagECC: "              + cacheParams.tagECC)
+  println("  DataECC: "             + cacheParams.dataECC)
 
   println("  enableICachePrefetch:     " + cacheParams.enableICachePrefetch)
   println("  prefetchToL1:       " + cacheParams.prefetchToL1)
@@ -658,4 +655,63 @@ class ICachePartWayArray[T <: Data](gen: T, pWay: Int)(implicit p: Parameters) e
 
   io.read.resp.rdata := VecInit(srams.map(bank => bank.io.r.resp.asTypeOf(Vec(pWay,gen))))
 
+}
+
+// Automatically partition the SRAM based on the width of the data and the desired width.
+// final SRAM width = width * way
+class SRAMTemplateWithFixedWidth[T <: Data]
+(
+  gen: T, set: Int, width: Int, way: Int = 1,
+  shouldReset: Boolean = false, holdRead: Boolean = false,
+  singlePort: Boolean = false, bypassWrite: Boolean = false
+) extends Module {
+
+  val dataBits  = gen.getWidth
+  val bankNum = math.ceil(dataBits.toDouble / width.toDouble).toInt
+  val totalBits = bankNum * width
+
+  val io = IO(new Bundle {
+    val r = Flipped(new SRAMReadBus(gen, set, way))
+    val w = Flipped(new SRAMWriteBus(gen, set, way))
+  })
+
+  val wordType   = UInt(width.W)
+  val writeDatas = (0 until bankNum).map(bank =>
+    VecInit((0 until way).map(i =>
+      io.w.req.bits.data(i).asTypeOf(UInt(totalBits.W)).asTypeOf(Vec(bankNum, wordType))(bank)
+    ))
+  )
+
+  val srams = (0 until bankNum) map { bank =>
+    val sramBank = Module(new SRAMTemplate(
+      wordType,
+      set=set,
+      way=way,
+      shouldReset = shouldReset,
+      holdRead = holdRead,
+      singlePort = singlePort,
+      bypassWrite = bypassWrite,
+    ))
+    // read req
+    sramBank.io.r.req.valid       := io.r.req.valid
+    sramBank.io.r.req.bits.setIdx := io.r.req.bits.setIdx
+
+    // write req
+    sramBank.io.w.req.valid       := io.w.req.valid
+    sramBank.io.w.req.bits.setIdx := io.w.req.bits.setIdx
+    sramBank.io.w.req.bits.data   := writeDatas(bank)
+    sramBank.io.w.req.bits.waymask.map(_ := io.w.req.bits.waymask.get)
+
+    sramBank
+  }
+
+  io.r.req.ready := !io.w.req.valid
+  (0 until way).foreach{i =>
+    io.r.resp.data(i) := VecInit((0 until bankNum).map(bank =>
+                           srams(bank).io.r.resp.data(i)
+                         )).asTypeOf(UInt(totalBits.W))(dataBits-1, 0).asTypeOf(gen.cloneType)
+  }
+
+  io.r.req.ready := srams.head.io.r.req.ready
+  io.w.req.ready := srams.head.io.w.req.ready
 }

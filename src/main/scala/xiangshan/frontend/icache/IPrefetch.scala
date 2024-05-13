@@ -173,8 +173,9 @@ class IPrefetchPipe(implicit p: Parameters) extends  IPrefetchModule
     */
   val s1_need_meta = ((state === m_itlbResend) && itlb_finish) || (state === m_metaResend)
   toMeta.valid              := s1_need_meta || s0_valid
+  toMeta.bits               := DontCare
   toMeta.bits.isDoubleLine  := Mux(s1_need_meta, s1_doubleline, s0_doubleline)
-  toMeta.bits.waymask       := DontCare
+
   for (i <- 0 until PortNumber) {
     toMeta.bits.vSetIdx(i)  := Mux(s1_need_meta, s1_req_vSetIdx(i), s0_req_vSetIdx(i))
   }
