@@ -966,7 +966,7 @@ class StoreQueue(implicit p: Parameters) extends XSModule
   for (i <- 0 until StoreQueueSize) {
     val fbk = io.vecFeedback
     for (j <- 0 until VecStorePipelineWidth) {
-      vecCommittmp(i)(j) := fbk(j).valid && fbk(j).bits.isCommit && uop(i).robIdx === fbk(j).bits.robidx && uop(i).uopIdx === fbk(j).bits.uopidx
+      vecCommittmp(i)(j) := fbk(j).valid && fbk(j).bits.isCommit && uop(i).robIdx === fbk(j).bits.robidx && uop(i).uopIdx === fbk(j).bits.uopidx && allocated(i)
     }
     vecCommit(i) := vecCommittmp(i).reduce(_ || _)
 
