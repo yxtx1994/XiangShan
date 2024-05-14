@@ -370,7 +370,7 @@ class StoreQueue(implicit p: Parameters) extends XSModule
   addrReadyPtrExt := nextAddrReadyPtr
 
   (0 until StoreQueueSize).map(i => {
-    io.stAddrReadyVec(i) := RegNext(allocated(i) && (mmio(i) || addrvalid(i)))
+    io.stAddrReadyVec(i) := RegNext(allocated(i) && (mmio(i) || addrvalid(i) || (isVec(i) && vecMbCommit(i))))
   })
 
   when (io.brqRedirect.valid) {
@@ -392,7 +392,7 @@ class StoreQueue(implicit p: Parameters) extends XSModule
   dataReadyPtrExt := nextDataReadyPtr
 
   (0 until StoreQueueSize).map(i => {
-    io.stDataReadyVec(i) := RegNext(allocated(i) && (mmio(i) || datavalid(i)))
+    io.stDataReadyVec(i) := RegNext(allocated(i) && (mmio(i) || datavalid(i) || (isVec(i) && vecMbCommit(i))))
   })
 
   when (io.brqRedirect.valid) {
