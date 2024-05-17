@@ -57,6 +57,7 @@ class DataBufferEntry (implicit p: Parameters)  extends DCacheBundle {
   val wline = Bool()
   val sqPtr  = new SqPtr
   val prefetch = Bool()
+  val pc = UInt(VAddrBits.W)
 }
 
 // Store Queue
@@ -716,6 +717,7 @@ class StoreQueue(implicit p: Parameters) extends XSModule
     dataBuffer.io.enq(i).bits.wline    := paddrModule.io.rlineflag(i)
     dataBuffer.io.enq(i).bits.sqPtr    := rdataPtrExt(i)
     dataBuffer.io.enq(i).bits.prefetch := prefetch(ptr)
+    dataBuffer.io.enq(i).bits.pc       := uop(ptr).cf.pc
   }
 
   // Send data stored in sbufferReqBitsReg to sbuffer
@@ -728,6 +730,7 @@ class StoreQueue(implicit p: Parameters) extends XSModule
     io.sbuffer(i).bits.cmd   := MemoryOpConstants.M_XWR
     io.sbuffer(i).bits.addr  := dataBuffer.io.deq(i).bits.addr
     io.sbuffer(i).bits.vaddr := dataBuffer.io.deq(i).bits.vaddr
+    io.sbuffer(i).bits.pc := dataBuffer.io.deq(i).bits.pc
     io.sbuffer(i).bits.data  := dataBuffer.io.deq(i).bits.data
     io.sbuffer(i).bits.mask  := dataBuffer.io.deq(i).bits.mask
     io.sbuffer(i).bits.wline := dataBuffer.io.deq(i).bits.wline

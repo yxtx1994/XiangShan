@@ -354,6 +354,7 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   io.dcache.req.bits.debug_robIdx := s0_sel_src.uop.robIdx.value
   io.dcache.req.bits.replayCarry  := s0_sel_src.rep_carry
   io.dcache.req.bits.id           := DontCare // TODO: update cache meta
+  io.dcache.req.bits.pc           := DontCare
   io.dcache.pf_source             := Mux(s0_hw_prf_select, io.prefetch_req.bits.pf_source.value, L1_HW_PREFETCH_NULL)
 
   // load flow priority mux

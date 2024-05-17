@@ -18,7 +18,7 @@ package xiangshan.cache
 
 import chisel3._
 import chisel3.util._
-import coupledL2.VaddrKey
+import coupledL2.{PCKey, VaddrKey}
 import difftest._
 import freechips.rocketchip.tilelink.ClientStates._
 import freechips.rocketchip.tilelink.MemoryOpCategories._
@@ -227,6 +227,8 @@ class MissReqPipeRegBundle(edge: TLEdgeOut)(implicit p: Parameters) extends DCac
     acquire.user.lift(AliasKey).foreach(_ := req.vaddr(13, 12))
     // pass vaddr to l2
     acquire.user.lift(VaddrKey).foreach(_ := req.vaddr(VAddrBits - 1, blockOffBits))
+    // pass pc to l2
+    acquire.user.lift(PCKey).foreach(_ := req.pc)
     // trigger prefetch
     acquire.user.lift(PrefetchKey).foreach(_ := Mux(l2_pf_store_only, req.isFromStore, true.B))
     // req source
@@ -649,6 +651,8 @@ class MissEntry(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheModule {
   io.mem_acquire.bits.user.lift(AliasKey).foreach( _ := req.vaddr(13, 12))
   // pass vaddr to l2
   io.mem_acquire.bits.user.lift(VaddrKey).foreach( _ := req.vaddr(VAddrBits-1, blockOffBits))
+  // pass pc to l2
+  io.mem_acquire.bits.user.lift(PCKey).foreach(_ := req.pc)
   // trigger prefetch
   io.mem_acquire.bits.user.lift(PrefetchKey).foreach(_ := Mux(io.l2_pf_store_only, req.isFromStore, true.B))
   // req source
@@ -687,6 +691,7 @@ class MissEntry(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheModule {
   replace.source := LOAD_SOURCE.U
   replace.vaddr := req.vaddr // only untag bits are needed
   replace.addr := Cat(req.replace_tag, 0.U(pgUntagBits.W)) // only tag bits are needed
+  replace.pc := 0.U
   replace.store_mask := 0.U
   replace.replace := true.B
   replace.replace_way_en := req.way_en
@@ -741,6 +746,7 @@ class MissEntry(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheModule {
   io.main_pipe_req.bits.cmd := req.cmd
   io.main_pipe_req.bits.vaddr := req.vaddr
   io.main_pipe_req.bits.addr := req.addr
+  io.main_pipe_req.bits.pc := req.pc
   io.main_pipe_req.bits.store_data := refill_and_store_data.asUInt
   io.main_pipe_req.bits.store_mask := ~0.U(blockBytes.W)
   io.main_pipe_req.bits.word_idx := req.word_idx

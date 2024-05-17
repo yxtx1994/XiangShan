@@ -227,10 +227,12 @@ class StoreAddrUnit(implicit p: Parameters) extends XSModule with HasDCacheParam
   s2_out.atomic  := s2_mmio
   s2_out.uop.cf.exceptionVec(storePageFault)   := io.tlb.resp.bits.excp(0).pf.st
   s2_out.uop.cf.exceptionVec(storeAccessFault) := io.tlb.resp.bits.excp(0).af.st
+  s2_out.uop.cf.pc := s2_in.uop.cf.pc
 
   io.lsq.valid     := s2_valid && !s2_in.isHWPrefetch
   io.lsq.bits      := s2_out
   io.lsq.bits.miss := s2_tlb_miss
+  dontTouch(io.lsq.bits.uop.cf.pc)
 
   // st-ld violation dectect request.
   io.stld_nuke_query.s2_valid  := s2_valid && !s2_in.isHWPrefetch && !s2_tlb_miss
