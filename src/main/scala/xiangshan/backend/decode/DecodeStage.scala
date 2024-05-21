@@ -63,6 +63,8 @@ class DecodeStage(implicit p: Parameters) extends XSModule
       val out = new StallReasonIO(DecodeWidth)
     }
     val vsetvlVType = Input(VType())
+    val lastSpecVType = (Valid(new VType))
+    val specVtype = Output(new VType)
   })
 
   // io alias
@@ -105,6 +107,8 @@ class DecodeStage(implicit p: Parameters) extends XSModule
   vtypeGen.io.commitVType := io.commitVType
   vtypeGen.io.walkVType := io.walkVType
   vtypeGen.io.vsetvlVType := io.vsetvlVType
+  io.specVtype := vtypeGen.io.specVtype
+  io.lastSpecVType := vtypeGen.io.lastSpecVType
 
   //Comp 1
   decoderComp.io.redirect := io.redirect

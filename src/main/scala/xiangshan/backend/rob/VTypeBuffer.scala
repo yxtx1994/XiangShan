@@ -53,6 +53,11 @@ class VTypeBufferIO(size: Int)(implicit p: Parameters) extends XSBundle {
     }
   })
 
+  val fromDecode = new Bundle {
+    val lastSpecVType = Flipped(Valid(new VType))
+    val specVtype = Input(new VType)
+  }
+
   val status = Output(new Bundle {
     val walkEnd = Bool()
   })
@@ -103,7 +108,15 @@ class VTypeBuffer(size: Int)(implicit p: Parameters) extends XSModule with HasCi
   private val walkPtrNext = Wire(new VTypeBufferPtr)
   private val walkPtrVecNext = VecInit((0 until CommitWidth).map(x => walkPtrNext + x.U))
 
+  private val enqVType = WireInit(0.U.asTypeOf(new (VType)))
+  when(io.fromDecode.lastSpecVType.valid) {
+    enqVType := io.fromDecode.lastSpecVType.bits
+  }.otherwise {
+    enqVType := io.fromDecode.specVtype
+  }
+
   private val walkPtrSnapshots = SnapshotGenerator(enqPtr, io.snpt.snptEnq, io.snpt.snptDeq, io.redirect.valid, io.snpt.flushVec)
+  private val walkVtypeSnapshots = SnapshotGenerator(enqVType, io.snpt.snptEnq, io.snpt.snptDeq, io.redirect.valid, io.snpt.flushVec)
 
   private val robWalkEndReg = RegInit(false.B)
   private val robWalkEnd = io.fromRob.walkEnd || robWalkEndReg
@@ -265,6 +278,10 @@ class VTypeBuffer(size: Int)(implicit p: Parameters) extends XSModule with HasCi
     // special walk use commit vtype
     decodeResumeVType.valid := commitVTypeValid
     decodeResumeVType.bits := newestArchVType
+  }.elsewhen (state === s_walk && stateLast === s_idle) {
+    // use snapshot vtype
+    decodeResumeVType.valid := true.B
+    decodeResumeVType.bits := walkVtypeSnapshots(snptSelect)
   }.elsewhen (state === s_walk && walkCount =/= 0.U) {
     decodeResumeVType.valid := true.B
     decodeResumeVType.bits := newestVType
