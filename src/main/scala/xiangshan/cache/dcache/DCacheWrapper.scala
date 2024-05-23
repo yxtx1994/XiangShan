@@ -42,7 +42,8 @@ case class DCacheParameters
 (
   nSets: Int = 128,
   nWays: Int = 8,
-  rowBits: Int = 64,
+  // rowBits: Int = 64,
+  rowBits: Int = 128,
   tagECC: Option[String] = None,
   dataECC: Option[String] = None,
   replacer: Option[String] = Some("setplru"),
@@ -133,14 +134,15 @@ trait HasDCacheParameters extends HasL1CacheParameters with HasL1PrefetchSourceP
   val DCacheSetDiv = 1
   val DCacheSets = cacheParams.nSets
   val DCacheWays = cacheParams.nWays
-  val DCacheBanks = 8 // hardcoded
+  // val DCacheBanks = 8 // hardcoded
+  val DCacheBanks = 4
   val DCacheDupNum = 16
   val DCacheSRAMRowBits = cacheParams.rowBits // hardcoded
   val DCacheWordBits = 64 // hardcoded
   val DCacheWordBytes = DCacheWordBits / 8
   val MaxPrefetchEntry = cacheParams.nMaxPrefetchEntry
   val DCacheVWordBytes = VLEN / 8
-  require(DCacheSRAMRowBits == 64)
+  // require(DCacheSRAMRowBits == 64)
 
   val DCacheSetDivBits = log2Ceil(DCacheSetDiv)
   val DCacheSetBits = log2Ceil(DCacheSets)
