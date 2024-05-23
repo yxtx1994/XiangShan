@@ -81,7 +81,6 @@ class MinimalConfig(n: Int = 1) extends Config(
         VlMergeBufferSize = 8,
         VsMergeBufferSize = 8,
         UopWritebackWidth = 2,
-        SplitBufferSize = 8,
         // ==============================
         RobSize = 48,
         RabSize = 96,
