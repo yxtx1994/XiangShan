@@ -40,6 +40,7 @@ class DecodeStage(implicit p: Parameters) extends XSModule
 
   val io = IO(new Bundle() {
     val redirect = Input(Bool())
+    val vtypeRedirect = Input(Bool())
     // from Ibuffer
     val in = Vec(DecodeWidth, Flipped(DecoupledIO(new StaticInst)))
     // to Rename
@@ -103,7 +104,7 @@ class DecodeStage(implicit p: Parameters) extends XSModule
     inst.bits := io.in(i).bits.instr
   }
   vtypeGen.io.canUpdateVType := decoderComp.io.in.fire && decoderComp.io.in.bits.simpleDecodedInst.isVset
-  vtypeGen.io.redirect := io.redirect
+  vtypeGen.io.redirect := io.vtypeRedirect
   vtypeGen.io.commitVType := io.commitVType
   vtypeGen.io.walkVType := io.walkVType
   vtypeGen.io.vsetvlVType := io.vsetvlVType
