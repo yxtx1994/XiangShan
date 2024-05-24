@@ -97,7 +97,7 @@ class ICacheMainPipeInterface(implicit p: Parameters) extends ICacheBundle {
   val dataArray     = new ICacheDataReqBundle
   /** prefetch io */
   val touch = Vec(PortNumber,ValidIO(new ReplacerTouch))
-  val wayLookupRead = Flipped(DecoupledIO(new WayLookupRead))
+  val wayLookupRead = Flipped(DecoupledIO(new WayLookupInfo))
 
   val mshr          = new ICacheMSHRBundle
   val errors        = Output(Vec(PortNumber, new L1CacheErrorInfo))

@@ -43,7 +43,7 @@ class IPredfetchIO(implicit p: Parameters) extends IPrefetchBundle {
   val metaRead          = new ICacheMetaReqBundle
   val MSHRReq           = DecoupledIO(new ICacheMissReq)
   val MSHRResp          = Flipped(ValidIO(new ICacheMissResp))
-  val wayLookupWrite    = DecoupledIO(new WayLookupWrite)
+  val wayLookupWrite    = DecoupledIO(new WayLookupInfo)
 }
 
 class IPrefetchPipe(implicit p: Parameters) extends  IPrefetchModule
@@ -193,7 +193,7 @@ class IPrefetchPipe(implicit p: Parameters) extends  IPrefetchModule
 
   val s1_tag_eq_vec       = VecInit((0 until PortNumber).map( p => VecInit((0 until nWays).map( w => s1_meta_ptags(p)(w) === s1_req_ptags(p)))))
   val s1_tag_match_vec    = VecInit((0 until PortNumber).map( k => VecInit(s1_tag_eq_vec(k).zipWithIndex.map{ case(way_tag_eq, w) => way_tag_eq && s1_meta_valids(k)(w)})))
-  val s1_SRAM_waymasks    = s1_tag_match_vec.map(_.asUInt)
+  val s1_SRAM_waymasks    = VecInit(s1_tag_match_vec.map(_.asUInt))
 
   /**
     ******************************************************************************
@@ -207,7 +207,7 @@ class IPrefetchPipe(implicit p: Parameters) extends  IPrefetchModule
     val ptag_same = getPhyTagFromBlk(fromMSHR.bits.blkPaddr) === ptag
     val way_same  = fromMSHR.bits.waymask === mask
     when(vset_same) {
-      when(ptag_same) {
+      when(ptag_same) { 
         new_mask := fromMSHR.bits.waymask
       }.elsewhen(way_same) {
         new_mask := 0.U
@@ -217,15 +217,10 @@ class IPrefetchPipe(implicit p: Parameters) extends  IPrefetchModule
   }
 
   val s1_waymasks_r = RegInit(VecInit(Seq.fill(PortNumber)(0.U(nWays.W))))
-  val s1_waymasks   = WireInit(s1_waymasks_r)
-  s1_waymasks_r := s1_waymasks
+  val s1_SRAM_valid = s0_fire_r || RegNext(s1_need_meta && toMeta.ready)
+  val s1_waymasks   = Mux(s1_SRAM_valid, s1_SRAM_waymasks, s1_waymasks_r)
   (0 until PortNumber).foreach{i =>
-    when(s0_fire_r || RegNext(s1_need_meta && toMeta.ready)) {
-      // register metaInfo when receive mete resp
-      s1_waymasks(i) := update_waymask(s1_SRAM_waymasks(i), s1_req_vSetIdx(i), s1_req_ptags(i))
-    }.otherwise {
-      s1_waymasks(i) := update_waymask(s1_waymasks_r(i), s1_req_vSetIdx(i), s1_req_ptags(i))
-    }
+    s1_waymasks_r(i) := update_waymask(s1_waymasks(i), s1_req_vSetIdx(i), s1_req_ptags(i))
   }
 
   /**
@@ -233,12 +228,13 @@ class IPrefetchPipe(implicit p: Parameters) extends  IPrefetchModule
     * send enqueu req to WayLookup
     ******** **********************************************************************
     */
-  toWayLookup.valid             := ((state === m_enqWay) || ((state === m_idle) && itlb_finish)) && !s1_flush
-  toWayLookup.bits.ptag         := s1_req_ptags
+  // Disallow enqueuing wayLookup when SRAM write occurs.
+  toWayLookup.valid             := ((state === m_enqWay) || ((state === m_idle) && itlb_finish)) && !s1_flush && !fromMSHR.valid
   toWayLookup.bits.vSetIdx      := s1_req_vSetIdx
+  toWayLookup.bits.ptag         := s1_req_ptags
+  toWayLookup.bits.waymask      := s1_waymasks
   toWayLookup.bits.excp_tlb_af  := itlbExcpAF
   toWayLookup.bits.excp_tlb_pf  := itlbExcpPF
-  toWayLookup.bits.waymask      := s1_waymasks
 
   val s1_waymasks_vec = s1_waymasks.map(_.asTypeOf(Vec(nWays, Bool())))
   when(toWayLookup.fire) {
@@ -334,8 +330,6 @@ class IPrefetchPipe(implicit p: Parameters) extends  IPrefetchModule
 
   val s2_req_vSetIdx  = s2_req_vaddr.map(get_idx(_))
   val s2_req_ptags    = s2_req_paddr.map(get_phy_tag(_))
-
-  
 
   /**
     ******************************************************************************

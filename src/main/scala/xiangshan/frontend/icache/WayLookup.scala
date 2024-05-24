@@ -29,53 +29,41 @@ import huancun.PreferCacheKey
 import xiangshan.XSCoreParamsKey
 import utility._
 
-class WayLookupRead(implicit p: Parameters) extends ICacheBundle {
+class WayLookupInfo(implicit p: Parameters) extends ICacheBundle {
+  val vSetIdx     = Vec(PortNumber, UInt(idxBits.W))
   val waymask     = Vec(PortNumber, UInt(nWays.W))
   val ptag        = Vec(PortNumber, UInt(tagBits.W))
   val excp_tlb_af = Vec(PortNumber, Bool())
   val excp_tlb_pf = Vec(PortNumber, Bool())
-  // debug
-  val vSetIdx     = Vec(PortNumber, UInt(idxBits.W))
 }
 
-class WayLookupWrite(implicit p: Parameters) extends ICacheBundle {
-  val vSetIdx       = Vec(PortNumber, UInt(idxBits.W))
-  val ptag          = Vec(PortNumber, UInt(tagBits.W))
-  val waymask       = Vec(PortNumber, UInt(nWays.W))
-  val excp_tlb_af   = Vec(PortNumber, Bool())
-  val excp_tlb_pf   = Vec(PortNumber, Bool())
-}
+// class WayLookupRead(implicit p: Parameters) extends ICacheBundle {
+//   val vSetIdx     = Vec(PortNumber, UInt(idxBits.W))
+//   val waymask     = Vec(PortNumber, UInt(nWays.W))
+//   val ptag        = Vec(PortNumber, UInt(tagBits.W))
+//   val excp_tlb_af = Vec(PortNumber, Bool())
+//   val excp_tlb_pf = Vec(PortNumber, Bool())
+// }
+
+// class WayLookupWrite(implicit p: Parameters) extends ICacheBundle {
+//   val vSetIdx       = Vec(PortNumber, UInt(idxBits.W))
+//   val ptag          = Vec(PortNumber, UInt(tagBits.W))
+//   val waymask       = Vec(PortNumber, UInt(nWays.W))
+//   val excp_tlb_af   = Vec(PortNumber, Bool())
+//   val excp_tlb_pf   = Vec(PortNumber, Bool())
+// }
 
 class WayLookupInterface(implicit p: Parameters) extends ICacheBundle {
   val flush   = Input(Bool())
-  val read    = DecoupledIO(new WayLookupRead)
-  val write   = Flipped(DecoupledIO(new WayLookupWrite))
+  val read    = DecoupledIO(new WayLookupInfo)
+  val write   = Flipped(DecoupledIO(new WayLookupInfo))
   val update  = Flipped(ValidIO(new ICacheMissResp))
 }
 
 class WayLookup(implicit p: Parameters) extends ICacheModule {
   val io = IO(new WayLookupInterface)
 
-  // class WayLookupEntry(implicit p: Parameters) {
-  //   val first_vSetIdx = RegInit(0.U(idxBits.W))
-  //   val ptag          = RegInit(VecInit(Seq.fill(PortNumber)(0.U(tagBits.W))))
-  //   val way           = RegInit(VecInit(Seq.fill(PortNumber)(0.U(log2Ceil(nWays).W))))
-  //   val excp_tlb_af   = RegInit(VecInit(Seq.fill(PortNumber)(false.B)))
-  //   val excp_tlb_pf   = RegInit(VecInit(Seq.fill(PortNumber)(false.B)))
-
-  //   def vSetIdx       = VecInit(Seq(this.first_vSetIdx, this.first_vSetIdx + 1.U))
-  //   def update(info: ICacheMissResp, valid: Bool): Bool = {
-  //     val hits = Wire(Vec(PortNumber, Bool()))
-  //     (0 until PortNumber).foreach { i => 
-  //       val hits(i) = (info.vSetIdx === this.vSetIdx(i)) && (info.ptag === this.ptag(i)) && !info.corrupt && valid
-  //       this.way(i) := Mux(hits(i), info.way, this.way(i))
-  //     }
-  //     hits.reduce(_||_)
-  //   }
-  // }
-
   class WayLookupPtr(implicit p: Parameters) extends CircularQueuePtr[WayLookupPtr](nWayLookupSize)
-
   object WayLookupPtr {
     def apply(f: Bool, v: UInt)(implicit p: Parameters): WayLookupPtr = {
       val ptr = Wire(new WayLookupPtr)
@@ -85,15 +73,7 @@ class WayLookup(implicit p: Parameters) extends ICacheModule {
     }
   }
 
-  class WayLookupEntry(implicit p: Parameters) extends ICacheBundle {
-    val vSetIdx       = Vec(PortNumber, UInt(idxBits.W))
-    val ptag          = Vec(PortNumber, UInt(tagBits.W))
-    val waymask       = Vec(PortNumber, UInt(nWays.W))
-    val excp_tlb_af   = Vec(PortNumber, Bool())
-    val excp_tlb_pf   = Vec(PortNumber, Bool())
-  }
-
-  val entries         = RegInit(VecInit(Seq.fill(nWayLookupSize)(0.U.asTypeOf((new WayLookupEntry).cloneType))))
+  val entries         = RegInit(VecInit(Seq.fill(nWayLookupSize)(0.U.asTypeOf((new WayLookupInfo).cloneType))))
   val readPtr         = RegInit(WayLookupPtr(false.B, 0.U))
   val writePtr        = RegInit(WayLookupPtr(false.B, 0.U))
 
@@ -145,14 +125,9 @@ class WayLookup(implicit p: Parameters) extends ICacheModule {
     * read
     ******************************************************************************
     */
-  // disalbe read when entries(0) update
-  io.read.valid             := !empty
-  io.read.bits.ptag         := entries(readPtr.value).ptag
-  io.read.bits.waymask      := entries(readPtr.value).waymask
-  io.read.bits.vSetIdx      := entries(readPtr.value).vSetIdx
-  io.read.bits.excp_tlb_af  := entries(readPtr.value).excp_tlb_af
-  io.read.bits.excp_tlb_pf  := entries(readPtr.value).excp_tlb_pf
-  
+  val bypass = empty && io.write.valid
+  io.read.valid             := !empty || io.write.valid
+  io.read.bits              := Mux(bypass, io.write.bits, entries(readPtr.value))
 
   /**
     ******************************************************************************
@@ -161,10 +136,6 @@ class WayLookup(implicit p: Parameters) extends ICacheModule {
     */
   io.write.ready := !full
   when(io.write.fire) {
-    entries(writePtr.value).vSetIdx       := io.write.bits.vSetIdx
-    entries(writePtr.value).ptag          := io.write.bits.ptag
-    entries(writePtr.value).waymask       := io.write.bits.waymask
-    entries(writePtr.value).excp_tlb_af   := io.write.bits.excp_tlb_af
-    entries(writePtr.value).excp_tlb_pf   := io.write.bits.excp_tlb_pf
+    entries(writePtr.value) := io.write.bits
   }
 }
