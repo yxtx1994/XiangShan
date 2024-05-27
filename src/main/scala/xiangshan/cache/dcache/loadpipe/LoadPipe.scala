@@ -474,11 +474,8 @@ class LoadPipe(id: Int)(implicit p: Parameters) extends DCacheModule with HasPer
   val s3_req_instrtype = RegEnable(s2_req.instrtype, s2_fire)
   val s3_is_prefetch = s3_req_instrtype === DCACHE_PREFETCH_SOURCE.U
 
-  // val s3_data128bit = Cat(io.banked_data_resp(1).raw_data, io.banked_data_resp(0).raw_data)
   val s3_data128bit = io.banked_data_resp(0).raw_data
-  // val s3_data64bit = Fill(2, io.banked_data_resp(0).raw_data)
-  val s3_data64bit = Fill(2, io.banked_data_resp(0).raw_data(127, 64))
-  val s3_banked_data_resp_word = Mux(s3_load128Req, s3_data128bit, s3_data64bit)
+  val s3_banked_data_resp_word = s3_data128bit
   val s3_data_error = Mux(s3_load128Req, io.read_error_delayed.asUInt.orR, io.read_error_delayed(0)) && s3_hit
   val s3_tag_error = RegEnable(s2_tag_error, s2_fire)
   val s3_flag_error = RegEnable(s2_flag_error, s2_fire)
