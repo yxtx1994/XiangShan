@@ -158,8 +158,10 @@ class IPrefetchPipe(implicit p: Parameters) extends  IPrefetchModule
     * Receive resp from ITLB
     ******************************************************************************
     */
-  val itlbRespPAddr  = VecInit((0 until PortNumber).map(i =>
-                         ResultHoldBypass(valid = tlb_valid_pulse(i), data = fromITLB(i).bits.paddr(0))))
+  val s1_req_paddr_wire   = VecInit(fromITLB.map(_.bits.paddr(0)))
+  val s1_req_paddr_reg    = VecInit((0 until PortNumber).map(i => RegEnable(s1_req_paddr_wire(i), tlb_valid_pulse(i))))
+  val s1_req_paddr        = VecInit((0 until PortNumber).map(i => Mux(tlb_valid_pulse(i), s1_req_paddr_wire(i), s1_req_paddr_reg(i))))
+
   val itlbExcpPF     = VecInit((0 until PortNumber).map(i =>
                          ResultHoldBypass(valid = tlb_valid_pulse(i), data = fromITLB(i).bits.excp(0).pf.instr)))
   val itlbExcpAF     = VecInit((0 until PortNumber).map(i =>
@@ -185,15 +187,21 @@ class IPrefetchPipe(implicit p: Parameters) extends  IPrefetchModule
     * Receive resp from IMeta and check
     ******************************************************************************
     */
-  val s1_req_paddr    = itlbRespPAddr
   val s1_req_ptags    = VecInit(s1_req_paddr.map(get_phy_tag(_)))
 
   val s1_meta_ptags   = fromMeta.tags
   val s1_meta_valids  = fromMeta.entryValid
 
-  val s1_tag_eq_vec       = VecInit((0 until PortNumber).map( p => VecInit((0 until nWays).map( w => s1_meta_ptags(p)(w) === s1_req_ptags(p)))))
-  val s1_tag_match_vec    = VecInit((0 until PortNumber).map( k => VecInit(s1_tag_eq_vec(k).zipWithIndex.map{ case(way_tag_eq, w) => way_tag_eq && s1_meta_valids(k)(w)})))
-  val s1_SRAM_waymasks    = VecInit(s1_tag_match_vec.map(_.asUInt))
+  def get_waymask(paddrs: Vec[UInt]): Vec[UInt] = {
+    val ptags         = paddrs.map(get_phy_tag(_))
+    val tag_eq_vec    = VecInit((0 until PortNumber).map( p => VecInit((0 until nWays).map( w => s1_meta_ptags(p)(w) === ptags(p)))))
+    val tag_match_vec = VecInit((0 until PortNumber).map( k => VecInit(tag_eq_vec(k).zipWithIndex.map{ case(way_tag_eq, w) => way_tag_eq && s1_meta_valids(k)(w)})))
+    val waymasks      = VecInit(tag_match_vec.map(_.asUInt))
+    waymasks
+  }
+
+  val s1_SRAM_waymasks = VecInit((0 until PortNumber).map(i =>
+                            Mux(tlb_valid_pulse(i), get_waymask(s1_req_paddr_wire)(i), get_waymask(s1_req_paddr_reg)(i))))
 
   /**
     ******************************************************************************
@@ -363,7 +371,7 @@ class IPrefetchPipe(implicit p: Parameters) extends  IPrefetchModule
   }
 
   (0 until PortNumber).map{ i =>
-    toMSHRArbiter.io.in(i).valid          := s2_valid && s2_miss(i) && !has_send(i) && !s2_flush
+    toMSHRArbiter.io.in(i).valid          := s2_valid && s2_miss(i) && !has_send(i)
     toMSHRArbiter.io.in(i).bits.blkPaddr  := getBlkAddr(s2_req_paddr(i))
     toMSHRArbiter.io.in(i).bits.vSetIdx   := s2_req_vSetIdx(i)
   }
