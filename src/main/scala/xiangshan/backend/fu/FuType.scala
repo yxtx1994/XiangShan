@@ -131,7 +131,8 @@ object FuType extends OHEnumeration {
   val vecArith = vecOPI ++ vecOPF
   val vecMem = Seq(vldu, vstu, vsegldu, vsegstu)
   val vecArithOrMem = vecArith ++ vecMem
-  val vecAll = vecVSET ++ vecMem
+  val vecAll = vecVSET ++ vecArithOrMem
+  val fpOP = fpArithAll ++ Seq(i2f, i2v)
 
   val lat0 = Seq(jmp, brh)
   val lat1 = Seq(vialuF, vppu, vipu)
