@@ -621,7 +621,8 @@ class IssueQueueIQWakeUpBundle(
                                                 Some(new SqPtr())             else None
     val trigger      = if (params.trigger)      Some(new TriggerCf)           else None
     // uop info
-    val predecodeInfo = if(params.hasPredecode) Some(new PreDecodeInfo) else None
+    val predecodeInfo = if(params.hasPredecode) Some(new PreDecodeInfo)       else None
+    val veidx         = if (params.hasVecLsFu)  Some(UopIdx())                else None
     // vldu used only
     val vls = OptionWrapper(params.hasVLoadFu, new Bundle {
       val vpu = new VPUCtrlSignals

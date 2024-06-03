@@ -320,6 +320,8 @@ class Redirect(implicit p: Parameters) extends XSBundle {
   val debugIsCtrl = Bool()
   val debugIsMemVio = Bool()
 
+  val veidx = UopIdx()
+
   def flushItself() = RedirectLevel.flushItself(level)
 }
 

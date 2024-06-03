@@ -25,7 +25,7 @@ import utility._
 import utils._
 import xiangshan._
 import xiangshan.backend.BackendParams
-import xiangshan.backend.Bundles.{DynInst, ExceptionInfo, ExuOutput}
+import xiangshan.backend.Bundles.{DynInst, ExceptionInfo, ExuOutput, UopIdx}
 import xiangshan.backend.fu.{FuConfig, FuType}
 import xiangshan.frontend.FtqPtr
 import xiangshan.mem.{LqPtr, LsqEnqIO, SqPtr}
@@ -219,6 +219,7 @@ class RobExceptionInfo(implicit p: Parameters) extends XSBundle {
   val trigger = new TriggerCf
   val vstartEn = Bool()
   val vstart = UInt(XLEN.W)
+  val veidx = UopIdx()
 
   def has_exception = exceptionVec.asUInt.orR || flushPipe || singleStep || replayInst || trigger.canFire
   def not_commit = exceptionVec.asUInt.orR || singleStep || replayInst || trigger.canFire
@@ -250,7 +251,7 @@ class ExceptionGen(params: BackendParams)(implicit p: Parameters) extends XSModu
           res(i).valid := valid(i)
           res(i).bits := bits(i)
         }
-        val oldest = Mux(!valid(1) || valid(0) && isAfter(bits(1).robIdx, bits(0).robIdx), res(0), res(1))
+        val oldest = Mux(!valid(1) || valid(0) && (isAfter(bits(1).robIdx, bits(0).robIdx) || ((bits(1).robIdx === bits(0).robIdx) && bits(1).veidx > bits(0).veidx)), res(0), res(1))
         (Seq(oldest.valid), Seq(oldest.bits))
       } else {
         val left = getOldest_recursion(valid.take(valid.length / 2), bits.take(valid.length / 2))
@@ -408,7 +409,6 @@ class RobImp(override val wrapper: Rob)(implicit p: Parameters, params: BackendP
   val numExuWbPorts = exuWBs.length
   val numStdWbPorts = stdWBs.length
 
-
   println(s"Rob: size $RobSize, numExuWbPorts: $numExuWbPorts, numStdWbPorts: $numStdWbPorts, commitwidth: $CommitWidth")
 //  println(s"exuPorts: ${exuWbs.map(_._1.map(_.name))}")
 //  println(s"stdPorts: ${stdWbs.map(_._1.map(_.name))}")
@@ -426,6 +426,7 @@ class RobImp(override val wrapper: Rob)(implicit p: Parameters, params: BackendP
   val fflagsDataModule   = RegInit(VecInit(Seq.fill(RobSize)(0.U(5.W))))
   val vxsatDataModule    = RegInit(VecInit(Seq.fill(RobSize)(false.B)))
   val vls                = RegInit(VecInit(Seq.fill(RobSize)(false.B)))
+  val vlsHasException    = RegInit(VecInit(Seq.fill(RobSize)(false.B)))
 
   val stdWritebackedDeqGroup   = Reg(Vec(CommitWidth, Bool()))
   val uopNumVecDeqGroup        = RegInit(VecInit(Seq.fill(CommitWidth)(0.U(log2Up(MaxUopSize + 1).W))))
@@ -646,6 +647,7 @@ class RobImp(override val wrapper: Rob)(implicit p: Parameters, params: BackendP
       mmio(enqIndex) := false.B
 
       vls(enqIndex) := enqUop.vlsInstr
+      vlsHasException(enqIndex) := false.B
     }
   }
 
@@ -794,6 +796,7 @@ class RobImp(override val wrapper: Rob)(implicit p: Parameters, params: BackendP
   io.flushOut.bits.ftqOffset := Mux(needModifyFtqIdxOffset, firstVInstrFtqOffset, deqDispatchData.ftqOffset)
   io.flushOut.bits.level := Mux(deqHasReplayInst || intrEnable || exceptionEnable || needModifyFtqIdxOffset, RedirectLevel.flush, RedirectLevel.flushAfter) // TODO use this to implement "exception next"
   io.flushOut.bits.interrupt := true.B
+  io.flushOut.bits.veidx := exceptionDataRead.bits.veidx
   XSPerfAccumulate("interrupt_num", io.flushOut.valid && intrEnable)
   XSPerfAccumulate("exception_num", io.flushOut.valid && exceptionEnable)
   XSPerfAccumulate("flush_pipe_num", io.flushOut.valid && isFlushPipe)
@@ -1145,7 +1148,7 @@ class RobImp(override val wrapper: Rob)(implicit p: Parameters, params: BackendP
   for ((wb, blockWb) <- exuWBs.zip(blockWbSeq)) {
     when(wb.valid) {
       val wbIdx = wb.bits.robIdx.value
-      val wbHasException = wb.bits.exceptionVec.getOrElse(0.U).asUInt.orR
+      val wbHasException = wb.bits.exceptionVec.getOrElse(0.U).asUInt.orR && !vls(wbIdx)
       val wbHasTriggerCanFire = wb.bits.trigger.getOrElse(0.U).asTypeOf(io.enq.req(0).bits.trigger).getBackendCanFire //Todo: wb.bits.trigger.getHitBackend
       val wbHasFlushPipe = wb.bits.flushPipe.getOrElse(false.B)
       val wbHasReplayInst = wb.bits.replay.getOrElse(false.B) //Todo: && wb.bits.replayInst
@@ -1185,7 +1188,14 @@ class RobImp(override val wrapper: Rob)(implicit p: Parameters, params: BackendP
     val canWbSeq = exuWBs.map(writeback => writeback.valid && writeback.bits.robIdx.value === i.U)
     val canWbNoBlockSeq = canWbSeq.zip(blockWbSeq).map{ case(canWb, blockWb) => canWb && !blockWb }
     val canStdWbSeq = VecInit(stdWBs.map(writeback => writeback.valid && writeback.bits.robIdx.value === i.U))
+    val vlsWbExceptionSeq = VecInit(exuWBs.map(writeback => writeback.valid && vls(i) && writeback.bits.robIdx.value === i.U && writeback.bits.exceptionVec.getOrElse(0.U).asUInt.orR))
     val wbCnt = Mux1H(canWbNoBlockSeq, io.writebackNums.map(_.bits))
+    val exceptionHandle = (vls(i) && uopNumVec(i) === 0.U) || !vls(i)
+    val vlsException = vlsWbExceptionSeq.asUInt.orR
+
+    when (vlsException) {
+      vlsHasException(i) := true.B
+    }
 
     val exceptionHas = RegInit(false.B)
     val exceptionHasWire = Wire(Bool())
@@ -1195,10 +1205,11 @@ class RobImp(override val wrapper: Rob)(implicit p: Parameters, params: BackendP
     ))
     exceptionHas := exceptionHasWire
 
-    when (exceptionHas || exceptionHasWire) {
+    when ((exceptionHas || exceptionHasWire) && exceptionHandle) {
       // exception flush
       uopNumVec(i) := 0.U
       stdWritebacked(i) := true.B
+      vlsHasException(i) := false.B
       for (j <- 0 until 2 * CommitWidth) {
         when(i.U === deqPtrValue(j).value) {
           commit_wNextVec(j) := true.B
@@ -1214,7 +1225,7 @@ class RobImp(override val wrapper: Rob)(implicit p: Parameters, params: BackendP
       assert(!(uopNumVec(i) - wbCnt > uopNumVec(i)), s"Overflow! robIdx=$i")
       for (j <- 0 until 2 * CommitWidth) {
         when(i.U === deqPtrValue(j).value) {
-          commit_wNextVec(j) := (uopNumVec(i) === wbCnt) && stdWritebacked(i)
+          commit_wNextVec(j) := (uopNumVec(i) === wbCnt) && stdWritebacked(i) && !vlsHasException(i) && !vlsException
         }
       }
       when (canStdWbSeq.asUInt.orR) {
@@ -1362,6 +1373,7 @@ class RobImp(override val wrapper: Rob)(implicit p: Parameters, params: BackendP
     exceptionGen.io.enq(i).bits.trigger.frontendCanFire := io.enq.req(i).bits.trigger.frontendCanFire
     exceptionGen.io.enq(i).bits.vstartEn := false.B //DontCare
     exceptionGen.io.enq(i).bits.vstart := 0.U //DontCare
+    exceptionGen.io.enq(i).bits.veidx := 0.U //DontCare
   }
 
   println(s"ExceptionGen:")
@@ -1385,6 +1397,8 @@ class RobImp(override val wrapper: Rob)(implicit p: Parameters, params: BackendP
     exc_wb.bits.trigger.backendCanFire := trigger.backendCanFire
     exc_wb.bits.vstartEn := false.B //wb.bits.vstartEn.getOrElse(false.B) // todo need add vstart in ExuOutput
     exc_wb.bits.vstart := 0.U //wb.bits.vstart.getOrElse(0.U)
+    exc_wb.bits.veidx := wb.bits.veidx.getOrElse(0.U)
+
 //    println(s"  [$i] ${configs.map(_.name)}: exception ${exceptionCases(i)}, " +
 //      s"flushPipe ${configs.exists(_.flushPipe)}, " +
 //      s"replayInst ${configs.exists(_.replayInst)}")
