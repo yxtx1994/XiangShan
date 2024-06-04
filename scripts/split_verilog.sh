@@ -12,7 +12,7 @@ while :; do
 	lastline=$(echo "$res" | grep -o '[0-9]*' | head -1)
 	directory=$(echo "$current" | grep -o '.*/')
 	if [ -n "$directory" ]; then mkdir -p "$path/tmp/$directory"; fi
-	head -n $(($lastline - 2)) "$path/$origin" >"$path/tmp/$current"
+	head -n $(($lastline)) "$path/$origin" >"$path/tmp/$current"
 	sed -i "1,$(($lastline + 1))d" "$path/$origin"
 	current=$(echo "$res" | grep -oP "(?<=$lastline:).*")
 done
