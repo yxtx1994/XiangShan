@@ -41,7 +41,7 @@ class Radix2Divider(len: Int)(implicit p: Parameters) extends AbstractDivider(le
 
   val (a, b) = (io.in.bits.src(0), io.in.bits.src(1))
   val divBy0 = b === 0.U(len.W)
-  val divBy0Reg = RegEnable(divBy0, newReq)
+  val divBy0Reg = utils.HackedAPI.HackedRegEnable(divBy0, newReq)
 
   val shiftReg = Reg(UInt((1 + len * 2).W))
   val hi = shiftReg(len * 2, len)
@@ -51,12 +51,12 @@ class Radix2Divider(len: Int)(implicit p: Parameters) extends AbstractDivider(le
 
   val (aSign, aVal) = abs(a, sign)
   val (bSign, bVal) = abs(b, sign)
-  val aSignReg = RegEnable(aSign, newReq)
-  val qSignReg = RegEnable((aSign ^ bSign) && !divBy0, newReq)
-  val bReg = RegEnable(bVal, newReq)
-  val aValx2Reg = RegEnable(Cat(aVal, "b0".U), newReq)
-  val ctrlReg = RegEnable(ctrl, newReq)
-  val uopReg = RegEnable(uop, newReq)
+  val aSignReg = utils.HackedAPI.HackedRegEnable(aSign, newReq)
+  val qSignReg = utils.HackedAPI.HackedRegEnable((aSign ^ bSign) && !divBy0, newReq)
+  val bReg = utils.HackedAPI.HackedRegEnable(bVal, newReq)
+  val aValx2Reg = utils.HackedAPI.HackedRegEnable(Cat(aVal, "b0".U), newReq)
+  val ctrlReg = utils.HackedAPI.HackedRegEnable(ctrl, newReq)
+  val uopReg = utils.HackedAPI.HackedRegEnable(uop, newReq)
 
   val cnt = Counter(len)
   when (newReq && !io.in.bits.uop.robIdx.needFlush(io.redirectIn)) {

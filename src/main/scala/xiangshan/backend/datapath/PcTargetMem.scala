@@ -29,8 +29,8 @@ class PcTargetMemImp(override val wrapper: PcTargetMem)(implicit p: Parameters, 
   private val pcVec       : Vec[UInt] = Wire(Vec(params.numPcMemReadPort, UInt(VAddrData().dataWidth.W)))
 
   targetMem.io.wen.head := GatedValidRegNext(io.fromFrontendFtq.pc_mem_wen)
-  targetMem.io.waddr.head := RegEnable(io.fromFrontendFtq.pc_mem_waddr, io.fromFrontendFtq.pc_mem_wen)
-  targetMem.io.wdata.head := RegEnable(io.fromFrontendFtq.pc_mem_wdata, io.fromFrontendFtq.pc_mem_wen)
+  targetMem.io.waddr.head := utils.HackedAPI.HackedRegEnable(io.fromFrontendFtq.pc_mem_waddr, io.fromFrontendFtq.pc_mem_wen)
+  targetMem.io.wdata.head := utils.HackedAPI.HackedRegEnable(io.fromFrontendFtq.pc_mem_wdata, io.fromFrontendFtq.pc_mem_wen)
 
   private val newestEn: Bool = io.fromFrontendFtq.newest_entry_en
   private val newestTarget: UInt = io.fromFrontendFtq.newest_entry_target
@@ -39,10 +39,10 @@ class PcTargetMemImp(override val wrapper: PcTargetMem)(implicit p: Parameters, 
     // target pc stored in next entry
     targetMem.io.ren.get(i) := readValid(i)
     targetMem.io.raddr(i) := (targetPtr + 1.U).value
-    val needNewestTarget = RegEnable(targetPtr === io.fromFrontendFtq.newest_entry_ptr && newestEn, false.B, readValid(i))
+    val needNewestTarget = utils.HackedAPI.HackedRegEnable(targetPtr === io.fromFrontendFtq.newest_entry_ptr && newestEn, false.B, readValid(i))
     targetPCVec(i) := Mux(
       needNewestTarget,
-      RegEnable(newestTarget, newestEn),
+      utils.HackedAPI.HackedRegEnable(newestTarget, newestEn),
       targetMem.io.rdata(i).startAddr
     )
   }
@@ -53,7 +53,7 @@ class PcTargetMemImp(override val wrapper: PcTargetMem)(implicit p: Parameters, 
     // pc stored in this entry
     targetMem.io.ren.get(i + params.numTargetReadPort) := readValid(i)
     targetMem.io.raddr(i + params.numTargetReadPort) := pcAddr.value
-    pcVec(i) := targetMem.io.rdata(i + params.numTargetReadPort).getPc(RegEnable(offset, readValid(i)))
+    pcVec(i) := targetMem.io.rdata(i + params.numTargetReadPort).getPc(utils.HackedAPI.HackedRegEnable(offset, readValid(i)))
   }
 
   io.toDataPath.toDataPathTargetPC := targetPCVec

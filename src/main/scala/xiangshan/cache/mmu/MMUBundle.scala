@@ -271,7 +271,7 @@ class TlbEntry(pageNormal: Boolean, pageSuper: Boolean)(implicit p: Parameters) 
       Mux(inner_level(1), vpn(vpnnLen*2-1, vpnnLen), ppn(vpnnLen*2-1, vpnnLen)),
       Mux(inner_level(0), vpn(vpnnLen-1, 0), ppn(vpnnLen-1, 0)))
 
-    if (saveLevel) Cat(ppn(ppn.getWidth-1, vpnnLen*2), RegEnable(ppn_res(vpnnLen*2-1, 0), valid))
+    if (saveLevel) Cat(ppn(ppn.getWidth-1, vpnnLen*2), utils.HackedAPI.HackedRegEnable(ppn_res(vpnnLen*2-1, 0), valid))
     else ppn_res
   }
 
@@ -476,10 +476,10 @@ class TlbSectorEntry(pageNormal: Boolean, pageSuper: Boolean)(implicit p: Parame
 
     if (saveLevel) {
       if (ppn.getWidth == ppnLen - vpnnLen) {
-        Cat(ppn(ppn.getWidth - 1, vpnnLen * 2), RegEnable(ppn_res(vpnnLen * 2 - 1, 0), valid))
+        Cat(ppn(ppn.getWidth - 1, vpnnLen * 2), utils.HackedAPI.HackedRegEnable(ppn_res(vpnnLen * 2 - 1, 0), valid))
       } else {
         require(ppn.getWidth == sectorppnLen)
-        Cat(ppn(ppn.getWidth - 1, vpnnLen * 2 - sectortlbwidth), RegEnable(ppn_res(vpnnLen * 2 - 1, 0), valid))
+        Cat(ppn(ppn.getWidth - 1, vpnnLen * 2 - sectortlbwidth), utils.HackedAPI.HackedRegEnable(ppn_res(vpnnLen * 2 - 1, 0), valid))
       }
     }
     else ppn_res

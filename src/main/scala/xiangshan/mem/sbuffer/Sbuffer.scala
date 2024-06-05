@@ -133,10 +133,10 @@ class SbufferData(implicit p: Parameters) extends XSModule with HasSbufferConst 
     for(line <- 0 until StoreBufferSize){
       val sbuffer_in_s1_line_wen = req.valid && req.bits.wvec(line)
       val sbuffer_in_s2_line_wen = RegNext(sbuffer_in_s1_line_wen)
-      val line_write_buffer_data = RegEnable(req.bits.data, sbuffer_in_s1_line_wen)
-      val line_write_buffer_wline = RegEnable(req.bits.wline, sbuffer_in_s1_line_wen)
-      val line_write_buffer_mask = RegEnable(req.bits.mask, sbuffer_in_s1_line_wen)
-      val line_write_buffer_offset = RegEnable(req.bits.vwordOffset(VWordsWidth-1, 0), sbuffer_in_s1_line_wen)
+      val line_write_buffer_data = utils.HackedAPI.HackedRegEnable(req.bits.data, sbuffer_in_s1_line_wen)
+      val line_write_buffer_wline = utils.HackedAPI.HackedRegEnable(req.bits.wline, sbuffer_in_s1_line_wen)
+      val line_write_buffer_mask = utils.HackedAPI.HackedRegEnable(req.bits.mask, sbuffer_in_s1_line_wen)
+      val line_write_buffer_offset = utils.HackedAPI.HackedRegEnable(req.bits.vwordOffset(VWordsWidth-1, 0), sbuffer_in_s1_line_wen)
       sbuffer_in_s1_line_wen.suggestName("sbuffer_in_s1_line_wen_"+line)
       sbuffer_in_s2_line_wen.suggestName("sbuffer_in_s2_line_wen_"+line)
       line_write_buffer_data.suggestName("line_write_buffer_data_"+line)
@@ -288,7 +288,7 @@ class Sbuffer(implicit p: Parameters)
   val missqReplayTimeOutMask = VecInit(widthMap(i => missqReplayCount(i)(MissqReplayCountBits - 1) && stateVec(i).w_timeout))
   val (missqReplayTimeOutIdxGen, missqReplayHasTimeOutGen) = PriorityEncoderWithFlag(missqReplayTimeOutMask)
   val missqReplayHasTimeOut = RegNext(missqReplayHasTimeOutGen) && !RegNext(sbuffer_out_s0_fire)
-  val missqReplayTimeOutIdx = RegEnable(missqReplayTimeOutIdxGen, missqReplayHasTimeOutGen)
+  val missqReplayTimeOutIdx = utils.HackedAPI.HackedRegEnable(missqReplayTimeOutIdxGen, missqReplayHasTimeOutGen)
 
   //-------------------------sbuffer enqueue-----------------------------
 
@@ -668,9 +668,9 @@ class Sbuffer(implicit p: Parameters)
   accessIdx(EnsbufferWidth).valid := invalidMask(replaceIdx) || (
     need_replace && !need_drain && !cohHasTimeOut && !missqReplayHasTimeOut && sbuffer_out_s0_cango && activeMask(replaceIdx))
   accessIdx(EnsbufferWidth).bits := replaceIdx
-  val sbuffer_out_s1_evictionIdx = RegEnable(sbuffer_out_s0_evictionIdx, sbuffer_out_s0_fire)
-  val sbuffer_out_s1_evictionPTag = RegEnable(ptag(sbuffer_out_s0_evictionIdx), sbuffer_out_s0_fire)
-  val sbuffer_out_s1_evictionVTag = RegEnable(vtag(sbuffer_out_s0_evictionIdx), sbuffer_out_s0_fire)
+  val sbuffer_out_s1_evictionIdx = utils.HackedAPI.HackedRegEnable(sbuffer_out_s0_evictionIdx, sbuffer_out_s0_fire)
+  val sbuffer_out_s1_evictionPTag = utils.HackedAPI.HackedRegEnable(ptag(sbuffer_out_s0_evictionIdx), sbuffer_out_s0_fire)
+  val sbuffer_out_s1_evictionVTag = utils.HackedAPI.HackedRegEnable(vtag(sbuffer_out_s0_evictionIdx), sbuffer_out_s0_fire)
 
   io.dcache.req.valid := sbuffer_out_s1_valid && !blockDcacheWrite
   io.dcache.req.bits := DontCare
@@ -770,7 +770,7 @@ class Sbuffer(implicit p: Parameters)
   for ((forward, i) <- io.forward.zipWithIndex) {
     val vtag_matches = VecInit(widthMap(w => vtag(w) === getVTag(forward.vaddr)))
     // ptag_matches uses paddr from dtlb, which is far from sbuffer
-    val ptag_matches = VecInit(widthMap(w => RegEnable(ptag(w), forward.valid) === RegEnable(getPTag(forward.paddr), forward.valid)))
+    val ptag_matches = VecInit(widthMap(w => utils.HackedAPI.HackedRegEnable(ptag(w), forward.valid) === utils.HackedAPI.HackedRegEnable(getPTag(forward.paddr), forward.valid)))
     val tag_matches = vtag_matches
     val tag_mismatch = RegNext(forward.valid) && VecInit(widthMap(w =>
       RegNext(vtag_matches(w)) =/= ptag_matches(w) && RegNext((activeMask(w) || inflightMask(w)))
@@ -792,11 +792,11 @@ class Sbuffer(implicit p: Parameters)
     val valid_tag_match_reg = valid_tag_matches.map(RegNext(_))
     val inflight_tag_match_reg = inflight_tag_matches.map(RegNext(_))
     val line_offset_reg = RegNext(line_offset_mask)
-    val forward_mask_candidate_reg = RegEnable(
+    val forward_mask_candidate_reg = utils.HackedAPI.HackedRegEnable(
       VecInit(mask.map(entry => entry(getVWordOffset(forward.paddr)))),
       forward.valid
     )
-    val forward_data_candidate_reg = RegEnable(
+    val forward_data_candidate_reg = utils.HackedAPI.HackedRegEnable(
       VecInit(data.map(entry => entry(getVWordOffset(forward.paddr)))),
       forward.valid
     )

@@ -315,7 +315,7 @@ class IPrefetchPipe(implicit p: Parameters) extends  IPrefetchModule
   val p0_valid  = fromFtq.req.valid
 
   val p0_vaddr      = addrAlign(fromFtq.req.bits.target, blockBytes, VAddrBits)
-  val p0_vaddr_reg  = RegEnable(p0_vaddr, p0_fire)
+  val p0_vaddr_reg  = utils.HackedAPI.HackedRegEnable(p0_vaddr, p0_fire)
   val p0_req_cancel = Wire(Bool())
 
   /** 1. send req to IMeta */
@@ -368,7 +368,7 @@ class IPrefetchPipe(implicit p: Parameters) extends  IPrefetchModule
     */
   val p1_valid  = generatePipeControl(lastFire = p0_fire, thisFire = p1_fire || p1_discard, thisFlush = false.B, lastFlush = false.B)
 
-  val p1_vaddr      = RegEnable(p0_vaddr, 0.U(VAddrBits.W), p0_fire)
+  val p1_vaddr      = utils.HackedAPI.HackedRegEnable(p0_vaddr, 0.U(VAddrBits.W), p0_fire)
   val p1_req_cancel = Wire(Bool())
 
   /** 1. Receive resp from ITLB (no blocked) */
@@ -381,8 +381,8 @@ class IPrefetchPipe(implicit p: Parameters) extends  IPrefetchModule
   val p1_paddr          = p1_tlb_resp_paddr
 
   /** 2. Receive resp from IMeta. Register the data first because of strict timing. */
-  val p1_meta_ptags_reg   = RegEnable(VecInit(fromIMeta.map(way => way.tag)), RegNext(p0_fire))
-  val p1_meta_valids_reg  = RegEnable(fromIMetaValid, RegNext(p0_fire))
+  val p1_meta_ptags_reg   = utils.HackedAPI.HackedRegEnable(VecInit(fromIMeta.map(way => way.tag)), RegNext(p0_fire))
+  val p1_meta_valids_reg  = utils.HackedAPI.HackedRegEnable(fromIMetaValid, RegNext(p0_fire))
 
   /** Stage 1 control */
   p1_req_cancel := p1_tlb_resp_miss || p1_has_except || io.fencei
@@ -409,8 +409,8 @@ class IPrefetchPipe(implicit p: Parameters) extends  IPrefetchModule
     */
   val p2_valid  = generatePipeControl(lastFire = p1_fire, thisFire = p2_fire || p2_discard, thisFlush = false.B, lastFlush = false.B)
   
-  val p2_paddr      = RegEnable(p1_paddr, p1_fire)
-  val p2_vaddr      = RegEnable(p1_vaddr, 0.U(VAddrBits.W), p1_fire)
+  val p2_paddr      = utils.HackedAPI.HackedRegEnable(p1_paddr, p1_fire)
+  val p2_vaddr      = utils.HackedAPI.HackedRegEnable(p1_vaddr, 0.U(VAddrBits.W), p1_fire)
   val p2_req_cancel = Wire(Bool())
   val p2_vidx       = get_idx(p2_vaddr)
 
@@ -628,7 +628,7 @@ class PrefetchQueue(edge: TLEdgeOut)(implicit p: Parameters) extends IPrefetchMo
       toMainPipe(i).data_valid  := handleEntry.valid && handleEntry.finish
     })
   }
-  val piq_hit_req = RegEnable(piq_hit.reduce(_||_), fromMainPipe.map(_.valid).reduce(_||_))
+  val piq_hit_req = utils.HackedAPI.HackedRegEnable(piq_hit.reduce(_||_), fromMainPipe.map(_.valid).reduce(_||_))
 
   XSPerfAccumulate("cancel_req_by_mainpipe_hit_handle", cancelHandleEntry && !io.mem_acquire.fire)
 

@@ -76,8 +76,8 @@ class FCVT(cfg: FuConfig)(implicit p: Parameters) extends FpPipedFuncUnit(cfg) {
 
 
   //cycle2
-  val isNarrowCycle2 = RegEnable(RegEnable(isNarrowCvt, fire), fireReg)
-  val outputWidth1HCycle2 = RegEnable(RegEnable(outputWidth1H, fire), fireReg)
+  val isNarrowCycle2 = utils.HackedAPI.HackedRegEnable(utils.HackedAPI.HackedRegEnable(isNarrowCvt, fire), fireReg)
+  val outputWidth1HCycle2 = utils.HackedAPI.HackedRegEnable(utils.HackedAPI.HackedRegEnable(outputWidth1H, fire), fireReg)
 
   val fcvtResult = Mux(isNarrowCycle2, fcvt.io.result.tail(32), fcvt.io.result)
 

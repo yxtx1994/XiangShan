@@ -278,20 +278,20 @@ class MainPipe(implicit p: Parameters) extends DCacheModule with HasPerfEvents w
 
   // s1: read data
   val s1_valid = RegInit(false.B)
-  val s1_need_data = RegEnable(banked_need_data, s0_fire)
-  val s1_req = RegEnable(s0_req, s0_fire)
-  val s1_banked_rmask = RegEnable(s0_banked_rmask, s0_fire)
-  val s1_banked_store_wmask = RegEnable(banked_store_wmask, s0_fire)
-  val s1_need_tag = RegEnable(s0_need_tag, s0_fire)
+  val s1_need_data = utils.HackedAPI.HackedRegEnable(banked_need_data, s0_fire)
+  val s1_req = utils.HackedAPI.HackedRegEnable(s0_req, s0_fire)
+  val s1_banked_rmask = utils.HackedAPI.HackedRegEnable(s0_banked_rmask, s0_fire)
+  val s1_banked_store_wmask = utils.HackedAPI.HackedRegEnable(banked_store_wmask, s0_fire)
+  val s1_need_tag = utils.HackedAPI.HackedRegEnable(s0_need_tag, s0_fire)
   val s1_can_go = s2_ready && (io.data_readline.ready || !s1_need_data)
   val s1_fire = s1_valid && s1_can_go
   val s1_idx = get_idx(s1_req.vaddr)
 
   // duplicate regs to reduce fanout
   val s1_valid_dup = RegInit(VecInit(Seq.fill(6)(false.B)))
-  val s1_req_vaddr_dup_for_data_read = RegEnable(s0_req.vaddr, s0_fire)
-  val s1_idx_dup_for_replace_way = RegEnable(get_idx(s0_req.vaddr), s0_fire)
-  val s1_dmWay_dup_for_replace_way = RegEnable(get_direct_map_way(s0_req.vaddr), s0_fire)
+  val s1_req_vaddr_dup_for_data_read = utils.HackedAPI.HackedRegEnable(s0_req.vaddr, s0_fire)
+  val s1_idx_dup_for_replace_way = utils.HackedAPI.HackedRegEnable(get_idx(s0_req.vaddr), s0_fire)
+  val s1_dmWay_dup_for_replace_way = utils.HackedAPI.HackedRegEnable(get_direct_map_way(s0_req.vaddr), s0_fire)
 
   val s1_valid_dup_for_status = RegInit(VecInit(Seq.fill(nDupStatus)(false.B)))
 
@@ -367,38 +367,38 @@ class MainPipe(implicit p: Parameters) extends DCacheModule with HasPerfEvents w
 
   // s2: select data, return resp if this is a store miss
   val s2_valid = RegInit(false.B)
-  val s2_req = RegEnable(s1_req, s1_fire)
-  val s2_tag_match = RegEnable(s1_tag_match, s1_fire)
-  val s2_tag_match_way = RegEnable(s1_tag_match_way, s1_fire)
-  val s2_hit_coh = RegEnable(s1_hit_coh, s1_fire)
+  val s2_req = utils.HackedAPI.HackedRegEnable(s1_req, s1_fire)
+  val s2_tag_match = utils.HackedAPI.HackedRegEnable(s1_tag_match, s1_fire)
+  val s2_tag_match_way = utils.HackedAPI.HackedRegEnable(s1_tag_match_way, s1_fire)
+  val s2_hit_coh = utils.HackedAPI.HackedRegEnable(s1_hit_coh, s1_fire)
   val (s2_has_permission, _, s2_new_hit_coh) = s2_hit_coh.onAccess(s2_req.cmd)
 
-  val s2_repl_tag = RegEnable(s1_repl_tag, s1_fire)
-  val s2_repl_coh = RegEnable(s1_repl_coh, s1_fire)
-  val s2_repl_pf  = RegEnable(s1_repl_pf, s1_fire)
-  val s2_need_replacement = RegEnable(s1_need_replacement, s1_fire)
-  val s2_need_data = RegEnable(s1_need_data, s1_fire)
-  val s2_need_tag = RegEnable(s1_need_tag, s1_fire)
-  val s2_encTag = RegEnable(s1_encTag, s1_fire)
+  val s2_repl_tag = utils.HackedAPI.HackedRegEnable(s1_repl_tag, s1_fire)
+  val s2_repl_coh = utils.HackedAPI.HackedRegEnable(s1_repl_coh, s1_fire)
+  val s2_repl_pf  = utils.HackedAPI.HackedRegEnable(s1_repl_pf, s1_fire)
+  val s2_need_replacement = utils.HackedAPI.HackedRegEnable(s1_need_replacement, s1_fire)
+  val s2_need_data = utils.HackedAPI.HackedRegEnable(s1_need_data, s1_fire)
+  val s2_need_tag = utils.HackedAPI.HackedRegEnable(s1_need_tag, s1_fire)
+  val s2_encTag = utils.HackedAPI.HackedRegEnable(s1_encTag, s1_fire)
   val s2_idx = get_idx(s2_req.vaddr)
 
   // duplicate regs to reduce fanout
   val s2_valid_dup = RegInit(VecInit(Seq.fill(8)(false.B)))
   val s2_valid_dup_for_status = RegInit(VecInit(Seq.fill(nDupStatus)(false.B)))
-  val s2_req_vaddr_dup_for_miss_req = RegEnable(s1_req.vaddr, s1_fire)
-  val s2_idx_dup_for_status = RegEnable(get_idx(s1_req.vaddr), s1_fire)
-  val s2_idx_dup_for_replace_access = RegEnable(get_idx(s1_req.vaddr), s1_fire)
+  val s2_req_vaddr_dup_for_miss_req = utils.HackedAPI.HackedRegEnable(s1_req.vaddr, s1_fire)
+  val s2_idx_dup_for_status = utils.HackedAPI.HackedRegEnable(get_idx(s1_req.vaddr), s1_fire)
+  val s2_idx_dup_for_replace_access = utils.HackedAPI.HackedRegEnable(get_idx(s1_req.vaddr), s1_fire)
 
   val s2_req_replace_dup_1,
-      s2_req_replace_dup_2 = RegEnable(s1_req.replace, s1_fire)
+      s2_req_replace_dup_2 = utils.HackedAPI.HackedRegEnable(s1_req.replace, s1_fire)
 
-  val s2_can_go_to_mq_dup = (0 until 3).map(_ => RegEnable(s1_pregen_can_go_to_mq, s1_fire))
+  val s2_can_go_to_mq_dup = (0 until 3).map(_ => utils.HackedAPI.HackedRegEnable(s1_pregen_can_go_to_mq, s1_fire))
 
-  val s2_way_en = RegEnable(s1_way_en, s1_fire)
-  val s2_tag = RegEnable(s1_tag, s1_fire)
-  val s2_coh = RegEnable(s1_coh, s1_fire)
-  val s2_banked_store_wmask = RegEnable(s1_banked_store_wmask, s1_fire)
-  val s2_flag_error = RegEnable(s1_flag_error, s1_fire)
+  val s2_way_en = utils.HackedAPI.HackedRegEnable(s1_way_en, s1_fire)
+  val s2_tag = utils.HackedAPI.HackedRegEnable(s1_tag, s1_fire)
+  val s2_coh = utils.HackedAPI.HackedRegEnable(s1_coh, s1_fire)
+  val s2_banked_store_wmask = utils.HackedAPI.HackedRegEnable(s1_banked_store_wmask, s1_fire)
+  val s2_flag_error = utils.HackedAPI.HackedRegEnable(s1_flag_error, s1_fire)
   val s2_tag_error = dcacheParameters.tagCode.decode(s2_encTag).error && s2_need_tag
   val s2_l2_error = s2_req.error
   val s2_error = s2_flag_error || s2_tag_error || s2_l2_error // data_error not included
@@ -414,9 +414,9 @@ class MainPipe(implicit p: Parameters) extends DCacheModule with HasPerfEvents w
 
   // For a store req, it either hits and goes to s3, or miss and enter miss queue immediately
   val s2_req_miss_without_data = Mux(s2_valid, s2_req.miss && !io.refill_info.valid, false.B)
-  val s2_can_go_to_mq_replay = s2_req_miss_without_data && RegEnable(s2_req_miss_without_data && !io.mainpipe_info.s2_replay_to_mq, false.B, s2_valid) // miss_req in s2 but refill data is invalid, can block 1 cycle
+  val s2_can_go_to_mq_replay = s2_req_miss_without_data && utils.HackedAPI.HackedRegEnable(s2_req_miss_without_data && !io.mainpipe_info.s2_replay_to_mq, false.B, s2_valid) // miss_req in s2 but refill data is invalid, can block 1 cycle
   val s2_can_go_to_s3 = (s2_req_replace_dup_1 || s2_req.probe || (s2_req.miss && io.refill_info.valid) || (s2_req.isStore || s2_req.isAMO) && s2_hit) && s3_ready
-  val s2_can_go_to_mq = RegEnable(s1_pregen_can_go_to_mq, s1_fire)
+  val s2_can_go_to_mq = utils.HackedAPI.HackedRegEnable(s1_pregen_can_go_to_mq, s1_fire)
   assert(RegNext(!(s2_valid && s2_can_go_to_s3 && s2_can_go_to_mq && s2_can_go_to_mq_replay)))
   val s2_can_go = s2_can_go_to_s3 || s2_can_go_to_mq || s2_can_go_to_mq_replay
   val s2_fire = s2_valid && s2_can_go
@@ -461,22 +461,22 @@ class MainPipe(implicit p: Parameters) extends DCacheModule with HasPerfEvents w
 
   // s3: write data, meta and tag
   val s3_valid = RegInit(false.B)
-  val s3_req = RegEnable(s2_req, s2_fire_to_s3)
-  val s3_miss_param = RegEnable(io.refill_info.bits.miss_param, s2_fire_to_s3)
-  val s3_miss_dirty = RegEnable(io.refill_info.bits.miss_dirty, s2_fire_to_s3)
-  val s3_tag = RegEnable(s2_tag, s2_fire_to_s3)
-  val s3_tag_match = RegEnable(s2_tag_match, s2_fire_to_s3)
-  val s3_coh = RegEnable(s2_coh, s2_fire_to_s3)
-  val s3_hit = RegEnable(s2_hit, s2_fire_to_s3)
-  val s3_amo_hit = RegEnable(s2_amo_hit, s2_fire_to_s3)
-  val s3_store_hit = RegEnable(s2_store_hit, s2_fire_to_s3)
-  val s3_hit_coh = RegEnable(s2_hit_coh, s2_fire_to_s3)
-  val s3_new_hit_coh = RegEnable(s2_new_hit_coh, s2_fire_to_s3)
-  val s3_way_en = RegEnable(s2_way_en, s2_fire_to_s3)
-  val s3_banked_store_wmask = RegEnable(s2_banked_store_wmask, s2_fire_to_s3)
-  val s3_store_data_merged = RegEnable(s2_store_data_merged, s2_fire_to_s3)
-  val s3_data_word = RegEnable(s2_data_word, s2_fire_to_s3)
-  val s3_data = RegEnable(s2_data, s2_fire_to_s3)
+  val s3_req = utils.HackedAPI.HackedRegEnable(s2_req, s2_fire_to_s3)
+  val s3_miss_param = utils.HackedAPI.HackedRegEnable(io.refill_info.bits.miss_param, s2_fire_to_s3)
+  val s3_miss_dirty = utils.HackedAPI.HackedRegEnable(io.refill_info.bits.miss_dirty, s2_fire_to_s3)
+  val s3_tag = utils.HackedAPI.HackedRegEnable(s2_tag, s2_fire_to_s3)
+  val s3_tag_match = utils.HackedAPI.HackedRegEnable(s2_tag_match, s2_fire_to_s3)
+  val s3_coh = utils.HackedAPI.HackedRegEnable(s2_coh, s2_fire_to_s3)
+  val s3_hit = utils.HackedAPI.HackedRegEnable(s2_hit, s2_fire_to_s3)
+  val s3_amo_hit = utils.HackedAPI.HackedRegEnable(s2_amo_hit, s2_fire_to_s3)
+  val s3_store_hit = utils.HackedAPI.HackedRegEnable(s2_store_hit, s2_fire_to_s3)
+  val s3_hit_coh = utils.HackedAPI.HackedRegEnable(s2_hit_coh, s2_fire_to_s3)
+  val s3_new_hit_coh = utils.HackedAPI.HackedRegEnable(s2_new_hit_coh, s2_fire_to_s3)
+  val s3_way_en = utils.HackedAPI.HackedRegEnable(s2_way_en, s2_fire_to_s3)
+  val s3_banked_store_wmask = utils.HackedAPI.HackedRegEnable(s2_banked_store_wmask, s2_fire_to_s3)
+  val s3_store_data_merged = utils.HackedAPI.HackedRegEnable(s2_store_data_merged, s2_fire_to_s3)
+  val s3_data_word = utils.HackedAPI.HackedRegEnable(s2_data_word, s2_fire_to_s3)
+  val s3_data = utils.HackedAPI.HackedRegEnable(s2_data, s2_fire_to_s3)
   val s3_l2_error = s3_req.error
   // data_error will be reported by data array 1 cycle after data read resp
   val s3_data_error = Wire(Bool())
@@ -486,45 +486,45 @@ class MainPipe(implicit p: Parameters) extends DCacheModule with HasPerfEvents w
   )
   // error signal for amo inst
   // s3_error = s3_flag_error || s3_tag_error || s3_l2_error || s3_data_error
-  val s3_error = RegEnable(s2_error, s2_fire_to_s3) || s3_data_error
+  val s3_error = utils.HackedAPI.HackedRegEnable(s2_error, s2_fire_to_s3) || s3_data_error
   val (_, _, probe_new_coh) = s3_coh.onProbe(s3_req.probe_param)
-  val s3_need_replacement = RegEnable(s2_need_replacement, s2_fire_to_s3)
+  val s3_need_replacement = utils.HackedAPI.HackedRegEnable(s2_need_replacement, s2_fire_to_s3)
 
   // duplicate regs to reduce fanout
   val s3_valid_dup = RegInit(VecInit(Seq.fill(14)(false.B)))
   val s3_valid_dup_for_status = RegInit(VecInit(Seq.fill(nDupStatus)(false.B)))
-  val s3_way_en_dup = (0 until 4).map(_ => RegEnable(s2_way_en, s2_fire_to_s3))
-  val s3_coh_dup = (0 until 6).map(_ => RegEnable(s2_coh, s2_fire_to_s3))
-  val s3_tag_match_dup = RegEnable(s2_tag_match, s2_fire_to_s3)
+  val s3_way_en_dup = (0 until 4).map(_ => utils.HackedAPI.HackedRegEnable(s2_way_en, s2_fire_to_s3))
+  val s3_coh_dup = (0 until 6).map(_ => utils.HackedAPI.HackedRegEnable(s2_coh, s2_fire_to_s3))
+  val s3_tag_match_dup = utils.HackedAPI.HackedRegEnable(s2_tag_match, s2_fire_to_s3)
 
   val s3_req_vaddr_dup_for_wb,
-      s3_req_vaddr_dup_for_data_write = RegEnable(s2_req.vaddr, s2_fire_to_s3)
+      s3_req_vaddr_dup_for_data_write = utils.HackedAPI.HackedRegEnable(s2_req.vaddr, s2_fire_to_s3)
 
-  val s3_idx_dup = (0 until 6).map(_ => RegEnable(get_idx(s2_req.vaddr), s2_fire_to_s3))
-  val s3_idx_dup_for_replace_access = RegEnable(get_idx(s2_req.vaddr), s2_fire_to_s3)
+  val s3_idx_dup = (0 until 6).map(_ => utils.HackedAPI.HackedRegEnable(get_idx(s2_req.vaddr), s2_fire_to_s3))
+  val s3_idx_dup_for_replace_access = utils.HackedAPI.HackedRegEnable(get_idx(s2_req.vaddr), s2_fire_to_s3)
 
-  val s3_req_replace_dup = (0 until 8).map(_ => RegEnable(s2_req.replace, s2_fire_to_s3))
-  val s3_req_cmd_dup = (0 until 6).map(_ => RegEnable(s2_req.cmd, s2_fire_to_s3))
-  val s3_req_source_dup_1, s3_req_source_dup_2 = RegEnable(s2_req.source, s2_fire_to_s3)
-  val s3_req_addr_dup = (0 until 5).map(_ => RegEnable(s2_req.addr, s2_fire_to_s3))
-  val s3_req_probe_dup = (0 until 10).map(_ => RegEnable(s2_req.probe, s2_fire_to_s3))
-  val s3_req_miss_dup = (0 until 10).map(_ => RegEnable(s2_req.miss, s2_fire_to_s3))
-  val s3_req_word_idx_dup = (0 until DCacheBanks).map(_ => RegEnable(s2_req.word_idx, s2_fire_to_s3))
+  val s3_req_replace_dup = (0 until 8).map(_ => utils.HackedAPI.HackedRegEnable(s2_req.replace, s2_fire_to_s3))
+  val s3_req_cmd_dup = (0 until 6).map(_ => utils.HackedAPI.HackedRegEnable(s2_req.cmd, s2_fire_to_s3))
+  val s3_req_source_dup_1, s3_req_source_dup_2 = utils.HackedAPI.HackedRegEnable(s2_req.source, s2_fire_to_s3)
+  val s3_req_addr_dup = (0 until 5).map(_ => utils.HackedAPI.HackedRegEnable(s2_req.addr, s2_fire_to_s3))
+  val s3_req_probe_dup = (0 until 10).map(_ => utils.HackedAPI.HackedRegEnable(s2_req.probe, s2_fire_to_s3))
+  val s3_req_miss_dup = (0 until 10).map(_ => utils.HackedAPI.HackedRegEnable(s2_req.miss, s2_fire_to_s3))
+  val s3_req_word_idx_dup = (0 until DCacheBanks).map(_ => utils.HackedAPI.HackedRegEnable(s2_req.word_idx, s2_fire_to_s3))
 
-  val s3_need_replacement_dup = RegEnable(s2_need_replacement, s2_fire_to_s3)
+  val s3_need_replacement_dup = utils.HackedAPI.HackedRegEnable(s2_need_replacement, s2_fire_to_s3)
 
   val s3_s_amoalu_dup = RegInit(VecInit(Seq.fill(3)(false.B)))
 
-  val s3_hit_coh_dup = RegEnable(s2_hit_coh, s2_fire_to_s3)
-  val s3_new_hit_coh_dup = (0 until 2).map(_ => RegEnable(s2_new_hit_coh, s2_fire_to_s3))
-  val s3_amo_hit_dup = RegEnable(s2_amo_hit, s2_fire_to_s3)
-  val s3_store_hit_dup = (0 until 2).map(_ => RegEnable(s2_store_hit, s2_fire_to_s3))
+  val s3_hit_coh_dup = utils.HackedAPI.HackedRegEnable(s2_hit_coh, s2_fire_to_s3)
+  val s3_new_hit_coh_dup = (0 until 2).map(_ => utils.HackedAPI.HackedRegEnable(s2_new_hit_coh, s2_fire_to_s3))
+  val s3_amo_hit_dup = utils.HackedAPI.HackedRegEnable(s2_amo_hit, s2_fire_to_s3)
+  val s3_store_hit_dup = (0 until 2).map(_ => utils.HackedAPI.HackedRegEnable(s2_store_hit, s2_fire_to_s3))
 
   val lrsc_count_dup = RegInit(VecInit(Seq.fill(3)(0.U(log2Ceil(LRSCCycles).W))))
   val lrsc_valid_dup = lrsc_count_dup.map { case cnt => cnt > LRSCBackOff.U }
   val lrsc_addr_dup = Reg(UInt())
 
-  val s3_req_probe_param_dup = RegEnable(s2_req.probe_param, s2_fire_to_s3)
+  val s3_req_probe_param_dup = utils.HackedAPI.HackedRegEnable(s2_req.probe_param, s2_fire_to_s3)
   val (_, probe_shrink_param, _) = s3_coh.onProbe(s3_req_probe_param_dup)
 
 
@@ -663,7 +663,7 @@ class MainPipe(implicit p: Parameters) extends DCacheModule with HasPerfEvents w
       Mux(s3_req_word_idx_dup(i) === i.U && !s3_sc_fail, s3_req.amo_mask, 0.U(wordBytes.W))
     )
   }
-  val s3_amo_data_merged_reg = RegEnable(s3_amo_data_merged, do_amoalu)
+  val s3_amo_data_merged_reg = utils.HackedAPI.HackedRegEnable(s3_amo_data_merged, do_amoalu)
   when(do_amoalu){
     s3_s_amoalu := true.B
     s3_s_amoalu_dup.foreach(_ := true.B)
@@ -699,17 +699,17 @@ class MainPipe(implicit p: Parameters) extends DCacheModule with HasPerfEvents w
   val s3_update_data_cango = s3_store_can_go || s3_amo_can_go || s3_miss_can_go // used to speed up data_write gen
 
   // ---------------- duplicate regs for meta_write.valid to solve fanout ----------------
-  val s3_req_miss_dup_for_meta_w_valid = RegEnable(s2_req.miss, s2_fire_to_s3)
-  val s3_req_probe_dup_for_meta_w_valid = RegEnable(s2_req.probe, s2_fire_to_s3)
-  val s3_tag_match_dup_for_meta_w_valid = RegEnable(s2_tag_match, s2_fire_to_s3)
-  val s3_coh_dup_for_meta_w_valid = RegEnable(s2_coh, s2_fire_to_s3)
-  val s3_req_probe_param_dup_for_meta_w_valid = RegEnable(s2_req.probe_param, s2_fire_to_s3)
+  val s3_req_miss_dup_for_meta_w_valid = utils.HackedAPI.HackedRegEnable(s2_req.miss, s2_fire_to_s3)
+  val s3_req_probe_dup_for_meta_w_valid = utils.HackedAPI.HackedRegEnable(s2_req.probe, s2_fire_to_s3)
+  val s3_tag_match_dup_for_meta_w_valid = utils.HackedAPI.HackedRegEnable(s2_tag_match, s2_fire_to_s3)
+  val s3_coh_dup_for_meta_w_valid = utils.HackedAPI.HackedRegEnable(s2_coh, s2_fire_to_s3)
+  val s3_req_probe_param_dup_for_meta_w_valid = utils.HackedAPI.HackedRegEnable(s2_req.probe_param, s2_fire_to_s3)
   val (_, _, probe_new_coh_dup_for_meta_w_valid) = s3_coh_dup_for_meta_w_valid.onProbe(s3_req_probe_param_dup_for_meta_w_valid)
-  val s3_req_source_dup_for_meta_w_valid = RegEnable(s2_req.source, s2_fire_to_s3)
-  val s3_req_cmd_dup_for_meta_w_valid = RegEnable(s2_req.cmd, s2_fire_to_s3)
-  val s3_req_replace_dup_for_meta_w_valid = RegEnable(s2_req.replace, s2_fire_to_s3)
-  val s3_hit_coh_dup_for_meta_w_valid = RegEnable(s2_hit_coh, s2_fire_to_s3)
-  val s3_new_hit_coh_dup_for_meta_w_valid = RegEnable(s2_new_hit_coh, s2_fire_to_s3)
+  val s3_req_source_dup_for_meta_w_valid = utils.HackedAPI.HackedRegEnable(s2_req.source, s2_fire_to_s3)
+  val s3_req_cmd_dup_for_meta_w_valid = utils.HackedAPI.HackedRegEnable(s2_req.cmd, s2_fire_to_s3)
+  val s3_req_replace_dup_for_meta_w_valid = utils.HackedAPI.HackedRegEnable(s2_req.replace, s2_fire_to_s3)
+  val s3_hit_coh_dup_for_meta_w_valid = utils.HackedAPI.HackedRegEnable(s2_hit_coh, s2_fire_to_s3)
+  val s3_new_hit_coh_dup_for_meta_w_valid = utils.HackedAPI.HackedRegEnable(s2_new_hit_coh, s2_fire_to_s3)
 
   val miss_update_meta_dup_for_meta_w_valid = s3_req_miss_dup_for_meta_w_valid
   val probe_update_meta_dup_for_meta_w_valid = WireInit(s3_req_probe_dup_for_meta_w_valid && s3_tag_match_dup_for_meta_w_valid && s3_coh_dup_for_meta_w_valid =/= probe_new_coh_dup_for_meta_w_valid)
@@ -727,15 +727,15 @@ class MainPipe(implicit p: Parameters) extends DCacheModule with HasPerfEvents w
     s3_req_replace_dup_for_meta_w_valid
 
   val s3_valid_dup_for_meta_w_valid = RegInit(false.B)
-  val s3_amo_hit_dup_for_meta_w_valid = RegEnable(s2_amo_hit, s2_fire_to_s3)
+  val s3_amo_hit_dup_for_meta_w_valid = utils.HackedAPI.HackedRegEnable(s2_amo_hit, s2_fire_to_s3)
   val s3_s_amoalu_dup_for_meta_w_valid = RegInit(false.B)
   val amo_wait_amoalu_dup_for_meta_w_valid = s3_req_source_dup_for_meta_w_valid === AMO_SOURCE.U &&
     s3_req_cmd_dup_for_meta_w_valid =/= M_XLR &&
     s3_req_cmd_dup_for_meta_w_valid =/= M_XSC
   val do_amoalu_dup_for_meta_w_valid = amo_wait_amoalu_dup_for_meta_w_valid && s3_valid_dup_for_meta_w_valid && !s3_s_amoalu_dup_for_meta_w_valid
 
-  val s3_store_hit_dup_for_meta_w_valid = RegEnable(s2_store_hit, s2_fire_to_s3)
-  val s3_req_addr_dup_for_meta_w_valid = RegEnable(s2_req.addr, s2_fire_to_s3)
+  val s3_store_hit_dup_for_meta_w_valid = utils.HackedAPI.HackedRegEnable(s2_store_hit, s2_fire_to_s3)
+  val s3_req_addr_dup_for_meta_w_valid = utils.HackedAPI.HackedRegEnable(s2_req.addr, s2_fire_to_s3)
   val s3_can_do_amo_dup_for_meta_w_valid = (s3_req_miss_dup_for_meta_w_valid && !s3_req_probe_dup_for_meta_w_valid && s3_req_source_dup_for_meta_w_valid === AMO_SOURCE.U) ||
     s3_amo_hit_dup_for_meta_w_valid
 
@@ -814,17 +814,17 @@ class MainPipe(implicit p: Parameters) extends DCacheModule with HasPerfEvents w
   // -------------------------------------------------------------------------------------
 
   // ---------------- duplicate regs for err_write.valid to solve fanout -----------------
-  val s3_req_miss_dup_for_err_w_valid = RegEnable(s2_req.miss, s2_fire_to_s3)
-  val s3_req_probe_dup_for_err_w_valid = RegEnable(s2_req.probe, s2_fire_to_s3)
-  val s3_tag_match_dup_for_err_w_valid = RegEnable(s2_tag_match, s2_fire_to_s3)
-  val s3_coh_dup_for_err_w_valid = RegEnable(s2_coh, s2_fire_to_s3)
-  val s3_req_probe_param_dup_for_err_w_valid = RegEnable(s2_req.probe_param, s2_fire_to_s3)
+  val s3_req_miss_dup_for_err_w_valid = utils.HackedAPI.HackedRegEnable(s2_req.miss, s2_fire_to_s3)
+  val s3_req_probe_dup_for_err_w_valid = utils.HackedAPI.HackedRegEnable(s2_req.probe, s2_fire_to_s3)
+  val s3_tag_match_dup_for_err_w_valid = utils.HackedAPI.HackedRegEnable(s2_tag_match, s2_fire_to_s3)
+  val s3_coh_dup_for_err_w_valid = utils.HackedAPI.HackedRegEnable(s2_coh, s2_fire_to_s3)
+  val s3_req_probe_param_dup_for_err_w_valid = utils.HackedAPI.HackedRegEnable(s2_req.probe_param, s2_fire_to_s3)
   val (_, _, probe_new_coh_dup_for_err_w_valid) = s3_coh_dup_for_err_w_valid.onProbe(s3_req_probe_param_dup_for_err_w_valid)
-  val s3_req_source_dup_for_err_w_valid = RegEnable(s2_req.source, s2_fire_to_s3)
-  val s3_req_cmd_dup_for_err_w_valid = RegEnable(s2_req.cmd, s2_fire_to_s3)
-  val s3_req_replace_dup_for_err_w_valid = RegEnable(s2_req.replace, s2_fire_to_s3)
-  val s3_hit_coh_dup_for_err_w_valid = RegEnable(s2_hit_coh, s2_fire_to_s3)
-  val s3_new_hit_coh_dup_for_err_w_valid = RegEnable(s2_new_hit_coh, s2_fire_to_s3)
+  val s3_req_source_dup_for_err_w_valid = utils.HackedAPI.HackedRegEnable(s2_req.source, s2_fire_to_s3)
+  val s3_req_cmd_dup_for_err_w_valid = utils.HackedAPI.HackedRegEnable(s2_req.cmd, s2_fire_to_s3)
+  val s3_req_replace_dup_for_err_w_valid = utils.HackedAPI.HackedRegEnable(s2_req.replace, s2_fire_to_s3)
+  val s3_hit_coh_dup_for_err_w_valid = utils.HackedAPI.HackedRegEnable(s2_hit_coh, s2_fire_to_s3)
+  val s3_new_hit_coh_dup_for_err_w_valid = utils.HackedAPI.HackedRegEnable(s2_new_hit_coh, s2_fire_to_s3)
 
   val miss_update_meta_dup_for_err_w_valid = s3_req_miss_dup_for_err_w_valid
   val probe_update_meta_dup_for_err_w_valid = s3_req_probe_dup_for_err_w_valid && s3_tag_match_dup_for_err_w_valid && s3_coh_dup_for_err_w_valid =/= probe_new_coh_dup_for_err_w_valid
@@ -842,15 +842,15 @@ class MainPipe(implicit p: Parameters) extends DCacheModule with HasPerfEvents w
   ) && !s3_req_replace_dup_for_err_w_valid
 
   val s3_valid_dup_for_err_w_valid = RegInit(false.B)
-  val s3_amo_hit_dup_for_err_w_valid = RegEnable(s2_amo_hit, s2_fire_to_s3)
+  val s3_amo_hit_dup_for_err_w_valid = utils.HackedAPI.HackedRegEnable(s2_amo_hit, s2_fire_to_s3)
   val s3_s_amoalu_dup_for_err_w_valid = RegInit(false.B)
   val amo_wait_amoalu_dup_for_err_w_valid = s3_req_source_dup_for_err_w_valid === AMO_SOURCE.U &&
     s3_req_cmd_dup_for_err_w_valid =/= M_XLR &&
     s3_req_cmd_dup_for_err_w_valid =/= M_XSC
   val do_amoalu_dup_for_err_w_valid = amo_wait_amoalu_dup_for_err_w_valid && s3_valid_dup_for_err_w_valid && !s3_s_amoalu_dup_for_err_w_valid
 
-  val s3_store_hit_dup_for_err_w_valid = RegEnable(s2_store_hit, s2_fire_to_s3)
-  val s3_req_addr_dup_for_err_w_valid = RegEnable(s2_req.addr, s2_fire_to_s3)
+  val s3_store_hit_dup_for_err_w_valid = utils.HackedAPI.HackedRegEnable(s2_store_hit, s2_fire_to_s3)
+  val s3_req_addr_dup_for_err_w_valid = utils.HackedAPI.HackedRegEnable(s2_req.addr, s2_fire_to_s3)
   val s3_can_do_amo_dup_for_err_w_valid = (s3_req_miss_dup_for_err_w_valid && !s3_req_probe_dup_for_err_w_valid && s3_req_source_dup_for_err_w_valid === AMO_SOURCE.U) ||
     s3_amo_hit_dup_for_err_w_valid
 
@@ -910,17 +910,17 @@ class MainPipe(implicit p: Parameters) extends DCacheModule with HasPerfEvents w
   .elsewhen (s3_fire_dup_for_err_w_valid) { s3_valid_dup_for_err_w_valid := false.B }
   // -------------------------------------------------------------------------------------
   // ---------------- duplicate regs for tag_write.valid to solve fanout -----------------
-  val s3_req_miss_dup_for_tag_w_valid = RegEnable(s2_req.miss, s2_fire_to_s3)
-  val s3_req_probe_dup_for_tag_w_valid = RegEnable(s2_req.probe, s2_fire_to_s3)
-  val s3_tag_match_dup_for_tag_w_valid = RegEnable(s2_tag_match, s2_fire_to_s3)
-  val s3_coh_dup_for_tag_w_valid = RegEnable(s2_coh, s2_fire_to_s3)
-  val s3_req_probe_param_dup_for_tag_w_valid = RegEnable(s2_req.probe_param, s2_fire_to_s3)
+  val s3_req_miss_dup_for_tag_w_valid = utils.HackedAPI.HackedRegEnable(s2_req.miss, s2_fire_to_s3)
+  val s3_req_probe_dup_for_tag_w_valid = utils.HackedAPI.HackedRegEnable(s2_req.probe, s2_fire_to_s3)
+  val s3_tag_match_dup_for_tag_w_valid = utils.HackedAPI.HackedRegEnable(s2_tag_match, s2_fire_to_s3)
+  val s3_coh_dup_for_tag_w_valid = utils.HackedAPI.HackedRegEnable(s2_coh, s2_fire_to_s3)
+  val s3_req_probe_param_dup_for_tag_w_valid = utils.HackedAPI.HackedRegEnable(s2_req.probe_param, s2_fire_to_s3)
   val (_, _, probe_new_coh_dup_for_tag_w_valid) = s3_coh_dup_for_tag_w_valid.onProbe(s3_req_probe_param_dup_for_tag_w_valid)
-  val s3_req_source_dup_for_tag_w_valid = RegEnable(s2_req.source, s2_fire_to_s3)
-  val s3_req_cmd_dup_for_tag_w_valid = RegEnable(s2_req.cmd, s2_fire_to_s3)
-  val s3_req_replace_dup_for_tag_w_valid = RegEnable(s2_req.replace, s2_fire_to_s3)
-  val s3_hit_coh_dup_for_tag_w_valid = RegEnable(s2_hit_coh, s2_fire_to_s3)
-  val s3_new_hit_coh_dup_for_tag_w_valid = RegEnable(s2_new_hit_coh, s2_fire_to_s3)
+  val s3_req_source_dup_for_tag_w_valid = utils.HackedAPI.HackedRegEnable(s2_req.source, s2_fire_to_s3)
+  val s3_req_cmd_dup_for_tag_w_valid = utils.HackedAPI.HackedRegEnable(s2_req.cmd, s2_fire_to_s3)
+  val s3_req_replace_dup_for_tag_w_valid = utils.HackedAPI.HackedRegEnable(s2_req.replace, s2_fire_to_s3)
+  val s3_hit_coh_dup_for_tag_w_valid = utils.HackedAPI.HackedRegEnable(s2_hit_coh, s2_fire_to_s3)
+  val s3_new_hit_coh_dup_for_tag_w_valid = utils.HackedAPI.HackedRegEnable(s2_new_hit_coh, s2_fire_to_s3)
 
   val miss_update_meta_dup_for_tag_w_valid = s3_req_miss_dup_for_tag_w_valid
   val probe_update_meta_dup_for_tag_w_valid = s3_req_probe_dup_for_tag_w_valid && s3_tag_match_dup_for_tag_w_valid && s3_coh_dup_for_tag_w_valid =/= probe_new_coh_dup_for_tag_w_valid
@@ -938,15 +938,15 @@ class MainPipe(implicit p: Parameters) extends DCacheModule with HasPerfEvents w
   ) && !s3_req_replace_dup_for_tag_w_valid
 
   val s3_valid_dup_for_tag_w_valid = RegInit(false.B)
-  val s3_amo_hit_dup_for_tag_w_valid = RegEnable(s2_amo_hit, s2_fire_to_s3)
+  val s3_amo_hit_dup_for_tag_w_valid = utils.HackedAPI.HackedRegEnable(s2_amo_hit, s2_fire_to_s3)
   val s3_s_amoalu_dup_for_tag_w_valid = RegInit(false.B)
   val amo_wait_amoalu_dup_for_tag_w_valid = s3_req_source_dup_for_tag_w_valid === AMO_SOURCE.U &&
     s3_req_cmd_dup_for_tag_w_valid =/= M_XLR &&
     s3_req_cmd_dup_for_tag_w_valid =/= M_XSC
   val do_amoalu_dup_for_tag_w_valid = amo_wait_amoalu_dup_for_tag_w_valid && s3_valid_dup_for_tag_w_valid && !s3_s_amoalu_dup_for_tag_w_valid
 
-  val s3_store_hit_dup_for_tag_w_valid = RegEnable(s2_store_hit, s2_fire_to_s3)
-  val s3_req_addr_dup_for_tag_w_valid = RegEnable(s2_req.addr, s2_fire_to_s3)
+  val s3_store_hit_dup_for_tag_w_valid = utils.HackedAPI.HackedRegEnable(s2_store_hit, s2_fire_to_s3)
+  val s3_req_addr_dup_for_tag_w_valid = utils.HackedAPI.HackedRegEnable(s2_req.addr, s2_fire_to_s3)
   val s3_can_do_amo_dup_for_tag_w_valid = (s3_req_miss_dup_for_tag_w_valid && !s3_req_probe_dup_for_tag_w_valid && s3_req_source_dup_for_tag_w_valid === AMO_SOURCE.U) ||
     s3_amo_hit_dup_for_tag_w_valid
 
@@ -1006,17 +1006,17 @@ class MainPipe(implicit p: Parameters) extends DCacheModule with HasPerfEvents w
   .elsewhen (s3_fire_dup_for_tag_w_valid) { s3_valid_dup_for_tag_w_valid := false.B }
   // -------------------------------------------------------------------------------------
   // ---------------- duplicate regs for data_write.valid to solve fanout ----------------
-  val s3_req_miss_dup_for_data_w_valid = RegEnable(s2_req.miss, s2_fire_to_s3)
-  val s3_req_probe_dup_for_data_w_valid = RegEnable(s2_req.probe, s2_fire_to_s3)
-  val s3_tag_match_dup_for_data_w_valid = RegEnable(s2_tag_match, s2_fire_to_s3)
-  val s3_coh_dup_for_data_w_valid = RegEnable(s2_coh, s2_fire_to_s3)
-  val s3_req_probe_param_dup_for_data_w_valid = RegEnable(s2_req.probe_param, s2_fire_to_s3)
+  val s3_req_miss_dup_for_data_w_valid = utils.HackedAPI.HackedRegEnable(s2_req.miss, s2_fire_to_s3)
+  val s3_req_probe_dup_for_data_w_valid = utils.HackedAPI.HackedRegEnable(s2_req.probe, s2_fire_to_s3)
+  val s3_tag_match_dup_for_data_w_valid = utils.HackedAPI.HackedRegEnable(s2_tag_match, s2_fire_to_s3)
+  val s3_coh_dup_for_data_w_valid = utils.HackedAPI.HackedRegEnable(s2_coh, s2_fire_to_s3)
+  val s3_req_probe_param_dup_for_data_w_valid = utils.HackedAPI.HackedRegEnable(s2_req.probe_param, s2_fire_to_s3)
   val (_, _, probe_new_coh_dup_for_data_w_valid) = s3_coh_dup_for_data_w_valid.onProbe(s3_req_probe_param_dup_for_data_w_valid)
-  val s3_req_source_dup_for_data_w_valid = RegEnable(s2_req.source, s2_fire_to_s3)
-  val s3_req_cmd_dup_for_data_w_valid = RegEnable(s2_req.cmd, s2_fire_to_s3)
-  val s3_req_replace_dup_for_data_w_valid = RegEnable(s2_req.replace, s2_fire_to_s3)
-  val s3_hit_coh_dup_for_data_w_valid = RegEnable(s2_hit_coh, s2_fire_to_s3)
-  val s3_new_hit_coh_dup_for_data_w_valid = RegEnable(s2_new_hit_coh, s2_fire_to_s3)
+  val s3_req_source_dup_for_data_w_valid = utils.HackedAPI.HackedRegEnable(s2_req.source, s2_fire_to_s3)
+  val s3_req_cmd_dup_for_data_w_valid = utils.HackedAPI.HackedRegEnable(s2_req.cmd, s2_fire_to_s3)
+  val s3_req_replace_dup_for_data_w_valid = utils.HackedAPI.HackedRegEnable(s2_req.replace, s2_fire_to_s3)
+  val s3_hit_coh_dup_for_data_w_valid = utils.HackedAPI.HackedRegEnable(s2_hit_coh, s2_fire_to_s3)
+  val s3_new_hit_coh_dup_for_data_w_valid = utils.HackedAPI.HackedRegEnable(s2_new_hit_coh, s2_fire_to_s3)
 
   val miss_update_meta_dup_for_data_w_valid = s3_req_miss_dup_for_data_w_valid
   val probe_update_meta_dup_for_data_w_valid = s3_req_probe_dup_for_data_w_valid && s3_tag_match_dup_for_data_w_valid && s3_coh_dup_for_data_w_valid =/= probe_new_coh_dup_for_data_w_valid
@@ -1034,15 +1034,15 @@ class MainPipe(implicit p: Parameters) extends DCacheModule with HasPerfEvents w
   ) && !s3_req_replace_dup_for_data_w_valid
 
   val s3_valid_dup_for_data_w_valid = RegInit(false.B)
-  val s3_amo_hit_dup_for_data_w_valid = RegEnable(s2_amo_hit, s2_fire_to_s3)
+  val s3_amo_hit_dup_for_data_w_valid = utils.HackedAPI.HackedRegEnable(s2_amo_hit, s2_fire_to_s3)
   val s3_s_amoalu_dup_for_data_w_valid = RegInit(false.B)
   val amo_wait_amoalu_dup_for_data_w_valid = s3_req_source_dup_for_data_w_valid === AMO_SOURCE.U &&
     s3_req_cmd_dup_for_data_w_valid =/= M_XLR &&
     s3_req_cmd_dup_for_data_w_valid =/= M_XSC
   val do_amoalu_dup_for_data_w_valid = amo_wait_amoalu_dup_for_data_w_valid && s3_valid_dup_for_data_w_valid && !s3_s_amoalu_dup_for_data_w_valid
 
-  val s3_store_hit_dup_for_data_w_valid = RegEnable(s2_store_hit, s2_fire_to_s3)
-  val s3_req_addr_dup_for_data_w_valid = RegEnable(s2_req.addr, s2_fire_to_s3)
+  val s3_store_hit_dup_for_data_w_valid = utils.HackedAPI.HackedRegEnable(s2_store_hit, s2_fire_to_s3)
+  val s3_req_addr_dup_for_data_w_valid = utils.HackedAPI.HackedRegEnable(s2_req.addr, s2_fire_to_s3)
   val s3_can_do_amo_dup_for_data_w_valid = (s3_req_miss_dup_for_data_w_valid && !s3_req_probe_dup_for_data_w_valid && s3_req_source_dup_for_data_w_valid === AMO_SOURCE.U) ||
     s3_amo_hit_dup_for_data_w_valid
 
@@ -1099,8 +1099,8 @@ class MainPipe(implicit p: Parameters) extends DCacheModule with HasPerfEvents w
   when (do_amoalu_dup_for_data_w_valid) { s3_s_amoalu_dup_for_data_w_valid := true.B }
   when (s3_fire_dup_for_data_w_valid) { s3_s_amoalu_dup_for_data_w_valid := false.B }
 
-  val s3_banked_store_wmask_dup_for_data_w_valid = RegEnable(s2_banked_store_wmask, s2_fire_to_s3)
-  val s3_req_word_idx_dup_for_data_w_valid = RegEnable(s2_req.word_idx, s2_fire_to_s3)
+  val s3_banked_store_wmask_dup_for_data_w_valid = utils.HackedAPI.HackedRegEnable(s2_banked_store_wmask, s2_fire_to_s3)
+  val s3_req_word_idx_dup_for_data_w_valid = utils.HackedAPI.HackedRegEnable(s2_req.word_idx, s2_fire_to_s3)
   val banked_wmask = Mux(
     s3_req_miss_dup_for_data_w_valid,
     banked_full_wmask,
@@ -1117,8 +1117,8 @@ class MainPipe(implicit p: Parameters) extends DCacheModule with HasPerfEvents w
   assert(!(s3_valid && banked_wmask.orR && !update_data))
 
   val s3_sc_data_merged_dup_for_data_w_valid = Wire(Vec(DCacheBanks, UInt(DCacheSRAMRowBits.W)))
-  val s3_req_amo_data_dup_for_data_w_valid = RegEnable(s2_req.amo_data, s2_fire_to_s3)
-  val s3_req_amo_mask_dup_for_data_w_valid = RegEnable(s2_req.amo_mask, s2_fire_to_s3)
+  val s3_req_amo_data_dup_for_data_w_valid = utils.HackedAPI.HackedRegEnable(s2_req.amo_data, s2_fire_to_s3)
+  val s3_req_amo_mask_dup_for_data_w_valid = utils.HackedAPI.HackedRegEnable(s2_req.amo_mask, s2_fire_to_s3)
   for (i <- 0 until DCacheBanks) {
     val old_data = s3_store_data_merged(i)
     s3_sc_data_merged_dup_for_data_w_valid(i) := mergePutData(old_data, s3_req_amo_data_dup_for_data_w_valid,
@@ -1138,17 +1138,17 @@ class MainPipe(implicit p: Parameters) extends DCacheModule with HasPerfEvents w
   val tag_write_ready_dup_for_data_w_bank = io.tag_write_ready_dup.drop(dataWritePort).take(DCacheBanks)
   val wb_ready_dup_for_data_w_bank = io.wb_ready_dup.drop(dataWritePort).take(DCacheBanks)
   for (i <- 0 until DCacheBanks) {
-    val s3_req_miss_dup_for_data_w_bank = RegEnable(s2_req.miss, s2_fire_to_s3)
-    val s3_req_probe_dup_for_data_w_bank = RegEnable(s2_req.probe, s2_fire_to_s3)
-    val s3_tag_match_dup_for_data_w_bank = RegEnable(s2_tag_match, s2_fire_to_s3)
-    val s3_coh_dup_for_data_w_bank = RegEnable(s2_coh, s2_fire_to_s3)
-    val s3_req_probe_param_dup_for_data_w_bank = RegEnable(s2_req.probe_param, s2_fire_to_s3)
+    val s3_req_miss_dup_for_data_w_bank = utils.HackedAPI.HackedRegEnable(s2_req.miss, s2_fire_to_s3)
+    val s3_req_probe_dup_for_data_w_bank = utils.HackedAPI.HackedRegEnable(s2_req.probe, s2_fire_to_s3)
+    val s3_tag_match_dup_for_data_w_bank = utils.HackedAPI.HackedRegEnable(s2_tag_match, s2_fire_to_s3)
+    val s3_coh_dup_for_data_w_bank = utils.HackedAPI.HackedRegEnable(s2_coh, s2_fire_to_s3)
+    val s3_req_probe_param_dup_for_data_w_bank = utils.HackedAPI.HackedRegEnable(s2_req.probe_param, s2_fire_to_s3)
     val (_, _, probe_new_coh_dup_for_data_w_bank) = s3_coh_dup_for_data_w_bank.onProbe(s3_req_probe_param_dup_for_data_w_bank)
-    val s3_req_source_dup_for_data_w_bank = RegEnable(s2_req.source, s2_fire_to_s3)
-    val s3_req_cmd_dup_for_data_w_bank = RegEnable(s2_req.cmd, s2_fire_to_s3)
-    val s3_req_replace_dup_for_data_w_bank = RegEnable(s2_req.replace, s2_fire_to_s3)
-    val s3_hit_coh_dup_for_data_w_bank = RegEnable(s2_hit_coh, s2_fire_to_s3)
-    val s3_new_hit_coh_dup_for_data_w_bank = RegEnable(s2_new_hit_coh, s2_fire_to_s3)
+    val s3_req_source_dup_for_data_w_bank = utils.HackedAPI.HackedRegEnable(s2_req.source, s2_fire_to_s3)
+    val s3_req_cmd_dup_for_data_w_bank = utils.HackedAPI.HackedRegEnable(s2_req.cmd, s2_fire_to_s3)
+    val s3_req_replace_dup_for_data_w_bank = utils.HackedAPI.HackedRegEnable(s2_req.replace, s2_fire_to_s3)
+    val s3_hit_coh_dup_for_data_w_bank = utils.HackedAPI.HackedRegEnable(s2_hit_coh, s2_fire_to_s3)
+    val s3_new_hit_coh_dup_for_data_w_bank = utils.HackedAPI.HackedRegEnable(s2_new_hit_coh, s2_fire_to_s3)
 
     val miss_update_meta_dup_for_data_w_bank = s3_req_miss_dup_for_data_w_bank
     val probe_update_meta_dup_for_data_w_bank = s3_req_probe_dup_for_data_w_bank && s3_tag_match_dup_for_data_w_bank && s3_coh_dup_for_data_w_bank =/= probe_new_coh_dup_for_data_w_bank
@@ -1165,15 +1165,15 @@ class MainPipe(implicit p: Parameters) extends DCacheModule with HasPerfEvents w
       amo_update_meta_dup_for_data_w_bank
     ) && !s3_req_replace_dup_for_data_w_bank
 
-    val s3_amo_hit_dup_for_data_w_bank = RegEnable(s2_amo_hit, s2_fire_to_s3)
+    val s3_amo_hit_dup_for_data_w_bank = utils.HackedAPI.HackedRegEnable(s2_amo_hit, s2_fire_to_s3)
     val s3_s_amoalu_dup_for_data_w_bank = RegInit(false.B)
     val amo_wait_amoalu_dup_for_data_w_bank = s3_req_source_dup_for_data_w_bank === AMO_SOURCE.U &&
       s3_req_cmd_dup_for_data_w_bank =/= M_XLR &&
       s3_req_cmd_dup_for_data_w_bank =/= M_XSC
     val do_amoalu_dup_for_data_w_bank = amo_wait_amoalu_dup_for_data_w_bank && s3_valid_dup_for_data_w_bank(i) && !s3_s_amoalu_dup_for_data_w_bank
 
-    val s3_store_hit_dup_for_data_w_bank = RegEnable(s2_store_hit, s2_fire_to_s3)
-    val s3_req_addr_dup_for_data_w_bank = RegEnable(s2_req.addr, s2_fire_to_s3)
+    val s3_store_hit_dup_for_data_w_bank = utils.HackedAPI.HackedRegEnable(s2_store_hit, s2_fire_to_s3)
+    val s3_req_addr_dup_for_data_w_bank = utils.HackedAPI.HackedRegEnable(s2_req.addr, s2_fire_to_s3)
     val s3_can_do_amo_dup_for_data_w_bank = (s3_req_miss_dup_for_data_w_bank && !s3_req_probe_dup_for_data_w_bank && s3_req_source_dup_for_data_w_bank === AMO_SOURCE.U) ||
       s3_amo_hit_dup_for_data_w_bank
 
@@ -1236,23 +1236,23 @@ class MainPipe(implicit p: Parameters) extends DCacheModule with HasPerfEvents w
     .elsewhen (s3_fire_dup_for_data_w_bank) { s3_valid_dup_for_data_w_bank(i) := false.B }
 
     io.data_write_dup(i).valid := s3_valid_dup_for_data_w_bank(i) && s3_update_data_cango_dup_for_data_w_bank && update_data_dup_for_data_w_bank
-    io.data_write_dup(i).bits.way_en := RegEnable(s2_way_en, s2_fire_to_s3)
-    io.data_write_dup(i).bits.addr := RegEnable(s2_req.vaddr, s2_fire_to_s3)
+    io.data_write_dup(i).bits.way_en := utils.HackedAPI.HackedRegEnable(s2_way_en, s2_fire_to_s3)
+    io.data_write_dup(i).bits.addr := utils.HackedAPI.HackedRegEnable(s2_req.vaddr, s2_fire_to_s3)
   }
   // -------------------------------------------------------------------------------------
 
   // ---------------- duplicate regs for wb.valid to solve fanout ----------------
-  val s3_req_miss_dup_for_wb_valid = RegEnable(s2_req.miss, s2_fire_to_s3)
-  val s3_req_probe_dup_for_wb_valid = RegEnable(s2_req.probe, s2_fire_to_s3)
-  val s3_tag_match_dup_for_wb_valid = RegEnable(s2_tag_match, s2_fire_to_s3)
-  val s3_coh_dup_for_wb_valid = RegEnable(s2_coh, s2_fire_to_s3)
-  val s3_req_probe_param_dup_for_wb_valid = RegEnable(s2_req.probe_param, s2_fire_to_s3)
+  val s3_req_miss_dup_for_wb_valid = utils.HackedAPI.HackedRegEnable(s2_req.miss, s2_fire_to_s3)
+  val s3_req_probe_dup_for_wb_valid = utils.HackedAPI.HackedRegEnable(s2_req.probe, s2_fire_to_s3)
+  val s3_tag_match_dup_for_wb_valid = utils.HackedAPI.HackedRegEnable(s2_tag_match, s2_fire_to_s3)
+  val s3_coh_dup_for_wb_valid = utils.HackedAPI.HackedRegEnable(s2_coh, s2_fire_to_s3)
+  val s3_req_probe_param_dup_for_wb_valid = utils.HackedAPI.HackedRegEnable(s2_req.probe_param, s2_fire_to_s3)
   val (_, _, probe_new_coh_dup_for_wb_valid) = s3_coh_dup_for_wb_valid.onProbe(s3_req_probe_param_dup_for_wb_valid)
-  val s3_req_source_dup_for_wb_valid = RegEnable(s2_req.source, s2_fire_to_s3)
-  val s3_req_cmd_dup_for_wb_valid = RegEnable(s2_req.cmd, s2_fire_to_s3)
-  val s3_req_replace_dup_for_wb_valid = RegEnable(s2_req.replace, s2_fire_to_s3)
-  val s3_hit_coh_dup_for_wb_valid = RegEnable(s2_hit_coh, s2_fire_to_s3)
-  val s3_new_hit_coh_dup_for_wb_valid = RegEnable(s2_new_hit_coh, s2_fire_to_s3)
+  val s3_req_source_dup_for_wb_valid = utils.HackedAPI.HackedRegEnable(s2_req.source, s2_fire_to_s3)
+  val s3_req_cmd_dup_for_wb_valid = utils.HackedAPI.HackedRegEnable(s2_req.cmd, s2_fire_to_s3)
+  val s3_req_replace_dup_for_wb_valid = utils.HackedAPI.HackedRegEnable(s2_req.replace, s2_fire_to_s3)
+  val s3_hit_coh_dup_for_wb_valid = utils.HackedAPI.HackedRegEnable(s2_hit_coh, s2_fire_to_s3)
+  val s3_new_hit_coh_dup_for_wb_valid = utils.HackedAPI.HackedRegEnable(s2_new_hit_coh, s2_fire_to_s3)
 
   val miss_update_meta_dup_for_wb_valid = s3_req_miss_dup_for_wb_valid
   val probe_update_meta_dup_for_wb_valid = s3_req_probe_dup_for_wb_valid && s3_tag_match_dup_for_wb_valid && s3_coh_dup_for_wb_valid =/= probe_new_coh_dup_for_wb_valid
@@ -1270,15 +1270,15 @@ class MainPipe(implicit p: Parameters) extends DCacheModule with HasPerfEvents w
   ) && !s3_req_replace_dup_for_wb_valid
 
   val s3_valid_dup_for_wb_valid = RegInit(false.B)
-  val s3_amo_hit_dup_for_wb_valid = RegEnable(s2_amo_hit, s2_fire_to_s3)
+  val s3_amo_hit_dup_for_wb_valid = utils.HackedAPI.HackedRegEnable(s2_amo_hit, s2_fire_to_s3)
   val s3_s_amoalu_dup_for_wb_valid = RegInit(false.B)
   val amo_wait_amoalu_dup_for_wb_valid = s3_req_source_dup_for_wb_valid === AMO_SOURCE.U &&
     s3_req_cmd_dup_for_wb_valid =/= M_XLR &&
     s3_req_cmd_dup_for_wb_valid =/= M_XSC
   val do_amoalu_dup_for_wb_valid = amo_wait_amoalu_dup_for_wb_valid && s3_valid_dup_for_wb_valid && !s3_s_amoalu_dup_for_wb_valid
 
-  val s3_store_hit_dup_for_wb_valid = RegEnable(s2_store_hit, s2_fire_to_s3)
-  val s3_req_addr_dup_for_wb_valid = RegEnable(s2_req.addr, s2_fire_to_s3)
+  val s3_store_hit_dup_for_wb_valid = utils.HackedAPI.HackedRegEnable(s2_store_hit, s2_fire_to_s3)
+  val s3_req_addr_dup_for_wb_valid = utils.HackedAPI.HackedRegEnable(s2_req.addr, s2_fire_to_s3)
   val s3_can_do_amo_dup_for_wb_valid = (s3_req_miss_dup_for_wb_valid && !s3_req_probe_dup_for_wb_valid && s3_req_source_dup_for_wb_valid === AMO_SOURCE.U) ||
     s3_amo_hit_dup_for_wb_valid
 
@@ -1335,13 +1335,13 @@ class MainPipe(implicit p: Parameters) extends DCacheModule with HasPerfEvents w
   when (do_amoalu_dup_for_wb_valid) { s3_s_amoalu_dup_for_wb_valid := true.B }
   when (s3_fire_dup_for_wb_valid) { s3_s_amoalu_dup_for_wb_valid := false.B }
 
-  val s3_banked_store_wmask_dup_for_wb_valid = RegEnable(s2_banked_store_wmask, s2_fire_to_s3)
-  val s3_req_word_idx_dup_for_wb_valid = RegEnable(s2_req.word_idx, s2_fire_to_s3)
+  val s3_banked_store_wmask_dup_for_wb_valid = utils.HackedAPI.HackedRegEnable(s2_banked_store_wmask, s2_fire_to_s3)
+  val s3_req_word_idx_dup_for_wb_valid = utils.HackedAPI.HackedRegEnable(s2_req.word_idx, s2_fire_to_s3)
   val s3_replace_nothing_dup_for_wb_valid = s3_req_replace_dup_for_wb_valid && s3_coh_dup_for_wb_valid.state === ClientStates.Nothing
 
   val s3_sc_data_merged_dup_for_wb_valid = Wire(Vec(DCacheBanks, UInt(DCacheSRAMRowBits.W)))
-  val s3_req_amo_data_dup_for_wb_valid = RegEnable(s2_req.amo_data, s2_fire_to_s3)
-  val s3_req_amo_mask_dup_for_wb_valid = RegEnable(s2_req.amo_mask, s2_fire_to_s3)
+  val s3_req_amo_data_dup_for_wb_valid = utils.HackedAPI.HackedRegEnable(s2_req.amo_data, s2_fire_to_s3)
+  val s3_req_amo_mask_dup_for_wb_valid = utils.HackedAPI.HackedRegEnable(s2_req.amo_mask, s2_fire_to_s3)
   for (i <- 0 until DCacheBanks) {
     val old_data = s3_store_data_merged(i)
     s3_sc_data_merged_dup_for_wb_valid(i) := mergePutData(old_data, s3_req_amo_data_dup_for_wb_valid,
@@ -1353,12 +1353,12 @@ class MainPipe(implicit p: Parameters) extends DCacheModule with HasPerfEvents w
     )
   }
 
-  val s3_need_replacement_dup_for_wb_valid = RegEnable(s2_need_replacement, s2_fire_to_s3)
+  val s3_need_replacement_dup_for_wb_valid = utils.HackedAPI.HackedRegEnable(s2_need_replacement, s2_fire_to_s3)
   val miss_wb_dup_for_wb_valid = s3_req_miss_dup_for_wb_valid && s3_need_replacement_dup_for_wb_valid &&
     s3_coh_dup_for_wb_valid.state =/= ClientStates.Nothing
   val need_wb_dup_for_wb_valid = miss_wb_dup_for_wb_valid || s3_req_probe_dup_for_wb_valid || s3_req_replace_dup_for_wb_valid
 
-  val s3_tag_dup_for_wb_valid = RegEnable(s2_tag, s2_fire_to_s3)
+  val s3_tag_dup_for_wb_valid = utils.HackedAPI.HackedRegEnable(s2_tag, s2_fire_to_s3)
 
   val (_, probe_shrink_param_dup_for_wb_valid, _) = s3_coh_dup_for_wb_valid.onProbe(s3_req_probe_param_dup_for_wb_valid)
   val (_, miss_shrink_param_dup_for_wb_valid, _) = s3_coh_dup_for_wb_valid.onCacheControl(M_FLUSH)
@@ -1368,10 +1368,10 @@ class MainPipe(implicit p: Parameters) extends DCacheModule with HasPerfEvents w
     miss_shrink_param_dup_for_wb_valid
   )
   val writeback_data_dup_for_wb_valid = if (dcacheParameters.alwaysReleaseData) {
-    s3_tag_match_dup_for_wb_valid && s3_req_probe_dup_for_wb_valid && RegEnable(s2_req.probe_need_data, s2_fire_to_s3) ||
+    s3_tag_match_dup_for_wb_valid && s3_req_probe_dup_for_wb_valid && utils.HackedAPI.HackedRegEnable(s2_req.probe_need_data, s2_fire_to_s3) ||
       s3_coh_dup_for_wb_valid === ClientStates.Dirty || (miss_wb_dup_for_wb_valid || s3_req_replace_dup_for_wb_valid) && s3_coh_dup_for_wb_valid.state =/= ClientStates.Nothing
   } else {
-    s3_tag_match_dup_for_wb_valid && s3_req_probe_dup_for_wb_valid && RegEnable(s2_req.probe_need_data, s2_fire_to_s3) || s3_coh_dup_for_wb_valid === ClientStates.Dirty
+    s3_tag_match_dup_for_wb_valid && s3_req_probe_dup_for_wb_valid && utils.HackedAPI.HackedRegEnable(s2_req.probe_need_data, s2_fire_to_s3) || s3_coh_dup_for_wb_valid === ClientStates.Dirty
   }
 
   when (s2_fire_to_s3) { s3_valid_dup_for_wb_valid := true.B }
@@ -1603,14 +1603,14 @@ class MainPipe(implicit p: Parameters) extends DCacheModule with HasPerfEvents w
 
   for ((s, i) <- io.status_dup.zipWithIndex) {
     s.s1.valid := s1_valid_dup_for_status(i)
-    s.s1.bits.set := RegEnable(get_idx(s0_req.vaddr), s0_fire)
+    s.s1.bits.set := utils.HackedAPI.HackedRegEnable(get_idx(s0_req.vaddr), s0_fire)
     s.s1.bits.way_en := s1_way_en
-    s.s2.valid := s2_valid_dup_for_status(i) && !RegEnable(s1_req.replace, s1_fire)
-    s.s2.bits.set := RegEnable(get_idx(s1_req.vaddr), s1_fire)
-    s.s2.bits.way_en := RegEnable(s1_way_en, s1_fire)
-    s.s3.valid := s3_valid_dup_for_status(i) && !RegEnable(s2_req.replace, s2_fire_to_s3)
-    s.s3.bits.set := RegEnable(get_idx(s2_req.vaddr), s2_fire_to_s3)
-    s.s3.bits.way_en := RegEnable(s2_way_en, s2_fire_to_s3)
+    s.s2.valid := s2_valid_dup_for_status(i) && !utils.HackedAPI.HackedRegEnable(s1_req.replace, s1_fire)
+    s.s2.bits.set := utils.HackedAPI.HackedRegEnable(get_idx(s1_req.vaddr), s1_fire)
+    s.s2.bits.way_en := utils.HackedAPI.HackedRegEnable(s1_way_en, s1_fire)
+    s.s3.valid := s3_valid_dup_for_status(i) && !utils.HackedAPI.HackedRegEnable(s2_req.replace, s2_fire_to_s3)
+    s.s3.bits.set := utils.HackedAPI.HackedRegEnable(get_idx(s2_req.vaddr), s2_fire_to_s3)
+    s.s3.bits.way_en := utils.HackedAPI.HackedRegEnable(s2_way_en, s2_fire_to_s3)
   }
   dontTouch(io.status_dup)
 
@@ -1627,15 +1627,15 @@ class MainPipe(implicit p: Parameters) extends DCacheModule with HasPerfEvents w
   io.error.valid := s3_error && RegNext(s2_fire)
   // only tag_error and data_error will be reported to beu
   // l2_error should not be reported (l2 will report that)
-  io.error.report_to_beu := (RegEnable(s2_tag_error, s2_fire) || s3_data_error) && RegNext(s2_fire)
-  io.error.paddr := RegEnable(s2_req.addr, s2_fire)
-  io.error.source.tag := RegEnable(s2_tag_error, s2_fire)
+  io.error.report_to_beu := (utils.HackedAPI.HackedRegEnable(s2_tag_error, s2_fire) || s3_data_error) && RegNext(s2_fire)
+  io.error.paddr := utils.HackedAPI.HackedRegEnable(s2_req.addr, s2_fire)
+  io.error.source.tag := utils.HackedAPI.HackedRegEnable(s2_tag_error, s2_fire)
   io.error.source.data := s3_data_error
-  io.error.source.l2 := RegEnable(s2_flag_error || s2_l2_error, s2_fire)
-  io.error.opType.store := RegEnable(s2_req.isStore && !s2_req.probe, s2_fire)
-  io.error.opType.probe := RegEnable(s2_req.probe, s2_fire)
-  io.error.opType.release := RegEnable(s2_req.replace, s2_fire)
-  io.error.opType.atom := RegEnable(s2_req.isAMO && !s2_req.probe, s2_fire)
+  io.error.source.l2 := utils.HackedAPI.HackedRegEnable(s2_flag_error || s2_l2_error, s2_fire)
+  io.error.opType.store := utils.HackedAPI.HackedRegEnable(s2_req.isStore && !s2_req.probe, s2_fire)
+  io.error.opType.probe := utils.HackedAPI.HackedRegEnable(s2_req.probe, s2_fire)
+  io.error.opType.release := utils.HackedAPI.HackedRegEnable(s2_req.replace, s2_fire)
+  io.error.opType.atom := utils.HackedAPI.HackedRegEnable(s2_req.isAMO && !s2_req.probe, s2_fire)
 
   val perfEvents = Seq(
     ("dcache_mp_req          ", s0_fire                                                      ),

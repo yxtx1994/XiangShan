@@ -266,10 +266,10 @@ class VIAluFix(cfg: FuConfig)(implicit p: Parameters) extends VecPipedFuncUnit(c
   /**
    * [[mgu]]'s in connection
    */
-  private val outIsVwsll = RegEnable(isVwsll, io.in.valid)
-  private val outIsVwsllEewVdIs64 = RegEnable(isVwsllEewVdIs64, io.in.valid)
-  private val outIsVwsllEewVdIs32 = RegEnable(isVwsllEewVdIs32, io.in.valid)
-  private val outIsVwsllEewVdIs16 = RegEnable(isVwsllEewVdIs16, io.in.valid)
+  private val outIsVwsll = utils.HackedAPI.HackedRegEnable(isVwsll, io.in.valid)
+  private val outIsVwsllEewVdIs64 = utils.HackedAPI.HackedRegEnable(isVwsllEewVdIs64, io.in.valid)
+  private val outIsVwsllEewVdIs32 = utils.HackedAPI.HackedRegEnable(isVwsllEewVdIs32, io.in.valid)
+  private val outIsVwsllEewVdIs16 = utils.HackedAPI.HackedRegEnable(isVwsllEewVdIs16, io.in.valid)
   //private val outEewVs1 = DelayN(eewVs1, latency)
   private val outEewVs1 = SNReg(eewVs1, latency)
 

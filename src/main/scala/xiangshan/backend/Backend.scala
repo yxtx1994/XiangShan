@@ -395,7 +395,7 @@ class BackendImp(override val wrapper: Backend)(implicit p: Parameters) extends 
   csrio.vpu <> 0.U.asTypeOf(csrio.vpu) // Todo
 
   val fromVsetVType = intExuBlock.io.vtype.getOrElse(0.U.asTypeOf((Valid(new VType))))
-  val vsetvlVType = RegEnable(fromVsetVType.bits, 0.U.asTypeOf(new VType), fromVsetVType.valid)
+  val vsetvlVType = utils.HackedAPI.HackedRegEnable(fromVsetVType.bits, 0.U.asTypeOf(new VType), fromVsetVType.valid)
   ctrlBlock.io.robio.vsetvlVType := vsetvlVType
 
   val debugVconfig = dataPath.io.debugVconfig match {

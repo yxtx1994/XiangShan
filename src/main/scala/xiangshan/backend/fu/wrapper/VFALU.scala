@@ -261,7 +261,7 @@ class VFAlu(cfg: FuConfig)(implicit p: Parameters) extends VecPipedFuncUnit(cfg)
   val outCtrl_s0 = ctrlVec.head
   val outVecCtrl_s0 = ctrlVec.head.vpu.get
   val outEew_s0 = Mux(resWiden, outVecCtrl_s0.vsew + 1.U, outVecCtrl_s0.vsew)
-  val outEew = Mux(RegEnable(resWiden, io.in.fire), outVecCtrl.vsew + 1.U, outVecCtrl.vsew)
+  val outEew = Mux(utils.HackedAPI.HackedRegEnable(resWiden, io.in.fire), outVecCtrl.vsew + 1.U, outVecCtrl.vsew)
   val outVuopidx = outVecCtrl.vuopIdx(2, 0)
   val vlMax_s0 = ((VLEN/8).U >> outEew_s0).asUInt
   val vlMax = ((VLEN/8).U >> outEew).asUInt
@@ -306,7 +306,7 @@ class VFAlu(cfg: FuConfig)(implicit p: Parameters) extends VecPipedFuncUnit(cfg)
       Mux(outIsResuction_s0, reductionVl, outVl_s0)
     )
   )
-  val outVlFix = RegEnable(outVlFix_s0,io.in.fire)
+  val outVlFix = utils.HackedAPI.HackedRegEnable(outVlFix_s0,io.in.fire)
 
   val vlMaxAllUop = Wire(outVl.cloneType)
   vlMaxAllUop := Mux(outVecCtrl.vlmul(2), vlMax >> lmulAbs, vlMax << lmulAbs).asUInt
@@ -426,9 +426,9 @@ class VFAlu(cfg: FuConfig)(implicit p: Parameters) extends VecPipedFuncUnit(cfg)
   mgu.io.in.info.vlmul := outVecCtrl.vlmul
   mgu.io.in.info.valid := Mux(notModifyVd, false.B, io.in.valid)
   mgu.io.in.info.vstart := Mux(outVecCtrl.fpu.isFpToVecInst, 0.U, outVecCtrl.vstart)
-  mgu.io.in.info.eew :=  RegEnable(outEew_s0,io.in.fire)
+  mgu.io.in.info.eew :=  utils.HackedAPI.HackedRegEnable(outEew_s0,io.in.fire)
   mgu.io.in.info.vsew := outVecCtrl.vsew
-  mgu.io.in.info.vdIdx := RegEnable(Mux(outIsResuction_s0, 0.U, outVecCtrl_s0.vuopIdx), io.in.fire)
+  mgu.io.in.info.vdIdx := utils.HackedAPI.HackedRegEnable(Mux(outIsResuction_s0, 0.U, outVecCtrl_s0.vuopIdx), io.in.fire)
   mgu.io.in.info.narrow := outVecCtrl.isNarrow
   mgu.io.in.info.dstMask := outVecCtrl.isDstMask
   mgu.io.in.isIndexedVls := false.B

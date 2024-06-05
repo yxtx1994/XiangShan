@@ -40,7 +40,7 @@ object NewPipelineConnect {
     val valid = RegInit(false.B)
 
     left.ready := right.ready || !valid
-    val data = RegEnable(left.bits, left.fire)
+    val data = utils.HackedAPI.HackedRegEnable(left.bits, left.fire)
 
     when (rightOutFire) { valid := false.B }
     when (left.fire) { valid := true.B }

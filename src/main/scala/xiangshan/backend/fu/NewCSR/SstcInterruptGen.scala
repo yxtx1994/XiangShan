@@ -18,6 +18,6 @@ class SstcInterruptGen extends Module {
   }))
 
   // Guard TIP by envcfg.STCE to avoid wrong assertion of time interrupt
-  o.STIP  := RegEnable(i.stime.bits  >= i.stimecmp,  false.B, i.stime.valid  && i.menvcfgSTCE)
-  o.VSTIP := RegEnable(i.vstime.bits >= i.vstimecmp, false.B, i.vstime.valid && i.henvcfgSTCE)
+  o.STIP  := utils.HackedAPI.HackedRegEnable(i.stime.bits  >= i.stimecmp,  false.B, i.stime.valid  && i.menvcfgSTCE)
+  o.VSTIP := utils.HackedAPI.HackedRegEnable(i.vstime.bits >= i.vstimecmp, false.B, i.vstime.valid && i.henvcfgSTCE)
 }

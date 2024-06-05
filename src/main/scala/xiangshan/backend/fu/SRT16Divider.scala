@@ -72,12 +72,12 @@ class SRT16DividerDataModule(len: Int) extends Module {
   val special = Wire(Bool())
 
   // reused regs
-//  val aNormAbsReg = RegEnable(aNormAbs, newReq | state(s_pre_0) | state(s_post_0)) // reg for normalized a & d and rem & rem+d
-//  val dNormAbsReg = RegEnable(dNormAbs, newReq | state(s_pre_0) | state(s_post_0))
-  val quotIterReg = RegEnable(quotIter, state(s_pre_1) | state(s_iter) | state(s_post_0))
-  val quotM1IterReg = RegEnable(quotM1Iter, state(s_pre_1) | state(s_iter) | state(s_post_0))
-  val specialReg = RegEnable(special, state(s_pre_1))
-  val aReg = RegEnable(a, in_fire)
+//  val aNormAbsReg = utils.HackedAPI.HackedRegEnable(aNormAbs, newReq | state(s_pre_0) | state(s_post_0)) // reg for normalized a & d and rem & rem+d
+//  val dNormAbsReg = utils.HackedAPI.HackedRegEnable(dNormAbs, newReq | state(s_pre_0) | state(s_post_0))
+  val quotIterReg = utils.HackedAPI.HackedRegEnable(quotIter, state(s_pre_1) | state(s_iter) | state(s_post_0))
+  val quotM1IterReg = utils.HackedAPI.HackedRegEnable(quotM1Iter, state(s_pre_1) | state(s_iter) | state(s_post_0))
+  val specialReg = utils.HackedAPI.HackedRegEnable(special, state(s_pre_1))
+  val aReg = utils.HackedAPI.HackedRegEnable(a, in_fire)
 
   when(kill_r) {
     state := UIntToOH(s_idle, 7)
@@ -105,18 +105,18 @@ class SRT16DividerDataModule(len: Int) extends Module {
 
   val aSign = io.sign && a(len - 1) // 1
   val dSign = io.sign && d(len - 1)
-  val dSignReg = RegEnable(dSign, newReq)
+  val dSignReg = utils.HackedAPI.HackedRegEnable(dSign, newReq)
 
   val aAbs = Mux(aSign, aInverter, a) // 64, 0
   val dAbs = Mux(dSign, dInverter, d)
-  val aAbsReg = RegEnable(aAbs, newReq)
-  val dAbsReg = RegEnable(dAbs, newReq)
+  val aAbsReg = utils.HackedAPI.HackedRegEnable(aAbs, newReq)
+  val dAbsReg = utils.HackedAPI.HackedRegEnable(dAbs, newReq)
 
   val aNorm = (aAbsReg(len - 1, 0) << aLZC(lzc_width - 1, 0))(len - 1, 0) // 64, 65
   val dNorm = (dAbsReg(len - 1, 0) << dLZC(lzc_width - 1, 0))(len - 1, 0)
 
-  val aNormReg = RegEnable(aNorm, state(s_pre_0))
-  val dNormReg = RegEnable(dNorm, state(s_pre_0))
+  val aNormReg = utils.HackedAPI.HackedRegEnable(aNorm, state(s_pre_0))
+  val dNormReg = utils.HackedAPI.HackedRegEnable(dNorm, state(s_pre_0))
 
 //  aNormAbs := Mux1H(Seq(
 //    state(s_idle) -> Cat(0.U(1.W), aAbs), // 65, 0
@@ -134,8 +134,8 @@ class SRT16DividerDataModule(len: Int) extends Module {
 
   aLZC := PriorityEncoder(aAbsReg(len - 1, 0).asBools.reverse)
   dLZC := PriorityEncoder(dAbsReg(len - 1, 0).asBools.reverse)
-  val aLZCReg = RegEnable(aLZC, state(s_pre_0)) // 7, 0
-  val dLZCReg = RegEnable(dLZC, state(s_pre_0))
+  val aLZCReg = utils.HackedAPI.HackedRegEnable(aLZC, state(s_pre_0)) // 7, 0
+  val dLZCReg = utils.HackedAPI.HackedRegEnable(dLZC, state(s_pre_0))
 
   val lzcWireDiff = Cat(0.U(1.W), dLZC(lzc_width - 1, 0)) - Cat(0.U(1.W), aLZC(lzc_width - 1, 0)) // 7, 0
   val lzcRegDiff = Cat(0.U(1.W), dLZCReg(lzc_width - 1, 0)) - Cat(0.U(1.W), aLZCReg(lzc_width - 1, 0))
@@ -146,8 +146,8 @@ class SRT16DividerDataModule(len: Int) extends Module {
   // s_pre_0:
   val dIsOne = dLZC(lzc_width - 1, 0).andR
   val dIsZero = ~dNormReg.orR
-  val aIsZero = RegEnable(aLZC(lzc_width), state(s_pre_0))
-  val aTooSmall = RegEnable(aLZC(lzc_width) | lzcWireDiff(lzc_width), state(s_pre_0))
+  val aIsZero = utils.HackedAPI.HackedRegEnable(aLZC(lzc_width), state(s_pre_0))
+  val aTooSmall = utils.HackedAPI.HackedRegEnable(aLZC(lzc_width) | lzcWireDiff(lzc_width), state(s_pre_0))
   special := dIsOne | dIsZero | aTooSmall
 
   val quotSpecial = Mux(dIsZero, VecInit(Seq.fill(len)(true.B)).asUInt,
@@ -155,19 +155,19 @@ class SRT16DividerDataModule(len: Int) extends Module {
                               Mux(dSignReg, -aReg, aReg) //  signed 2^(len-1)
                             ))
   val remSpecial = Mux(dIsZero || aTooSmall, aReg, 0.U)
-  val quotSpecialReg = RegEnable(quotSpecial, state(s_pre_1))
-  val remSpecialReg = RegEnable(remSpecial, state(s_pre_1))
+  val quotSpecialReg = utils.HackedAPI.HackedRegEnable(quotSpecial, state(s_pre_1))
+  val remSpecialReg = utils.HackedAPI.HackedRegEnable(remSpecial, state(s_pre_1))
 
   // s_pre_1
   val quotSign = Mux(state(s_idle), aSign ^ dSign, true.B) // if not s_idle then must be s_pre_1 & dIsZero, and that we have
   val rSign = aSign
-  val quotSignReg = RegEnable(quotSign, in_fire | (state(s_pre_1) & dIsZero))
-  val rSignReg = RegEnable(rSign, in_fire)
+  val quotSignReg = utils.HackedAPI.HackedRegEnable(quotSign, in_fire | (state(s_pre_1) & dIsZero))
+  val rSignReg = utils.HackedAPI.HackedRegEnable(rSign, in_fire)
 
   val rShift = lzcRegDiff(0)
   val oddIter = lzcRegDiff(1) ^ lzcRegDiff(0)
   val iterNum = Wire(UInt((lzc_width - 2).W))
-  val iterNumReg = RegEnable(iterNum, state(s_pre_1) | state(s_iter))
+  val iterNumReg = utils.HackedAPI.HackedRegEnable(iterNum, state(s_pre_1) | state(s_iter))
   iterNum := Mux(state(s_pre_1), (lzcRegDiff + 1.U) >> 2, iterNumReg -% 1.U)
   finalIter := iterNumReg === 0.U
 
@@ -235,9 +235,9 @@ class SRT16DividerDataModule(len: Int) extends Module {
   // val r3wsIter = Wire(UInt(13.W))
   // val r3wcIter = Wire(UInt(13.W))
   // Input Regs of whole Spec + Sel + sum adder block
-  val qPrevReg = RegEnable(Mux(state(s_pre_1), qInit, qNext2), state(s_pre_1) | state(s_iter))
-  val rSumReg = RegEnable(Mux(state(s_pre_1), rSumInit, rSumIter), state(s_pre_1) | state(s_iter)) // (1, 67)
-  val rCarryReg = RegEnable(Mux(state(s_pre_1), rCarryInit, rCarryIter), state(s_pre_1) | state(s_iter))
+  val qPrevReg = utils.HackedAPI.HackedRegEnable(Mux(state(s_pre_1), qInit, qNext2), state(s_pre_1) | state(s_iter))
+  val rSumReg = utils.HackedAPI.HackedRegEnable(Mux(state(s_pre_1), rSumInit, rSumIter), state(s_pre_1) | state(s_iter)) // (1, 67)
+  val rCarryReg = utils.HackedAPI.HackedRegEnable(Mux(state(s_pre_1), rCarryInit, rCarryIter), state(s_pre_1) | state(s_iter))
 
   // Give values to the regs and wires above...
   val dForLookup = dPos(len-2, len-4)
@@ -264,10 +264,10 @@ class SRT16DividerDataModule(len: Int) extends Module {
   r2ws := rSumReg(itn_len-1, itn_len-10)
   r2wc := rCarryReg(itn_len-1, itn_len-10)
 
-  val udNegReg = RegEnable(udNeg, state(s_pre_1))
-//  val rudNegReg = RegEnable(rudNeg, state(s_pre_1))
-  val rudPmNegReg = RegEnable(rudPmNeg, state(s_pre_1))
-  val r2udPmNegReg = RegEnable(r2udPmNeg, state(s_pre_1))
+  val udNegReg = utils.HackedAPI.HackedRegEnable(udNeg, state(s_pre_1))
+//  val rudNegReg = utils.HackedAPI.HackedRegEnable(rudNeg, state(s_pre_1))
+  val rudPmNegReg = utils.HackedAPI.HackedRegEnable(rudPmNeg, state(s_pre_1))
+  val r2udPmNegReg = utils.HackedAPI.HackedRegEnable(r2udPmNeg, state(s_pre_1))
 
   def DetectSign(signs: UInt, name: String): UInt = {
     val qVec = Wire(Vec(5, Bool())).suggestName(name)
@@ -368,8 +368,8 @@ class SRT16DividerDataModule(len: Int) extends Module {
     rNext := rSumReg + rCarryReg
     rNextPd := rSumReg + rCarryReg + Cat(0.U(1.W), dNormReg, 0.U(3.W))
   }
-  val rNextReg = RegEnable(rNext(len + 3, 3), state(s_post_0))
-  val rNextPdReg = RegEnable(rNextPd(len + 3, 3), state(s_post_0))
+  val rNextReg = utils.HackedAPI.HackedRegEnable(rNext(len + 3, 3), state(s_post_0))
+  val rNextPdReg = utils.HackedAPI.HackedRegEnable(rNextPd(len + 3, 3), state(s_post_0))
   dontTouch(rNextReg)
   // post_1
   val r = rNextReg
@@ -382,8 +382,8 @@ class SRT16DividerDataModule(len: Int) extends Module {
   rightShifter.io.shiftNum := dLZCReg
   rightShifter.io.msb := Mux(~(rPreShifted.orR), 0.U, rSignReg)
   val rShifted = rightShifter.io.out
-  val rFinal = RegEnable(Mux(specialReg, remSpecialReg, rShifted), state(s_post_1))// right shifted remainder. shift by the number of bits divisor is shifted
-  val qFinal = RegEnable(Mux(specialReg, quotSpecialReg, Mux(needCorr, quotM1IterReg, quotIterReg)), state(s_post_1))
+  val rFinal = utils.HackedAPI.HackedRegEnable(Mux(specialReg, remSpecialReg, rShifted), state(s_post_1))// right shifted remainder. shift by the number of bits divisor is shifted
+  val qFinal = utils.HackedAPI.HackedRegEnable(Mux(specialReg, quotSpecialReg, Mux(needCorr, quotM1IterReg, quotIterReg)), state(s_post_1))
   val res = Mux(isHi, rFinal, qFinal)
   io.out_data := Mux(isW,
     SignExt(res(31, 0), len),

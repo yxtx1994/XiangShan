@@ -225,9 +225,9 @@ class RAS(implicit p: Parameters) extends BasePredictor {
       s2_lto := Mux(s2_is_jalr, s2_jalr_target, s2_lti)
     }
 
-  val s3_top_dup = io.s2_fire.map(f => RegEnable(spec_ras.top, f))
-  val s3_sp = RegEnable(spec_ras.sp, io.s2_fire(2))
-  val s3_spec_new_addr = RegEnable(s2_spec_new_addr, io.s2_fire(2))
+  val s3_top_dup = io.s2_fire.map(f => utils.HackedAPI.HackedRegEnable(spec_ras.top, f))
+  val s3_sp = utils.HackedAPI.HackedRegEnable(spec_ras.sp, io.s2_fire(2))
+  val s3_spec_new_addr = utils.HackedAPI.HackedRegEnable(s2_spec_new_addr, io.s2_fire(2))
 
   val s3_full_pred = io.in.bits.resp_in(0).s3.full_pred
   val s3_jalr_target_dup = io.out.s3.full_pred.map(_.jalr_target)
@@ -249,8 +249,8 @@ class RAS(implicit p: Parameters) extends BasePredictor {
       s3_lto := Mux(s3_is_jalr, s3_jalr_target, s3_lti)
     }
 
-  val s3_pushed_in_s2 = RegEnable(s2_spec_push, io.s2_fire(2))
-  val s3_popped_in_s2 = RegEnable(s2_spec_pop,  io.s2_fire(2))
+  val s3_pushed_in_s2 = utils.HackedAPI.HackedRegEnable(s2_spec_push, io.s2_fire(2))
+  val s3_popped_in_s2 = utils.HackedAPI.HackedRegEnable(s2_spec_pop,  io.s2_fire(2))
   val s3_push = io.in.bits.resp_in(0).s3.full_pred(2).hit_taken_on_call
   val s3_pop  = io.in.bits.resp_in(0).s3.full_pred(2).hit_taken_on_ret
 

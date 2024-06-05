@@ -50,7 +50,7 @@ class CountModule(implicit p: Parameters) extends XSModule {
   for(i <- 0 until 16){ c1(i) := clzi(1, c0(i*2+1), c0(i*2)) }
 
   // pipeline registers
-  val funcReg = RegEnable(io.func, io.regEnable)
+  val funcReg = utils.HackedAPI.HackedRegEnable(io.func, io.regEnable)
   val c2 = Reg(Vec(8, UInt(4.W)))
   val cpopTmp = Reg(Vec(4, UInt(5.W)))
   when (io.regEnable) {
@@ -102,7 +102,7 @@ class ClmulModule(implicit p: Parameters) extends XSModule {
   (0 until 16) map { i => mul2(i) := mul1(i*2) ^ mul1(i*2+1)}
 
   // pipeline registers
-  val funcReg = RegEnable(io.func, io.regEnable)
+  val funcReg = utils.HackedAPI.HackedRegEnable(io.func, io.regEnable)
   val mul3 = Reg(Vec(8, UInt(128.W)))
   when (io.regEnable) {
     (0 until 8) map { i => mul3(i) := mul2(i*2) ^ mul2(i*2+1)}
@@ -145,7 +145,7 @@ class MiscModule(implicit p: Parameters) extends XSModule {
   (0 until 8).map( i => xpermbVec(i) := Mux(src2(i*8+7, i*8+3).orR, 0.U, xpermLUT(src1, src2(i*8+2, i*8), 8)))
   val xpermb = Cat(xpermbVec.reverse)
 
-  io.out := RegEnable(Mux(io.func(0), xpermb, xpermn), io.regEnable)
+  io.out := utils.HackedAPI.HackedRegEnable(Mux(io.func(0), xpermb, xpermn), io.regEnable)
 }
 
 class HashModule(implicit p: Parameters) extends XSModule {
@@ -182,7 +182,7 @@ class HashModule(implicit p: Parameters) extends XSModule {
   val sha = shaSource(io.func(2,0))
   val sm3 = Mux(io.func(0), SignExt(sm3p1(31,0), XLEN), SignExt(sm3p0(31,0), XLEN))
 
-  io.out := RegEnable(Mux(io.func(3), sm3, sha), io.regEnable)
+  io.out := utils.HackedAPI.HackedRegEnable(Mux(io.func(3), sm3, sha), io.regEnable)
 }
 
 class BlockCipherModule(implicit p: Parameters) extends XSModule {
@@ -193,7 +193,7 @@ class BlockCipherModule(implicit p: Parameters) extends XSModule {
     val out = Output(UInt(XLEN.W))
   })
 
-  val (src1, src2, func, funcReg) = (io.src(0), io.src(1), io.func, RegEnable(io.func, io.regEnable))
+  val (src1, src2, func, funcReg) = (io.src(0), io.src(1), io.func, utils.HackedAPI.HackedRegEnable(io.func, io.regEnable))
 
   val src1Bytes = VecInit((0 until 8).map(i => src1(i*8+7, i*8)))
   val src2Bytes = VecInit((0 until 8).map(i => src2(i*8+7, i*8)))
@@ -224,7 +224,7 @@ class BlockCipherModule(implicit p: Parameters) extends XSModule {
   val aes64es = aesSboxOut.asUInt
   val aes64ds = iaesSboxOut.asUInt
 
-  val imMinIn  = RegEnable(src1Bytes, io.regEnable)
+  val imMinIn  = utils.HackedAPI.HackedRegEnable(src1Bytes, io.regEnable)
 
   val aes64esm = Cat(MixFwd(Seq(aesSboxOut(4), aesSboxOut(5), aesSboxOut(6), aesSboxOut(7))),
                      MixFwd(Seq(aesSboxOut(0), aesSboxOut(1), aesSboxOut(2), aesSboxOut(3))))
@@ -252,11 +252,11 @@ class BlockCipherModule(implicit p: Parameters) extends XSModule {
     out := SboxAesOut(SboxInv(top))
     }
 
-  val ks1Idx = RegEnable(src2(3,0), io.regEnable)
+  val ks1Idx = utils.HackedAPI.HackedRegEnable(src2(3,0), io.regEnable)
   val aes64ks1i = Cat(ksSboxOut.asUInt ^ rcon(ks1Idx), ksSboxOut.asUInt ^ rcon(ks1Idx))
 
   val aes64ks2Temp = src1(63,32) ^ src2(31,0)
-  val aes64ks2 = RegEnable(Cat(aes64ks2Temp ^ src2(63,32), aes64ks2Temp), io.regEnable)
+  val aes64ks2 = utils.HackedAPI.HackedRegEnable(Cat(aes64ks2Temp ^ src2(63,32), aes64ks2Temp), io.regEnable)
 
   val aesResult = LookupTreeDefault(funcReg, aes64es, List(
     BKUOpType.aes64es   -> aes64es,
@@ -288,7 +288,7 @@ class BlockCipherModule(implicit p: Parameters) extends XSModule {
     Cat(sm4ks(15,0), sm4ks(31,16)),
     Cat(sm4ks( 7,0), sm4ks(31,8))
   ))
-  val sm4Result = SignExt((sm4Source(funcReg(2,0)) ^ RegEnable(src1(31,0), io.regEnable))(31,0), XLEN)
+  val sm4Result = SignExt((sm4Source(funcReg(2,0)) ^ utils.HackedAPI.HackedRegEnable(src1(31,0), io.regEnable))(31,0), XLEN)
 
   io.out := Mux(funcReg(3), sm4Result, aesResult)
 }
@@ -302,7 +302,7 @@ class CryptoModule(implicit p: Parameters) extends XSModule {
   })
 
   val (src1, src2, func) = (io.src(0), io.src(1), io.func)
-  val funcReg = RegEnable(func, io.regEnable)
+  val funcReg = utils.HackedAPI.HackedRegEnable(func, io.regEnable)
 
   val hashModule = Module(new HashModule)
   hashModule.io.src := src1
@@ -353,11 +353,11 @@ class Bku(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg) with HasP
 
 
   // CountModule, ClmulModule, MiscModule, and CryptoModule have a latency of 1 cycle
-  val funcReg = RegEnable(func, io.in.fire)
+  val funcReg = utils.HackedAPI.HackedRegEnable(func, io.in.fire)
   val result = Mux(funcReg(5), cryptoModule.io.out,
                   Mux(funcReg(3), countModule.io.out,
                       Mux(funcReg(2),miscModule.io.out, clmulModule.io.out)))
 
-  io.out.bits.res.data := RegEnable(result, regEnable(2))
+  io.out.bits.res.data := utils.HackedAPI.HackedRegEnable(result, regEnable(2))
   // connectNonPipedCtrlSingal
 }

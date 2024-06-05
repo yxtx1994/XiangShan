@@ -108,7 +108,7 @@ class BusyTable(numReadPorts: Int, numWritePorts: Int, numPhyPregs: Int, pregWB:
   the bypass state lasts for a maximum of one cycle, cancel(=> busy) or else(=> regFile)
    */
   val table = VecInit((0 until numPhyPregs).zip(tableUpdate).map{ case (idx, update) =>
-    RegEnable(update, 0.U(1.W), allocMask(idx) || cancelMask(idx) || ldCancelMask(idx) || wakeUpMask(idx) || wbMask(idx))
+    utils.HackedAPI.HackedRegEnable(update, 0.U(1.W), allocMask(idx) || cancelMask(idx) || ldCancelMask(idx) || wakeUpMask(idx) || wbMask(idx))
   }).asUInt
 
   tableUpdate.zipWithIndex.foreach{ case (update, idx) =>

@@ -95,6 +95,26 @@ class XSCoreImp(outer: XSCoreBase) extends LazyModuleImp(outer)
     }
   })
 
+  val testBool = WireInit(true.B)
+  val testRegBool1 = utils.HackedAPI.HackedRegEnable(testBool, testBool)
+  val testRegBool2 = utils.HackedAPI.HackedRegEnable(testBool, false.B, testBool)
+
+  val testValidIO = WireInit(0.U.asTypeOf(ValidIO(Bool())))
+  val testRegValidIO1 = utils.HackedAPI.HackedRegEnable(testValidIO, testBool)
+  val testRegValidIO2 = utils.HackedAPI.HackedRegEnable(testValidIO, 0.U.asTypeOf(ValidIO(Bool())), testBool)
+
+  val testDecoupledIO = WireInit(0.U.asTypeOf(Decoupled(Bool())))
+  val testRegDecoupledIO1 = utils.HackedAPI.HackedRegEnable(testValidIO, testBool)
+  val testRegDecoupledIO2 = utils.HackedAPI.HackedRegEnable(testValidIO, 0.U.asTypeOf(ValidIO(Bool())), testBool)
+
+  class TestBundle extends Bundle {
+    val testField = Bool()
+    val testField2 = UInt(2.W)
+  }
+  val testBundle = WireInit(0.U.asTypeOf(new TestBundle))
+  val testRegBundle1 = utils.HackedAPI.HackedRegEnable(testBundle, testBundle.testField)
+  val testRegBundle2 = utils.HackedAPI.HackedRegEnable(testBundle, 0.U.asTypeOf(testBundle), testBundle.testField)
+
   println(s"FPGAPlatform:${env.FPGAPlatform} EnableDebug:${env.EnableDebug}")
 
   val frontend = outer.frontend.module

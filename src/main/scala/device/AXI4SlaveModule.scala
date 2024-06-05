@@ -175,8 +175,8 @@ class AXI4SlaveModuleImp[T<:Data](outer: AXI4SlaveModule[T])
   in.b.bits.resp := AXI4Parameters.RESP_OKAY
   in.b.valid := state===s_wresp
 
-  in.b.bits.id := RegEnable(in.aw.bits.id, in.aw.fire)
-  in.b.bits.user := RegEnable(in.aw.bits.user, in.aw.fire)
-  in.r.bits.id := RegEnable(in.ar.bits.id, in.ar.fire)
-  in.r.bits.user := RegEnable(in.ar.bits.user, in.ar.fire)
+  in.b.bits.id := utils.HackedAPI.HackedRegEnable(in.aw.bits.id, in.aw.fire)
+  in.b.bits.user := utils.HackedAPI.HackedRegEnable(in.aw.bits.user, in.aw.fire)
+  in.r.bits.id := utils.HackedAPI.HackedRegEnable(in.ar.bits.id, in.ar.fire)
+  in.r.bits.user := utils.HackedAPI.HackedRegEnable(in.ar.bits.user, in.ar.fire)
 }

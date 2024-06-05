@@ -153,8 +153,8 @@ class SQData8Module(numEntries: Int, numRead: Int, numWrite: Int, numForward: In
     (0 until StoreQueueNWriteBanks).map(bank => {
       val s0_wen = s0_wenVec(bank)
       val s1_wen = s1_wenVec(bank)
-      val s1_wdata = RegEnable(io.data.wdata(i), s0_wen)
-      val s1_waddr = RegEnable(get_bank_index(io.data.waddr(i)), s0_wen)
+      val s1_wdata = utils.HackedAPI.HackedRegEnable(io.data.wdata(i), s0_wen)
+      val s1_waddr = utils.HackedAPI.HackedRegEnable(get_bank_index(io.data.waddr(i)), s0_wen)
       val numRegsPerBank = StoreQueueSize / StoreQueueNWriteBanks
       (0 until numRegsPerBank).map(index => {
         when(s1_wen && s1_waddr === index.U){
@@ -185,8 +185,8 @@ class SQData8Module(numEntries: Int, numRead: Int, numWrite: Int, numForward: In
       // val s1_wen = RegNext(s0_wen)
       val s0_wen = s0_wenVec(bank)
       val s1_wen = s1_wenVec(bank)
-      val s1_wdata = RegEnable(io.mask.wdata(i), s0_wen)
-      val s1_waddr = RegEnable(get_bank_index(io.mask.waddr(i)), s0_wen)
+      val s1_wdata = utils.HackedAPI.HackedRegEnable(io.mask.wdata(i), s0_wen)
+      val s1_waddr = utils.HackedAPI.HackedRegEnable(get_bank_index(io.mask.waddr(i)), s0_wen)
       val numRegsPerBank = StoreQueueSize / StoreQueueNWriteBanks
       (0 until numRegsPerBank).map(index => {
         when(s1_wen && s1_waddr === index.U){

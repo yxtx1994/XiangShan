@@ -246,9 +246,9 @@ abstract class BaseVMergeBuffer(isVStore: Boolean=false)(implicit p: Parameters)
 
     // if is VLoad, need latch 1 cycle to merge data. only flowNum and wbIndex need to latch
     val latchWbValid     = if(isVStore) pipewb.valid else RegNext(pipewb.valid)
-    val latchWbIndex     = if(isVStore) wbIndex      else RegEnable(wbIndex, pipewb.valid)
-    val latchFlowNum     = if(isVStore) flowNumOffset else RegEnable(flowNumOffset, pipewb.valid)
-    val latchMergeByPre  = if(isVStore) mergedByPrevPortVec(i) else RegEnable(mergedByPrevPortVec(i), pipewb.valid)
+    val latchWbIndex     = if(isVStore) wbIndex      else utils.HackedAPI.HackedRegEnable(wbIndex, pipewb.valid)
+    val latchFlowNum     = if(isVStore) flowNumOffset else utils.HackedAPI.HackedRegEnable(flowNumOffset, pipewb.valid)
+    val latchMergeByPre  = if(isVStore) mergedByPrevPortVec(i) else utils.HackedAPI.HackedRegEnable(mergedByPrevPortVec(i), pipewb.valid)
     when(latchWbValid && !latchMergeByPre){
       entries(latchWbIndex).flowNum := entries(latchWbIndex).flowNum - latchFlowNum
     }
@@ -356,13 +356,13 @@ class VLMergeBufferImp(implicit p: Parameters) extends BaseVMergeBuffer(isVStore
     )
     /** step1 **/
     pipewbValidReg(i)      := RegNext(pipewb.valid)
-    wbIndexReg(i)          := RegEnable(wbIndex, pipewb.valid)
-    mergeDataReg(i)        := RegEnable(mergedData, pipewb.valid) // for not Unit-stride
-    val brodenMergeDataReg  = RegEnable(brodenMergeData, pipewb.valid) // only for Unit-stride
-    val brodenMergeMaskReg  = RegEnable(brodenMergeMask, pipewb.valid)
-    val mergedByPrevPortReg = RegEnable(mergedByPrevPortVec(i), pipewb.valid)
-    val regOffsetReg        = RegEnable(pipewb.bits.reg_offset.get, pipewb.valid) // only for Unit-stride
-    val isusMerge           = RegEnable(alignedType(2), pipewb.valid)
+    wbIndexReg(i)          := utils.HackedAPI.HackedRegEnable(wbIndex, pipewb.valid)
+    mergeDataReg(i)        := utils.HackedAPI.HackedRegEnable(mergedData, pipewb.valid) // for not Unit-stride
+    val brodenMergeDataReg  = utils.HackedAPI.HackedRegEnable(brodenMergeData, pipewb.valid) // only for Unit-stride
+    val brodenMergeMaskReg  = utils.HackedAPI.HackedRegEnable(brodenMergeMask, pipewb.valid)
+    val mergedByPrevPortReg = utils.HackedAPI.HackedRegEnable(mergedByPrevPortVec(i), pipewb.valid)
+    val regOffsetReg        = utils.HackedAPI.HackedRegEnable(pipewb.bits.reg_offset.get, pipewb.valid) // only for Unit-stride
+    val isusMerge           = utils.HackedAPI.HackedRegEnable(alignedType(2), pipewb.valid)
 
     val usSelData           = Mux1H(UIntToOH(regOffsetReg), (0 until VLENB).map{case i => getNoAlignedSlice(brodenMergeDataReg, i, 128)})
     val usSelMask           = Mux1H(UIntToOH(regOffsetReg), (0 until VLENB).map{case i => brodenMergeMaskReg(16 + i - 1, i)})

@@ -91,7 +91,7 @@ class Regfile
       hitBankReg := hitBankWire
       val banksRdata = Wire(Vec(bankNum, UInt(len.W)))
       for (i <- 0 until bankNum) {
-        banksRdata(i) := RegEnable(VecInit(banks(i))(r.addr(r.addr.getWidth - 1, bankWidth)), hitBankWire(i))
+        banksRdata(i) := utils.HackedAPI.HackedRegEnable(VecInit(banks(i))(r.addr(r.addr.getWidth - 1, bankWidth)), hitBankWire(i))
       }
       r.data := Mux1H(hitBankReg, banksRdata)
     }

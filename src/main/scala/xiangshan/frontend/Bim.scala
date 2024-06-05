@@ -56,9 +56,9 @@ class BIM(implicit p: Parameters) extends BasePredictor with BimParams with BPUU
   override val meta_size = s1_latch_meta.getWidth
 
   // io.out.s1.full_pred.br_taken_mask := s1_latch_taken_mask
-  // io.out.s2.full_pred.br_taken_mask := RegEnable(s1_latch_taken_mask, 0.U.asTypeOf(Vec(numBr, Bool())), io.s1_fire)
+  // io.out.s2.full_pred.br_taken_mask := utils.HackedAPI.HackedRegEnable(s1_latch_taken_mask, 0.U.asTypeOf(Vec(numBr, Bool())), io.s1_fire)
 
-  io.out.last_stage_meta := RegEnable(RegEnable(s1_latch_meta, io.s1_fire(0)), io.s2_fire(0)) // TODO: configurable with total-stages
+  io.out.last_stage_meta := utils.HackedAPI.HackedRegEnable(utils.HackedAPI.HackedRegEnable(s1_latch_meta, io.s1_fire(0)), io.s2_fire(0)) // TODO: configurable with total-stages
 
   // Update logic
   val u_valid = RegNext(io.update.valid)

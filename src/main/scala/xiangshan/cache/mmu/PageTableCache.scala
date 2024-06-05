@@ -281,7 +281,7 @@ class PtwCache()(implicit p: Parameters) extends XSModule with HasPtwConst with 
       case (e, i) => (e.hit(vpn_search, io.csr_dup(0).satp.asid, io.csr_dup(0).vsatp.asid, io.csr_dup(0).hgatp.asid, s2xlate = h_search =/= noS2xlate)
         && l1v(i) && h_search === l1h(i))
     }
-    val hitVec = hitVecT.map(RegEnable(_, stageReq.fire))
+    val hitVec = hitVecT.map(utils.HackedAPI.HackedRegEnable(_, stageReq.fire))
 
     // stageDelay, but check for l1
     val hitPPN = DataHoldBypass(ParallelPriorityMux(hitVec zip l1.map(_.ppn)), stageDelay_valid_1cycle)
@@ -301,9 +301,9 @@ class PtwCache()(implicit p: Parameters) extends XSModule with HasPtwConst with 
     VecInit(hitVec).suggestName(s"l1_hitVec")
 
     // synchronize with other entries with RegEnable
-    (RegEnable(hit, stageDelay(1).fire),
-     RegEnable(hitPPN, stageDelay(1).fire),
-     RegEnable(hitPre, stageDelay(1).fire))
+    (utils.HackedAPI.HackedRegEnable(hit, stageDelay(1).fire),
+     utils.HackedAPI.HackedRegEnable(hitPPN, stageDelay(1).fire),
+     utils.HackedAPI.HackedRegEnable(hitPre, stageDelay(1).fire))
   }
 
   // l2
@@ -323,17 +323,17 @@ class PtwCache()(implicit p: Parameters) extends XSModule with HasPtwConst with 
       onlyStage2 -> onlyStage2
     ))
     val data_resp = DataHoldBypass(l2.io.r.resp.data, stageDelay_valid_1cycle)
-    val vVec_delay = RegEnable(vVec_req, stageReq.fire)
-    val hVec_delay = RegEnable(hVec_req, stageReq.fire)
+    val vVec_delay = utils.HackedAPI.HackedRegEnable(vVec_req, stageReq.fire)
+    val hVec_delay = utils.HackedAPI.HackedRegEnable(hVec_req, stageReq.fire)
     val hitVec_delay = VecInit(data_resp.zip(vVec_delay.asBools).zip(hVec_delay).map { case ((wayData, v), h) =>
       wayData.entries.hit(delay_vpn, io.csr_dup(1).satp.asid, io.csr_dup(1).vsatp.asid, io.csr_dup(1).hgatp.asid, s2xlate = delay_h =/= noS2xlate) && v && (delay_h === h)})
 
     // check hit and ecc
     val check_vpn = stageCheck(0).bits.req_info.vpn
-    val ramDatas = RegEnable(data_resp, stageDelay(1).fire)
-    val vVec = RegEnable(vVec_delay, stageDelay(1).fire).asBools
+    val ramDatas = utils.HackedAPI.HackedRegEnable(data_resp, stageDelay(1).fire)
+    val vVec = utils.HackedAPI.HackedRegEnable(vVec_delay, stageDelay(1).fire).asBools
 
-    val hitVec = RegEnable(hitVec_delay, stageDelay(1).fire)
+    val hitVec = utils.HackedAPI.HackedRegEnable(hitVec_delay, stageDelay(1).fire)
     val hitWayEntry = ParallelPriorityMux(hitVec zip ramDatas)
     val hitWayData = hitWayEntry.entries
     val hit = ParallelOR(hitVec)
@@ -380,17 +380,17 @@ class PtwCache()(implicit p: Parameters) extends XSModule with HasPtwConst with 
       onlyStage2 -> onlyStage2
     ))
     val data_resp = DataHoldBypass(l3.io.r.resp.data, stageDelay_valid_1cycle)
-    val vVec_delay = RegEnable(vVec_req, stageReq.fire)
-    val hVec_delay = RegEnable(hVec_req, stageReq.fire)
+    val vVec_delay = utils.HackedAPI.HackedRegEnable(vVec_req, stageReq.fire)
+    val hVec_delay = utils.HackedAPI.HackedRegEnable(hVec_req, stageReq.fire)
     val hitVec_delay = VecInit(data_resp.zip(vVec_delay.asBools).zip(hVec_delay).map { case ((wayData, v), h) =>
       wayData.entries.hit(delay_vpn, io.csr_dup(2).satp.asid, io.csr_dup(2).vsatp.asid, io.csr_dup(2).hgatp.asid, s2xlate = delay_h =/= noS2xlate) && v && (delay_h === h)})
 
     // check hit and ecc
     val check_vpn = stageCheck(0).bits.req_info.vpn
-    val ramDatas = RegEnable(data_resp, stageDelay(1).fire)
-    val vVec = RegEnable(vVec_delay, stageDelay(1).fire).asBools
+    val ramDatas = utils.HackedAPI.HackedRegEnable(data_resp, stageDelay(1).fire)
+    val vVec = utils.HackedAPI.HackedRegEnable(vVec_delay, stageDelay(1).fire).asBools
 
-    val hitVec = RegEnable(hitVec_delay, stageDelay(1).fire)
+    val hitVec = utils.HackedAPI.HackedRegEnable(hitVec_delay, stageDelay(1).fire)
     val hitWayEntry = ParallelPriorityMux(hitVec zip ramDatas)
     val hitWayData = hitWayEntry.entries
     val hitWayEcc = hitWayEntry.ecc
@@ -427,7 +427,7 @@ class PtwCache()(implicit p: Parameters) extends XSModule with HasPtwConst with 
   val spreplace = ReplacementPolicy.fromString(l2tlbParams.spReplacer, l2tlbParams.spSize)
   val (spHit, spHitData, spPre, spValid) = {
     val hitVecT = sp.zipWithIndex.map { case (e, i) => e.hit(vpn_search, io.csr_dup(0).satp.asid, io.csr_dup(0).vsatp.asid, io.csr_dup(0).hgatp.asid, s2xlate = h_search =/= noS2xlate) && spv(i) && (sph(i) === h_search) }
-    val hitVec = hitVecT.map(RegEnable(_, stageReq.fire))
+    val hitVec = hitVecT.map(utils.HackedAPI.HackedRegEnable(_, stageReq.fire))
     val hitData = ParallelPriorityMux(hitVec zip sp)
     val hit = ParallelOR(hitVec)
 
@@ -442,10 +442,10 @@ class PtwCache()(implicit p: Parameters) extends XSModule with HasPtwConst with 
     VecInit(hitVecT).suggestName(s"sp_hitVecT")
     VecInit(hitVec).suggestName(s"sp_hitVec")
 
-    (RegEnable(hit, stageDelay(1).fire),
-     RegEnable(hitData, stageDelay(1).fire),
-     RegEnable(hitData.prefetch, stageDelay(1).fire),
-     RegEnable(hitData.v, stageDelay(1).fire))
+    (utils.HackedAPI.HackedRegEnable(hit, stageDelay(1).fire),
+     utils.HackedAPI.HackedRegEnable(hitData, stageDelay(1).fire),
+     utils.HackedAPI.HackedRegEnable(hitData.prefetch, stageDelay(1).fire),
+     utils.HackedAPI.HackedRegEnable(hitData.v, stageDelay(1).fire))
   }
   val spHitPerm = spHitData.perm.getOrElse(0.U.asTypeOf(new PtePermBundle))
   val spHitLevel = spHitData.level.getOrElse(0.U)

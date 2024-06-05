@@ -203,9 +203,9 @@
 //    "b10".U -> Mux(s0_vl.orR, s0_fflags32vl(s0_vl - 1.U), 0.U(5.W)),
 //    "b11".U -> Mux(s0_vl.orR, s0_fflags64vl(s0_vl - 1.U), 0.U(5.W)),
 //  ))
-//  val s1_fflags = RegEnable(s0_fflags, validPipe(Latency-2))
+//  val s1_fflags = utils.HackedAPI.HackedRegEnable(s0_fflags, validPipe(Latency-2))
 //  val s0_result = VecInit(vfalu.map(_.io.fp_result)).asUInt
-//  val s1_result = RegEnable(s0_result, validPipe(Latency-2))
+//  val s1_result = utils.HackedAPI.HackedRegEnable(s0_result, validPipe(Latency-2))
 //
 //  fflags := s1_fflags
 //  io.out.bits.data := s1_result

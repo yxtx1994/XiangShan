@@ -299,13 +299,13 @@ class LoadQueueRAW(implicit p: Parameters) extends XSModule
     if (valid.length <= SelectGroupSize) {
       val (selValid, selBits) = selectPartialOldest(valid, bits)
       val selValidNext = GatedValidRegNext(selValid(0))
-      val selBitsNext = RegEnable(selBits(0), selValid(0))
+      val selBitsNext = utils.HackedAPI.HackedRegEnable(selBits(0), selValid(0))
       (Seq(selValidNext && !selBitsNext.uop.robIdx.needFlush(io.redirect) && !selBitsNext.uop.robIdx.needFlush(RegNext(io.redirect))), Seq(selBitsNext))
     } else {
       val select = (0 until numSelectGroups).map(g => {
         val (selValid, selBits) = selectPartialOldest(selectValidGroups(g), selectBitsGroups(g))
         val selValidNext = RegNext(selValid(0))
-        val selBitsNext = RegEnable(selBits(0), selValid(0))
+        val selBitsNext = utils.HackedAPI.HackedRegEnable(selBits(0), selValid(0))
         (selValidNext && !selBitsNext.uop.robIdx.needFlush(io.redirect) && !selBitsNext.uop.robIdx.needFlush(RegNext(io.redirect)), selBitsNext)
       })
       selectOldest(select.map(_._1), select.map(_._2))

@@ -97,16 +97,16 @@ abstract class FuncUnit(val cfg: FuConfig)(implicit p: Parameters) extends XSMod
 
   // should only be used in non-piped fu
   def connectNonPipedCtrlSingal: Unit = {
-    io.out.bits.ctrl.robIdx := RegEnable(io.in.bits.ctrl.robIdx, io.in.fire)
-    io.out.bits.ctrl.pdest  := RegEnable(io.in.bits.ctrl.pdest, io.in.fire)
-    io.out.bits.ctrl.rfWen  .foreach(_ := RegEnable(io.in.bits.ctrl.rfWen.get, io.in.fire))
-    io.out.bits.ctrl.fpWen  .foreach(_ := RegEnable(io.in.bits.ctrl.fpWen.get, io.in.fire))
-    io.out.bits.ctrl.vecWen .foreach(_ := RegEnable(io.in.bits.ctrl.vecWen.get, io.in.fire))
+    io.out.bits.ctrl.robIdx := utils.HackedAPI.HackedRegEnable(io.in.bits.ctrl.robIdx, io.in.fire)
+    io.out.bits.ctrl.pdest  := utils.HackedAPI.HackedRegEnable(io.in.bits.ctrl.pdest, io.in.fire)
+    io.out.bits.ctrl.rfWen  .foreach(_ := utils.HackedAPI.HackedRegEnable(io.in.bits.ctrl.rfWen.get, io.in.fire))
+    io.out.bits.ctrl.fpWen  .foreach(_ := utils.HackedAPI.HackedRegEnable(io.in.bits.ctrl.fpWen.get, io.in.fire))
+    io.out.bits.ctrl.vecWen .foreach(_ := utils.HackedAPI.HackedRegEnable(io.in.bits.ctrl.vecWen.get, io.in.fire))
     // io.out.bits.ctrl.flushPipe should be connected in fu
-    io.out.bits.ctrl.preDecode.foreach(_ := RegEnable(io.in.bits.ctrl.preDecode.get, io.in.fire))
-    io.out.bits.ctrl.fpu      .foreach(_ := RegEnable(io.in.bits.ctrl.fpu.get, io.in.fire))
-    io.out.bits.ctrl.vpu      .foreach(_ := RegEnable(io.in.bits.ctrl.vpu.get, io.in.fire))
-    io.out.bits.perfDebugInfo := RegEnable(io.in.bits.perfDebugInfo, io.in.fire)
+    io.out.bits.ctrl.preDecode.foreach(_ := utils.HackedAPI.HackedRegEnable(io.in.bits.ctrl.preDecode.get, io.in.fire))
+    io.out.bits.ctrl.fpu      .foreach(_ := utils.HackedAPI.HackedRegEnable(io.in.bits.ctrl.fpu.get, io.in.fire))
+    io.out.bits.ctrl.vpu      .foreach(_ := utils.HackedAPI.HackedRegEnable(io.in.bits.ctrl.vpu.get, io.in.fire))
+    io.out.bits.perfDebugInfo := utils.HackedAPI.HackedRegEnable(io.in.bits.perfDebugInfo, io.in.fire)
   }
 
   def connect0LatencyCtrlSingal: Unit = {
@@ -219,7 +219,7 @@ trait HasPipelineReg { this: FuncUnit =>
 
   def PipelineReg[TT <: Data](i: Int)(next: TT) = {
     val lat = preLat min i
-    RegEnable(
+    utils.HackedAPI.HackedRegEnable(
       next,
       regEnable(lat)
     )

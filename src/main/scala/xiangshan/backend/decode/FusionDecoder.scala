@@ -584,8 +584,8 @@ class FusionDecoder(implicit p: Parameters) extends XSModule {
       new FusedLui32w(pair)
     )
     val fire = io.in(i).valid && io.inReady(i)
-    val instrPairValid = RegEnable(VecInit(pair.map(_.valid)).asUInt.andR, false.B, io.inReady(i))
-    val fusionVec = RegEnable(VecInit(fusionList.map(_.isValid)), fire)
+    val instrPairValid = utils.HackedAPI.HackedRegEnable(VecInit(pair.map(_.valid)).asUInt.andR, false.B, io.inReady(i))
+    val fusionVec = utils.HackedAPI.HackedRegEnable(VecInit(fusionList.map(_.isValid)), fire)
     val thisCleared = io.clear(i)
     out.valid := instrPairValid && !thisCleared && fusionVec.asUInt.orR
     XSError(instrPairValid && PopCount(fusionVec) > 1.U, "more then one fusion matched\n")
@@ -605,7 +605,7 @@ class FusionDecoder(implicit p: Parameters) extends XSModule {
     def connectByUInt(field: FusionDecodeReplace => Valid[UInt], replace: Seq[Option[UInt]], needReg: Boolean): Unit = {
       field(out.bits).valid := false.B
       field(out.bits).bits := DontCare
-      val replaceVec = if (needReg) fusionVec.zip(replace).filter(_._2.isDefined).map(x => (x._1, RegEnable(x._2.get, fire))) else fusionVec.zip(replace).filter(_._2.isDefined).map(x => (x._1, x._2.get))
+      val replaceVec = if (needReg) fusionVec.zip(replace).filter(_._2.isDefined).map(x => (x._1, utils.HackedAPI.HackedRegEnable(x._2.get, fire))) else fusionVec.zip(replace).filter(_._2.isDefined).map(x => (x._1, x._2.get))
       if (replaceVec.nonEmpty) {
         val replEnable = VecInit(replaceVec.map(_._1)).asUInt.orR
         val replTypes = replaceVec.map(_._2).distinct
@@ -643,11 +643,11 @@ class FusionDecoder(implicit p: Parameters) extends XSModule {
     val src2WithZero = VecInit(fusionVec.zip(fusionList.map(_.lsrc2NeedZero)).filter(_._2).map(_._1)).asUInt.orR
     val src2WithMux = VecInit(fusionVec.zip(fusionList.map(_.lsrc2NeedMux)).filter(_._2).map(_._1)).asUInt.orR
     io.info(i).rs2FromZero := src2WithZero
-    io.info(i).rs2FromRs1 := src2WithMux && !RegEnable(fusionList.head.destToRs1, fire)
-    io.info(i).rs2FromRs2 := src2WithMux && RegEnable(fusionList.head.destToRs1, fire)
+    io.info(i).rs2FromRs1 := src2WithMux && !utils.HackedAPI.HackedRegEnable(fusionList.head.destToRs1, fire)
+    io.info(i).rs2FromRs2 := src2WithMux && utils.HackedAPI.HackedRegEnable(fusionList.head.destToRs1, fire)
     out.bits.lsrc2.valid := src2WithMux || src2WithZero
     when (src2WithMux) {
-      out.bits.lsrc2.bits := RegEnable(fusionList.head.lsrc2MuxResult, fire)
+      out.bits.lsrc2.bits := utils.HackedAPI.HackedRegEnable(fusionList.head.lsrc2MuxResult, fire)
     }.otherwise {//elsewhen (src2WithZero) {
       out.bits.lsrc2.bits := 0.U
     }

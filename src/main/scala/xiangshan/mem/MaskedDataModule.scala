@@ -145,9 +145,9 @@ class MaskedBankedSyncDataModuleTemplate[T <: Data](
       a._1.suggestName("s0_bank_write_en" + bank + "_" + a._2)
     )
     // s1: write data to entries
-    val s1_bank_waddr_dec = s0_bank_waddr_dec.zip(s0_bank_write_en).map(w => RegEnable(w._1, w._2))
+    val s1_bank_waddr_dec = s0_bank_waddr_dec.zip(s0_bank_write_en).map(w => utils.HackedAPI.HackedRegEnable(w._1, w._2))
     val s1_bank_wen = RegNext(VecInit(s0_bank_write_en))
-    val s1_wdata = io.wdata.zip(s0_bank_write_en).map(w => RegEnable(w._1, w._2))
+    val s1_wdata = io.wdata.zip(s0_bank_write_en).map(w => utils.HackedAPI.HackedRegEnable(w._1, w._2))
     s1_bank_waddr_dec.zipWithIndex.map(a =>
       a._1.suggestName("s1_bank_waddr_dec" + bank + "_" + a._2)
     )
@@ -169,7 +169,7 @@ class MaskedBankedSyncDataModuleTemplate[T <: Data](
     )
     // s1: write data to entries
     val s1_bank_mwmask = s0_bank_mwmask.map(a => RegNext(a))
-    val s1_mwdata = io.mwdata.zip(s0_bank_mwrite_en).map(w => RegEnable(w._1, w._2))
+    val s1_mwdata = io.mwdata.zip(s0_bank_mwrite_en).map(w => utils.HackedAPI.HackedRegEnable(w._1, w._2))
     s1_bank_mwmask.zipWithIndex.map(a =>
       a._1.suggestName("s1_bank_mwmask" + bank + "_" + a._2)
     )

@@ -184,9 +184,9 @@ class BloomFilter(n: Int, bypass: Boolean = true)(implicit p: Parameters) extend
   for(i <- 0 until LoadPipelineWidth) {
     io.resp(i).valid := GatedValidRegNext(io.query(i).valid)
     if(bypass) {
-      io.resp(i).bits.res := RegEnable(data_next(io.query(i).bits.addr), io.query(i).valid)
+      io.resp(i).bits.res := utils.HackedAPI.HackedRegEnable(data_next(io.query(i).bits.addr), io.query(i).valid)
     }else {
-      io.resp(i).bits.res := RegEnable(data(io.query(i).bits.addr), io.query(i).valid)
+      io.resp(i).bits.res := utils.HackedAPI.HackedRegEnable(data(io.query(i).bits.addr), io.query(i).valid)
     }
   }
 

@@ -27,8 +27,8 @@ class DivUnit(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg) {
     x
   )
 
-  val robIdxReg = RegEnable(io.in.bits.ctrl.robIdx, io.in.fire)
-  val ctrlReg = RegEnable(ctrl, io.in.fire)
+  val robIdxReg = utils.HackedAPI.HackedRegEnable(io.in.bits.ctrl.robIdx, io.in.fire)
+  val ctrlReg = utils.HackedAPI.HackedRegEnable(ctrl, io.in.fire)
 
   val divDataModule = Module(new SRT16DividerDataModule(cfg.dataBits))
 

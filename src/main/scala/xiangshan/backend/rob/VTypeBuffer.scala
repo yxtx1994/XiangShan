@@ -73,7 +73,7 @@ class VTypeBuffer(size: Int)(implicit p: Parameters) extends XSModule with HasCi
   private val s_idle :: s_spcl_walk :: s_walk :: Nil = Enum(3)
   private val state = RegInit(s_idle)
   private val stateNext = WireInit(state) // otherwise keep state value
-  private val stateLast = RegEnable(state, state =/= stateNext)
+  private val stateLast = utils.HackedAPI.HackedRegEnable(state, state =/= stateNext)
   private val stateLastCycle = RegNext(state)
 
   // +1 read port to get walk initial state

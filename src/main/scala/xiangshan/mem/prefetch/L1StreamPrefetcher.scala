@@ -233,7 +233,7 @@ class StreamBitVectorArray(implicit p: Parameters) extends XSModule with HasStre
   assert(!s0_valid || !(s0_hit && s0_plus_one_hit && (s0_index === s0_plus_one_index)), "region and region plus 1 index match failed")
   assert(!s0_valid || !(s0_hit && s0_minus_one_hit && (s0_index === s0_minus_one_index)), "region and region minus 1 index match failed")
   assert(!s0_valid || !(s0_plus_one_hit && s0_minus_one_hit && (s0_minus_one_index === s0_plus_one_index)), "region plus 1 and region minus 1 index match failed")
-  assert(!(s0_valid && GatedValidRegNext(s0_valid) && !s0_hit && !RegEnable(s0_hit, s0_valid) && replacement.way === RegEnable(replacement.way, s0_valid)), "replacement error")
+  assert(!(s0_valid && GatedValidRegNext(s0_valid) && !s0_hit && !utils.HackedAPI.HackedRegEnable(s0_hit, s0_valid) && replacement.way === utils.HackedAPI.HackedRegEnable(replacement.way, s0_valid)), "replacement error")
 
   XSPerfAccumulate("s0_valid_train_req", s0_valid)
   val s0_hit_pattern_vec = Seq(s0_hit, s0_plus_one_hit, s0_minus_one_hit)
@@ -252,22 +252,22 @@ class StreamBitVectorArray(implicit p: Parameters) extends XSModule with HasStre
 
   // s1: alloc or update
   val s1_valid = GatedValidRegNext(s0_valid)
-  val s1_index = RegEnable(s0_index, s0_valid)
-  val s1_pc    = RegEnable(s0_pc, s0_valid)
-  val s1_vaddr = RegEnable(s0_vaddr, s0_valid)
-  val s1_plus_one_index = RegEnable(s0_plus_one_index, s0_valid)
-  val s1_minus_one_index = RegEnable(s0_minus_one_index, s0_valid)
-  val s1_hit = RegEnable(s0_hit, s0_valid)
+  val s1_index = utils.HackedAPI.HackedRegEnable(s0_index, s0_valid)
+  val s1_pc    = utils.HackedAPI.HackedRegEnable(s0_pc, s0_valid)
+  val s1_vaddr = utils.HackedAPI.HackedRegEnable(s0_vaddr, s0_valid)
+  val s1_plus_one_index = utils.HackedAPI.HackedRegEnable(s0_plus_one_index, s0_valid)
+  val s1_minus_one_index = utils.HackedAPI.HackedRegEnable(s0_minus_one_index, s0_valid)
+  val s1_hit = utils.HackedAPI.HackedRegEnable(s0_hit, s0_valid)
   val s1_plus_one_hit = if(ENABLE_STRICT_ACTIVE_DETECTION)
-                            RegEnable(s0_plus_one_hit, s0_valid) && array(s1_plus_one_index).active && (array(s1_plus_one_index).cnt >= ACTIVE_THRESHOLD.U)
+                            utils.HackedAPI.HackedRegEnable(s0_plus_one_hit, s0_valid) && array(s1_plus_one_index).active && (array(s1_plus_one_index).cnt >= ACTIVE_THRESHOLD.U)
                         else
-                            RegEnable(s0_plus_one_hit, s0_valid) && array(s1_plus_one_index).active
+                            utils.HackedAPI.HackedRegEnable(s0_plus_one_hit, s0_valid) && array(s1_plus_one_index).active
   val s1_minus_one_hit = if(ENABLE_STRICT_ACTIVE_DETECTION)
-                            RegEnable(s0_minus_one_hit, s0_valid) && array(s1_minus_one_index).active && (array(s1_minus_one_index).cnt >= ACTIVE_THRESHOLD.U)
+                            utils.HackedAPI.HackedRegEnable(s0_minus_one_hit, s0_valid) && array(s1_minus_one_index).active && (array(s1_minus_one_index).cnt >= ACTIVE_THRESHOLD.U)
                         else
-                            RegEnable(s0_minus_one_hit, s0_valid) && array(s1_minus_one_index).active
-  val s1_region_tag = RegEnable(s0_region_tag, s0_valid)
-  val s1_region_bits = RegEnable(s0_region_bits, s0_valid)
+                            utils.HackedAPI.HackedRegEnable(s0_minus_one_hit, s0_valid) && array(s1_minus_one_index).active
+  val s1_region_tag = utils.HackedAPI.HackedRegEnable(s0_region_tag, s0_valid)
+  val s1_region_bits = utils.HackedAPI.HackedRegEnable(s0_region_bits, s0_valid)
   val s1_alloc = s1_valid && !s1_hit
   val s1_update = s1_valid && s1_hit
   val s1_pf_l1_incr_vaddr = Cat(region_to_block_addr(s1_region_tag, s1_region_bits) + io.dynamic_depth, 0.U(BLOCK_OFFSET.W))
@@ -286,8 +286,8 @@ class StreamBitVectorArray(implicit p: Parameters) extends XSModule with HasStre
       alloc_tag = s1_region_tag,
       alloc_bit_vec = UIntToOH(s1_region_bits),
       alloc_active = s1_plus_one_hit || s1_minus_one_hit,
-      alloc_decr_mode = RegEnable(s0_plus_one_hit, s0_valid),
-      alloc_full_vaddr = RegEnable(s0_vaddr, s0_valid)
+      alloc_decr_mode = utils.HackedAPI.HackedRegEnable(s0_plus_one_hit, s0_valid),
+      alloc_full_vaddr = utils.HackedAPI.HackedRegEnable(s0_vaddr, s0_valid)
       )
 
   }.elsewhen(s1_update) {
@@ -305,18 +305,18 @@ class StreamBitVectorArray(implicit p: Parameters) extends XSModule with HasStre
 
   // s2: trigger prefetch if hit active bit vector, compute meta of prefetch req
   val s2_valid = GatedValidRegNext(s1_valid)
-  val s2_index = RegEnable(s1_index, s1_valid)
-  val s2_pc    = RegEnable(s1_pc, s1_valid)
-  val s2_vaddr = RegEnable(s1_vaddr, s1_valid)
-  val s2_region_bits = RegEnable(s1_region_bits, s1_valid)
-  val s2_region_tag = RegEnable(s1_region_tag, s1_valid)
-  val s2_pf_l1_incr_vaddr = RegEnable(s1_pf_l1_incr_vaddr, s1_valid)
-  val s2_pf_l1_decr_vaddr = RegEnable(s1_pf_l1_decr_vaddr, s1_valid)
-  val s2_pf_l2_incr_vaddr = RegEnable(s1_pf_l2_incr_vaddr, s1_valid)
-  val s2_pf_l2_decr_vaddr = RegEnable(s1_pf_l2_decr_vaddr, s1_valid)
-  val s2_pf_l3_incr_vaddr = RegEnable(s1_pf_l3_incr_vaddr, s1_valid)
-  val s2_pf_l3_decr_vaddr = RegEnable(s1_pf_l3_decr_vaddr, s1_valid)
-  val s2_can_send_pf = RegEnable(s1_can_send_pf, s1_valid)
+  val s2_index = utils.HackedAPI.HackedRegEnable(s1_index, s1_valid)
+  val s2_pc    = utils.HackedAPI.HackedRegEnable(s1_pc, s1_valid)
+  val s2_vaddr = utils.HackedAPI.HackedRegEnable(s1_vaddr, s1_valid)
+  val s2_region_bits = utils.HackedAPI.HackedRegEnable(s1_region_bits, s1_valid)
+  val s2_region_tag = utils.HackedAPI.HackedRegEnable(s1_region_tag, s1_valid)
+  val s2_pf_l1_incr_vaddr = utils.HackedAPI.HackedRegEnable(s1_pf_l1_incr_vaddr, s1_valid)
+  val s2_pf_l1_decr_vaddr = utils.HackedAPI.HackedRegEnable(s1_pf_l1_decr_vaddr, s1_valid)
+  val s2_pf_l2_incr_vaddr = utils.HackedAPI.HackedRegEnable(s1_pf_l2_incr_vaddr, s1_valid)
+  val s2_pf_l2_decr_vaddr = utils.HackedAPI.HackedRegEnable(s1_pf_l2_decr_vaddr, s1_valid)
+  val s2_pf_l3_incr_vaddr = utils.HackedAPI.HackedRegEnable(s1_pf_l3_incr_vaddr, s1_valid)
+  val s2_pf_l3_decr_vaddr = utils.HackedAPI.HackedRegEnable(s1_pf_l3_decr_vaddr, s1_valid)
+  val s2_can_send_pf = utils.HackedAPI.HackedRegEnable(s1_can_send_pf, s1_valid)
   val s2_active = array(s2_index).active
   val s2_decr_mode = array(s2_index).decr_mode
   val s2_l1_vaddr = Mux(s2_decr_mode, s2_pf_l1_decr_vaddr, s2_pf_l1_incr_vaddr)
@@ -362,22 +362,22 @@ class StreamBitVectorArray(implicit p: Parameters) extends XSModule with HasStre
 
   // s3: send the l1 prefetch req out
   val s3_pf_l1_valid = GatedValidRegNext(s2_pf_req_valid)
-  val s3_pf_l1_bits = RegEnable(s2_pf_l1_req_bits, s2_pf_req_valid)
+  val s3_pf_l1_bits = utils.HackedAPI.HackedRegEnable(s2_pf_l1_req_bits, s2_pf_req_valid)
   val s3_pf_l2_valid = GatedValidRegNext(s2_pf_req_valid)
-  val s3_pf_l2_bits = RegEnable(s2_pf_l2_req_bits, s2_pf_req_valid)
-  val s3_pf_l3_bits = RegEnable(s2_pf_l3_req_bits, s2_pf_req_valid)
+  val s3_pf_l2_bits = utils.HackedAPI.HackedRegEnable(s2_pf_l2_req_bits, s2_pf_req_valid)
+  val s3_pf_l3_bits = utils.HackedAPI.HackedRegEnable(s2_pf_l3_req_bits, s2_pf_req_valid)
 
   XSPerfAccumulate("s3_pf_sent", s3_pf_l1_valid)
 
   // s4: send the l2 prefetch req out
   val s4_pf_l2_valid = GatedValidRegNext(s3_pf_l2_valid)
-  val s4_pf_l2_bits = RegEnable(s3_pf_l2_bits, s3_pf_l2_valid)
-  val s4_pf_l3_bits = RegEnable(s3_pf_l3_bits, s3_pf_l2_valid)
+  val s4_pf_l2_bits = utils.HackedAPI.HackedRegEnable(s3_pf_l2_bits, s3_pf_l2_valid)
+  val s4_pf_l3_bits = utils.HackedAPI.HackedRegEnable(s3_pf_l3_bits, s3_pf_l2_valid)
 
   val enable_l3_pf = Constantin.createRecord(s"enableL3StreamPrefetch${p(XSCoreParamsKey).HartId}", initValue = false)
   // s5: send the l3 prefetch req out
   val s5_pf_l3_valid = GatedValidRegNext(s4_pf_l2_valid) && enable_l3_pf
-  val s5_pf_l3_bits = RegEnable(s4_pf_l3_bits, s4_pf_l2_valid)
+  val s5_pf_l3_bits = utils.HackedAPI.HackedRegEnable(s4_pf_l3_bits, s4_pf_l2_valid)
 
   io.l1_prefetch_req.valid := s3_pf_l1_valid
   io.l1_prefetch_req.bits := s3_pf_l1_bits
@@ -395,19 +395,19 @@ class StreamBitVectorArray(implicit p: Parameters) extends XSModule with HasStre
   val s0_lookup_tag = get_region_tag(s0_lookup_vaddr)
   // S1: match
   val s1_lookup_valid = GatedValidRegNext(s0_lookup_valid)
-  val s1_lookup_tag = RegEnable(s0_lookup_tag, s0_lookup_valid)
+  val s1_lookup_tag = utils.HackedAPI.HackedRegEnable(s0_lookup_tag, s0_lookup_valid)
   val s1_lookup_tag_match_vec = array.map(_.tag_match(s1_lookup_tag))
   val s1_lookup_hit = VecInit(s1_lookup_tag_match_vec).asUInt.orR
   val s1_lookup_index = OHToUInt(VecInit(s1_lookup_tag_match_vec))
   // S2: read active out
   val s2_lookup_valid = GatedValidRegNext(s1_lookup_valid)
-  val s2_lookup_hit = RegEnable(s1_lookup_hit, s1_lookup_valid)
-  val s2_lookup_index = RegEnable(s1_lookup_index, s1_lookup_valid)
+  val s2_lookup_hit = utils.HackedAPI.HackedRegEnable(s1_lookup_hit, s1_lookup_valid)
+  val s2_lookup_index = utils.HackedAPI.HackedRegEnable(s1_lookup_index, s1_lookup_valid)
   val s2_lookup_active = array(s2_lookup_index).active
   // S3: send back to Stride
   val s3_lookup_valid = GatedValidRegNext(s2_lookup_valid)
-  val s3_lookup_hit = RegEnable(s2_lookup_hit, s2_lookup_valid)
-  val s3_lookup_active = RegEnable(s2_lookup_active, s2_lookup_valid)
+  val s3_lookup_hit = utils.HackedAPI.HackedRegEnable(s2_lookup_hit, s2_lookup_valid)
+  val s3_lookup_active = utils.HackedAPI.HackedRegEnable(s2_lookup_active, s2_lookup_valid)
   io.stream_lookup_resp := s3_lookup_valid && s3_lookup_hit && s3_lookup_active
 
   // reset meta to avoid muti-hit problem

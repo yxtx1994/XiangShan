@@ -155,7 +155,7 @@ class AXI4MemoryImp[T <: Data](outer: AXI4Memory) extends AXI4SlaveModuleImp(out
 
   // accept a read request and send it to the external model
   val pending_read_req_valid = RegInit(false.B)
-  val pending_read_req_bits  = RegEnable(in.ar.bits, in.ar.fire)
+  val pending_read_req_bits  = utils.HackedAPI.HackedRegEnable(in.ar.bits, in.ar.fire)
   val pending_read_req_ready = Wire(Bool())
   val pending_read_need_req = pending_read_req_valid && !pending_read_req_ready
   val read_req_valid = pending_read_need_req || in.ar.valid
@@ -173,8 +173,8 @@ class AXI4MemoryImp[T <: Data](outer: AXI4Memory) extends AXI4SlaveModuleImp(out
 
   // accept a write request (including address and data) and send it to the external model
   val pending_write_req_valid = RegInit(VecInit.fill(2)(false.B))
-  val pending_write_req_bits  = RegEnable(in.aw.bits, in.aw.fire)
-  val pending_write_req_data  = RegEnable(in.w.bits, in.w.fire)
+  val pending_write_req_bits  = utils.HackedAPI.HackedRegEnable(in.aw.bits, in.aw.fire)
+  val pending_write_req_data  = utils.HackedAPI.HackedRegEnable(in.w.bits, in.w.fire)
   XSError(in.aw.fire && in.aw.bits.len === 0.U, "data must have more than one beat now")
   val pending_write_req_ready = Wire(Bool())
   val pending_write_need_req = pending_write_req_valid.last && !pending_write_req_ready

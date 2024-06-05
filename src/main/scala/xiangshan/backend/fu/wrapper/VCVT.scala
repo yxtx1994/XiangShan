@@ -71,7 +71,7 @@ class VCVT(cfg: FuConfig)(implicit p: Parameters) extends VecPipedFuncUnit(cfg) 
   val outIsInt = !outCtrl.fuOpType(6)
   val outIsMvInst = outCtrl.fuOpType(8)
 
-  val outEew = RegEnable(RegEnable(Mux1H(output1H, Seq(0,1,2,3).map(i => i.U)), fire), fireReg)
+  val outEew = utils.HackedAPI.HackedRegEnable(utils.HackedAPI.HackedRegEnable(Mux1H(output1H, Seq(0,1,2,3).map(i => i.U)), fire), fireReg)
   private val needNoMask = outVecCtrl.fpu.isFpToVecInst
   val maskToMgu = Mux(needNoMask, allMaskTrue, outSrcMask)
 
@@ -127,7 +127,7 @@ class VCVT(cfg: FuConfig)(implicit p: Parameters) extends VecPipedFuncUnit(cfg) 
 
   fflagsEn := mask.asBools.zipWithIndex.map{case(mask, i) => mask & (eNumEffectIdx > eStart + i.U) }
 
-  val fflagsEnCycle2 = RegEnable(RegEnable(fflagsEn, fire), fireReg)
+  val fflagsEnCycle2 = utils.HackedAPI.HackedRegEnable(utils.HackedAPI.HackedRegEnable(fflagsEn, fire), fireReg)
   val fflagsAll = Wire(Vec(8, UInt(5.W)))
   fflagsAll := vfcvtFflags.asTypeOf(fflagsAll)
   val fflags = fflagsEnCycle2.zip(fflagsAll).map{case(en, fflag) => Mux(en, fflag, 0.U(5.W))}.reduce(_ | _)
@@ -140,7 +140,7 @@ class VCVT(cfg: FuConfig)(implicit p: Parameters) extends VecPipedFuncUnit(cfg) 
   val resultDataUInt = Wire(UInt(dataWidth.W))
   resultDataUInt := vfcvtResult
 
-  private val narrow = RegEnable(RegEnable(isNarrowCvt, fire), fireReg)
+  private val narrow = utils.HackedAPI.HackedRegEnable(utils.HackedAPI.HackedRegEnable(isNarrowCvt, fire), fireReg)
   private val narrowNeedCat = outVecCtrl.vuopIdx(0).asBool && narrow
   private val outNarrowVd = Mux(narrowNeedCat, Cat(resultDataUInt(dataWidth / 2 - 1, 0), outOldVd(dataWidth / 2 - 1, 0)), resultDataUInt)
 
@@ -226,8 +226,8 @@ class VectorCvtTop(vlen: Int, xlen: Int) extends Module{
   vectorCvt1.rm := rm
   vectorCvt1.isFpToVecInst := isFpToVecInst
 
-  val isNarrowCycle2 = RegEnable(RegEnable(isNarrow, fire), fireReg)
-  val outputWidth1HCycle2 = RegEnable(RegEnable(outputWidth1H, fire), fireReg)
+  val isNarrowCycle2 = utils.HackedAPI.HackedRegEnable(utils.HackedAPI.HackedRegEnable(isNarrow, fire), fireReg)
+  val outputWidth1HCycle2 = utils.HackedAPI.HackedRegEnable(utils.HackedAPI.HackedRegEnable(outputWidth1H, fire), fireReg)
 
   //cycle2
   io.result := Mux(isNarrowCycle2,

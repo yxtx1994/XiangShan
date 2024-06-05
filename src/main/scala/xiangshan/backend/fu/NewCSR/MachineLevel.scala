@@ -317,7 +317,7 @@ trait MachineLevel { self: NewCSR =>
     val ALL = RO(7, 0)
   }) {
     val hartid = IO(Input(UInt(hartIdLen.W)))
-    this.reg.ALL := RegEnable(hartid, reset.asBool)
+    this.reg.ALL := utils.HackedAPI.HackedRegEnable(hartid, reset.asBool)
   })
     .setAddr(CSRs.mhartid)
 

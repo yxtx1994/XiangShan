@@ -83,10 +83,10 @@ class SRT4DividerDataModule(len: Int) extends Module {
   //reused ctrl regs
 
   //reused other regs
-  val aNormAbsReg = RegEnable(aNormAbs, startHandShake | state(s_pre_0) | state(s_post_0)) // reg for normalized a & d and rem & rem+d
-  val dNormAbsReg = RegEnable(dNormAbs, startHandShake | state(s_pre_0) | state(s_post_0))
-  val quotIterReg = RegEnable(quotIter, state(s_pre_1) | state(s_iter) | state(s_post_0))
-  val quotM1IterReg = RegEnable(quotM1Iter, state(s_pre_1) | state(s_iter) | state(s_post_0))
+  val aNormAbsReg = utils.HackedAPI.HackedRegEnable(aNormAbs, startHandShake | state(s_pre_0) | state(s_post_0)) // reg for normalized a & d and rem & rem+d
+  val dNormAbsReg = utils.HackedAPI.HackedRegEnable(dNormAbs, startHandShake | state(s_pre_0) | state(s_post_0))
+  val quotIterReg = utils.HackedAPI.HackedRegEnable(quotIter, state(s_pre_1) | state(s_iter) | state(s_post_0))
+  val quotM1IterReg = utils.HackedAPI.HackedRegEnable(quotM1Iter, state(s_pre_1) | state(s_iter) | state(s_post_0))
 
   when(kill_r) {
     state := UIntToOH(s_idle, 7)
@@ -140,8 +140,8 @@ class SRT4DividerDataModule(len: Int) extends Module {
 
   aLZC := PriorityEncoder(aNormAbsReg(len - 1, 0).asBools.reverse)
   dLZC := PriorityEncoder(dNormAbsReg(len - 1, 0).asBools.reverse)
-  val aLZCReg = RegEnable(aLZC, state(s_pre_0)) // 7, 0
-  val dLZCReg = RegEnable(dLZC, state(s_pre_0))
+  val aLZCReg = utils.HackedAPI.HackedRegEnable(aLZC, state(s_pre_0)) // 7, 0
+  val dLZCReg = utils.HackedAPI.HackedRegEnable(dLZC, state(s_pre_0))
 
 
 
@@ -151,15 +151,15 @@ class SRT4DividerDataModule(len: Int) extends Module {
   aIsZero := aLZC(lzc_width) // this is state pre_0
   dIsZero := dLZCReg(lzc_width) // this is pre_1 and all stages after
   val dIsOne = dLZC(lzc_width - 1, 0).andR // this is pre_0
-  val noIterReg = RegEnable(dIsOne & aNormAbsReg(len - 1), state(s_pre_0)) // This means dividend has lzc 0 so iter is 17
+  val noIterReg = utils.HackedAPI.HackedRegEnable(dIsOne & aNormAbsReg(len - 1), state(s_pre_0)) // This means dividend has lzc 0 so iter is 17
   noIter := noIterReg
-  val aTooSmallReg = RegEnable(aIsZero | lzcDiff(lzc_width), state(s_pre_0)) // a is zero or a smaller than d
+  val aTooSmallReg = utils.HackedAPI.HackedRegEnable(aIsZero | lzcDiff(lzc_width), state(s_pre_0)) // a is zero or a smaller than d
   aTooSmall := aTooSmallReg
 
   val quotSign = Mux(state(s_idle), aSign ^ dSign, true.B) // if not s_idle then must be s_pre_1 & dIsZero, and that we have
   val rSign = aSign
-  val quotSignReg = RegEnable(quotSign, startHandShake | (state(s_pre_1) & dIsZero))
-  val rSignReg = RegEnable(rSign, startHandShake)
+  val quotSignReg = utils.HackedAPI.HackedRegEnable(quotSign, startHandShake | (state(s_pre_1) & dIsZero))
+  val rSignReg = utils.HackedAPI.HackedRegEnable(rSign, startHandShake)
 
   val rShift = lzcDiff(0) // odd lzc diff, for SRT4
   val rightShifted = Wire(UInt(len.W))
@@ -209,8 +209,8 @@ class SRT4DividerDataModule(len: Int) extends Module {
   val initCmpPos2 = rSumInitTrunc >= mInitPos2
   val qInit = Mux(initCmpPos2, UIntToOH(quot_pos_2, 5), Mux(initCmpPos1, UIntToOH(quot_pos_1, 5), UIntToOH(quot_0, 5)))
   val qPrev = Mux(state(s_pre_1), qInit, qIterEnd)
-  val qPrevReg = RegEnable(qPrev, state(s_pre_1) | state(s_iter))
-  val specialDivisorReg = RegEnable(dNormAbsReg(len - 2, len - 2 - 3 + 1) === 0.U, state(s_pre_1)) // d=0.1000xxx
+  val qPrevReg = utils.HackedAPI.HackedRegEnable(qPrev, state(s_pre_1) | state(s_iter))
+  val specialDivisorReg = utils.HackedAPI.HackedRegEnable(dNormAbsReg(len - 2, len - 2 - 3 + 1) === 0.U, state(s_pre_1)) // d=0.1000xxx
   // rCarry and rSum in Iteration
   val qXd = Mux1H(Seq(
     qPrevReg(quot_neg_2) -> Cat(dNormAbsReg(len - 1, 0), 0.U(4.W)), // 68, 67 1.xxxxx0000
@@ -223,8 +223,8 @@ class SRT4DividerDataModule(len: Int) extends Module {
 
   val rSumIter = csa.io.out(0)
   val rCarryIter = Cat(csa.io.out(1)(itn_len - 2, 0), qPrevReg(quot_pos_1) | qPrevReg(quot_pos_2))
-  val rSumReg = RegEnable(Mux(state(s_pre_1), rSumInit, rSumIter), state(s_pre_1) | state(s_iter)) // 68, 67
-  val rCarryReg = RegEnable(Mux(state(s_pre_1), rCarryInit, rCarryIter), state(s_pre_1) | state(s_iter))
+  val rSumReg = utils.HackedAPI.HackedRegEnable(Mux(state(s_pre_1), rSumInit, rSumIter), state(s_pre_1) | state(s_iter)) // 68, 67
+  val rCarryReg = utils.HackedAPI.HackedRegEnable(Mux(state(s_pre_1), rCarryInit, rCarryIter), state(s_pre_1) | state(s_iter))
   csa.io.in(0) := rSumReg << 2
   csa.io.in(1) := rCarryReg << 2
   csa.io.in(2) := qXd
@@ -268,7 +268,7 @@ class SRT4DividerDataModule(len: Int) extends Module {
 
   // iter num
   val iterNum = Wire(UInt((lzc_width - 1).W))
-  val iterNumReg = RegEnable(iterNum, state(s_pre_1) | state(s_iter))
+  val iterNumReg = utils.HackedAPI.HackedRegEnable(iterNum, state(s_pre_1) | state(s_iter))
 
   iterNum := Mux(state(s_pre_1), lzcDiff(lzc_width - 1, 1) +% lzcDiff(0), iterNumReg -% 1.U)
   finalIter := iterNumReg === 0.U
@@ -288,7 +288,7 @@ class SRT4DividerDataModule(len: Int) extends Module {
   val rIsZero = ~(r.orR)
   val needCorr = (~dIsZero & ~noIterReg) & Mux(rSignReg, ~r(len) & ~rIsZero, r(len)) // when we get pos rem for d<0 or neg rem for d>0
   rPreShifted := Mux(needCorr, rPd, r)
-  val rFinal = RegEnable(rightShifted, state(s_post_1))// right shifted remainder. shift by the number of bits divisor is shifted
+  val rFinal = utils.HackedAPI.HackedRegEnable(rightShifted, state(s_post_1))// right shifted remainder. shift by the number of bits divisor is shifted
   val qFinal = Mux(needCorr, quotM1IterReg, quotIterReg)
   val res = Mux(isHi, rFinal, qFinal)
   io.out_data := Mux(isW,
@@ -432,8 +432,8 @@ class SRT4Divider(len: Int)(implicit p: Parameters) extends AbstractDivider(len)
   val newReq = io.in.fire
 
   val uop = io.in.bits.uop
-  val uopReg = RegEnable(uop, newReq)
-  val ctrlReg = RegEnable(ctrl, newReq)
+  val uopReg = utils.HackedAPI.HackedRegEnable(uop, newReq)
+  val ctrlReg = utils.HackedAPI.HackedRegEnable(ctrl, newReq)
 
   val divDataModule = Module(new SRT4DividerDataModule(len))
 

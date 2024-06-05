@@ -129,7 +129,7 @@ class ExeUnitImp(
     busy := false.B
   }
   else {
-    val robIdx = RegEnable(io.in.bits.robIdx, io.in.fire)
+    val robIdx = utils.HackedAPI.HackedRegEnable(io.in.bits.robIdx, io.in.fire)
     when(io.in.fire && io.in.bits.robIdx.needFlush(io.flush)) {
       busy := false.B
     }.elsewhen(busy && robIdx.needFlush(io.flush)) {

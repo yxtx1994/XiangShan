@@ -30,13 +30,13 @@ class FPToFPDataModule(latency: Int)(implicit p: Parameters) extends FPUDataModu
   val regEnables = IO(Input(Vec(latency, Bool())))
 
   val ctrlIn = io.in.fpCtrl
-  val ctrl = RegEnable(ctrlIn, regEnables(0))
+  val ctrl = utils.HackedAPI.HackedRegEnable(ctrlIn, regEnables(0))
   val inTag = ctrl.typeTagIn
   val outTag = ctrl.typeTagOut
   val wflags = ctrl.wflags
-  val src1 = RegEnable(FPU.unbox(io.in.src(0), ctrlIn.typeTagIn), regEnables(0))
-  val src2 = RegEnable(FPU.unbox(io.in.src(1), ctrlIn.typeTagIn), regEnables(0))
-  val rmReg = RegEnable(rm, regEnables(0))
+  val src1 = utils.HackedAPI.HackedRegEnable(FPU.unbox(io.in.src(0), ctrlIn.typeTagIn), regEnables(0))
+  val src2 = utils.HackedAPI.HackedRegEnable(FPU.unbox(io.in.src(1), ctrlIn.typeTagIn), regEnables(0))
+  val rmReg = utils.HackedAPI.HackedRegEnable(rm, regEnables(0))
 
   val signNum = Mux(rmReg(1), src1 ^ src2, Mux(rmReg(0), ~src2, src2))
   val fsgnj = VecInit(FPU.ftypes.map { t =>
@@ -115,8 +115,8 @@ class FPToFPDataModule(latency: Int)(implicit p: Parameters) extends FPUDataModu
     FPU.box(mux.data, FPU.D)
   )
 
-  io.out.data := RegEnable(boxed_data, regEnables(1))
-  io.out.fflags := RegEnable(mux.exc, regEnables(1))
+  io.out.data := utils.HackedAPI.HackedRegEnable(boxed_data, regEnables(1))
+  io.out.fflags := utils.HackedAPI.HackedRegEnable(mux.exc, regEnables(1))
 }
 
 class FPToFP(cfg: FuConfig)(implicit p: Parameters) extends FPUPipelineModule(cfg) {

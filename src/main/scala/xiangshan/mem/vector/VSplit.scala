@@ -184,7 +184,7 @@ class VSplitPipeline(isVStore: Boolean = false)(implicit p: Parameters) extends 
   }.elsewhen(s1_kill){
     s1_valid := false.B
   }
-  s1_in := RegEnable(s0_out, s0_fire)
+  s1_in := utils.HackedAPI.HackedRegEnable(s0_out, s0_fire)
 
   val s1_flowNum          = s1_in.flowNum
   val s1_uopidx           = s1_in.uop.vpu.vuopIdx

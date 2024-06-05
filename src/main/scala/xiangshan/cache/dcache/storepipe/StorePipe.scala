@@ -113,7 +113,7 @@ class StorePipe(id: Int)(implicit p: Parameters) extends DCacheModule{
   def wayMap[T <: Data](f: Int => T) = VecInit((0 until nWays).map(f))
 
   val s1_valid = RegNext(s0_fire)
-  val s1_req = RegEnable(s0_req, s0_fire)
+  val s1_req = utils.HackedAPI.HackedRegEnable(s0_req, s0_fire)
 
   val s1_meta_resp = io.meta_resp
   val s1_tag_resp  = io.tag_resp.map(tag => tag(tagBits - 1, 0))
@@ -147,12 +147,12 @@ class StorePipe(id: Int)(implicit p: Parameters) extends DCacheModule{
   * hit : update replace algrithom to make the hited line stay longer
   */
   val s2_valid = RegNext(s1_valid) && RegNext(!io.lsu.s1_kill)
-  val s2_req = RegEnable(s1_req, s1_valid)
+  val s2_req = utils.HackedAPI.HackedRegEnable(s1_req, s1_valid)
 
-  val s2_hit = RegEnable(s1_hit, s1_valid)
-  val s2_paddr = RegEnable(s1_paddr, s1_valid)
-  val s2_hit_coh = RegEnable(s1_hit_coh, s1_valid)
-  val s2_is_prefetch = RegEnable(s1_req.instrtype === DCACHE_PREFETCH_SOURCE.U, s1_valid)
+  val s2_hit = utils.HackedAPI.HackedRegEnable(s1_hit, s1_valid)
+  val s2_paddr = utils.HackedAPI.HackedRegEnable(s1_paddr, s1_valid)
+  val s2_hit_coh = utils.HackedAPI.HackedRegEnable(s1_hit_coh, s1_valid)
+  val s2_is_prefetch = utils.HackedAPI.HackedRegEnable(s1_req.instrtype === DCACHE_PREFETCH_SOURCE.U, s1_valid)
 
   io.lsu.resp.valid := s2_valid
   io.lsu.resp.bits.miss := !s2_hit

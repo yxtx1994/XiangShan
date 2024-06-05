@@ -123,8 +123,8 @@ class DecodeUnitComp()(implicit p : Parameters) extends XSModule with DecodeUnit
     }
   }
 
-  val latchedInst = RegEnable(inDecodedInst, inValid && inReady)
-  val latchedUopInfo = RegEnable(inUopInfo, inValid && inReady)
+  val latchedInst = utils.HackedAPI.HackedRegEnable(inDecodedInst, inValid && inReady)
+  val latchedUopInfo = utils.HackedAPI.HackedRegEnable(inUopInfo, inValid && inReady)
   //input bits
   private val instFields: XSInstBitFields = latchedInst.instr.asTypeOf(new XSInstBitFields)
 

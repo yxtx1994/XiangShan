@@ -310,9 +310,9 @@ class L2TLBImp(outer: L2TLB)(implicit p: Parameters) extends PtwModule(outer) wi
   mem_arb.io.out.ready := mem.a.ready && !flush
 
   // assert, should not send mem access at same addr for twice.
-  val last_resp_vpn = RegEnable(cache.io.refill.bits.req_info_dup(0).vpn, cache.io.refill.valid)
-  val last_resp_s2xlate = RegEnable(cache.io.refill.bits.req_info_dup(0).s2xlate, cache.io.refill.valid)
-  val last_resp_level = RegEnable(cache.io.refill.bits.level_dup(0), cache.io.refill.valid)
+  val last_resp_vpn = utils.HackedAPI.HackedRegEnable(cache.io.refill.bits.req_info_dup(0).vpn, cache.io.refill.valid)
+  val last_resp_s2xlate = utils.HackedAPI.HackedRegEnable(cache.io.refill.bits.req_info_dup(0).s2xlate, cache.io.refill.valid)
+  val last_resp_level = utils.HackedAPI.HackedRegEnable(cache.io.refill.bits.level_dup(0), cache.io.refill.valid)
   val last_resp_v = RegInit(false.B)
   val last_has_invalid = !Cat(cache.io.refill.bits.ptes.asTypeOf(Vec(blockBits/XLEN, UInt(XLEN.W))).map(a => a(0))).andR || cache.io.refill.bits.sel_pte_dup(0).asTypeOf(new PteBundle).isAf()
   when (cache.io.refill.valid) { last_resp_v := !last_has_invalid}
@@ -366,8 +366,8 @@ class L2TLBImp(outer: L2TLB)(implicit p: Parameters) extends PtwModule(outer) wi
   // save only one pte for each id
   // (miss queue may can't resp to tlb with low latency, it should have highest priority, but diffcult to design cache)
   val resp_pte = VecInit((0 until MemReqWidth).map(i =>
-    if (i == l2tlbParams.llptwsize + 1) {RegEnable(get_part(refill_data_tmp, req_addr_low(i)), mem_resp_done && mem_resp_from_hptw) }
-    else if (i == l2tlbParams.llptwsize) {RegEnable(get_part(refill_data_tmp, req_addr_low(i)), mem_resp_done && mem_resp_from_ptw) }
+    if (i == l2tlbParams.llptwsize + 1) {utils.HackedAPI.HackedRegEnable(get_part(refill_data_tmp, req_addr_low(i)), mem_resp_done && mem_resp_from_hptw) }
+    else if (i == l2tlbParams.llptwsize) {utils.HackedAPI.HackedRegEnable(get_part(refill_data_tmp, req_addr_low(i)), mem_resp_done && mem_resp_from_ptw) }
     else { DataHoldBypass(get_part(refill_data, req_addr_low(i)), llptw_mem.buffer_it(i)) }
     // llptw could not use refill_data_tmp, because enq bypass's result works at next cycle
   ))
@@ -375,8 +375,8 @@ class L2TLBImp(outer: L2TLB)(implicit p: Parameters) extends PtwModule(outer) wi
   // save eight ptes for each id when sector tlb
   // (miss queue may can't resp to tlb with low latency, it should have highest priority, but diffcult to design cache)
   val resp_pte_sector = VecInit((0 until MemReqWidth).map(i =>
-    if (i == l2tlbParams.llptwsize + 1) {RegEnable(refill_data_tmp, mem_resp_done && mem_resp_from_hptw) }
-    else if (i == l2tlbParams.llptwsize) {RegEnable(refill_data_tmp, mem_resp_done && mem_resp_from_ptw) }
+    if (i == l2tlbParams.llptwsize + 1) {utils.HackedAPI.HackedRegEnable(refill_data_tmp, mem_resp_done && mem_resp_from_hptw) }
+    else if (i == l2tlbParams.llptwsize) {utils.HackedAPI.HackedRegEnable(refill_data_tmp, mem_resp_done && mem_resp_from_ptw) }
     else { DataHoldBypass(refill_data, llptw_mem.buffer_it(i)) }
     // llptw could not use refill_data_tmp, because enq bypass's result works at next cycle
   ))
@@ -395,13 +395,13 @@ class L2TLBImp(outer: L2TLB)(implicit p: Parameters) extends PtwModule(outer) wi
   val refill_from_llptw = mem_resp_from_llptw
   val refill_from_ptw = mem_resp_from_ptw
   val refill_from_hptw = mem_resp_from_hptw
-  val refill_level = Mux(refill_from_llptw, 2.U, Mux(refill_from_ptw, RegEnable(ptw.io.refill.level, 0.U, ptw.io.mem.req.fire), RegEnable(hptw.io.refill.level, 0.U, hptw.io.mem.req.fire)))
+  val refill_level = Mux(refill_from_llptw, 2.U, Mux(refill_from_ptw, utils.HackedAPI.HackedRegEnable(ptw.io.refill.level, 0.U, ptw.io.mem.req.fire), utils.HackedAPI.HackedRegEnable(hptw.io.refill.level, 0.U, hptw.io.mem.req.fire)))
   val refill_valid = mem_resp_done && !flush && !flush_latch(mem.d.bits.source) && !hptw_bypassed
 
   cache.io.refill.valid := RegNext(refill_valid, false.B)
   cache.io.refill.bits.ptes := refill_data.asUInt
-  cache.io.refill.bits.req_info_dup.map(_ := RegEnable(Mux(refill_from_llptw, llptw_mem.refill, Mux(refill_from_ptw, ptw.io.refill.req_info, hptw.io.refill.req_info)), refill_valid))
-  cache.io.refill.bits.level_dup.map(_ := RegEnable(refill_level, refill_valid))
+  cache.io.refill.bits.req_info_dup.map(_ := utils.HackedAPI.HackedRegEnable(Mux(refill_from_llptw, llptw_mem.refill, Mux(refill_from_ptw, ptw.io.refill.req_info, hptw.io.refill.req_info)), refill_valid))
+  cache.io.refill.bits.level_dup.map(_ := utils.HackedAPI.HackedRegEnable(refill_level, refill_valid))
   cache.io.refill.bits.levelOH(refill_level, refill_valid)
   cache.io.refill.bits.sel_pte_dup.map(_ := RegNext(sel_data(refill_data_tmp.asUInt, req_addr_low(mem.d.bits.source))))
 

@@ -115,7 +115,7 @@ trait HasICacheParameters extends HasL1CacheParameters with HasInstrMMIOConst wi
   }
 
   def ResultHoldBypass[T<:Data](data: T, valid: Bool): T = {
-    Mux(valid, data, RegEnable(data, valid))
+    Mux(valid, data, utils.HackedAPI.HackedRegEnable(data, valid))
   }
 
   def holdReleaseLatch(valid: Bool, release: Bool, flush: Bool): Bool ={
@@ -186,10 +186,10 @@ class ICacheMetaArray()(implicit p: Parameters) extends ICacheArray
   val port_1_read_1  = io.read.valid &&  io.read.bits.vSetIdx(1)(0) && io.read.bits.isDoubleLine
   val port_1_read_0  = io.read.valid && !io.read.bits.vSetIdx(1)(0) && io.read.bits.isDoubleLine
 
-  val port_0_read_0_reg = RegEnable(port_0_read_0, io.read.fire)
-  val port_0_read_1_reg = RegEnable(port_0_read_1, io.read.fire)
-  val port_1_read_1_reg = RegEnable(port_1_read_1, io.read.fire)
-  val port_1_read_0_reg = RegEnable(port_1_read_0, io.read.fire)
+  val port_0_read_0_reg = utils.HackedAPI.HackedRegEnable(port_0_read_0, io.read.fire)
+  val port_0_read_1_reg = utils.HackedAPI.HackedRegEnable(port_0_read_1, io.read.fire)
+  val port_1_read_1_reg = utils.HackedAPI.HackedRegEnable(port_1_read_1, io.read.fire)
+  val port_1_read_0_reg = utils.HackedAPI.HackedRegEnable(port_1_read_0, io.read.fire)
 
   val bank_0_idx = Mux(port_0_read_0, io.read.bits.vSetIdx(0), io.read.bits.vSetIdx(1))
   val bank_1_idx = Mux(port_0_read_1, io.read.bits.vSetIdx(0), io.read.bits.vSetIdx(1))
@@ -227,7 +227,7 @@ class ICacheMetaArray()(implicit p: Parameters) extends ICacheArray
     tagArray
   }
 
-  val read_set_idx_next = RegEnable(io.read.bits.vSetIdx, io.read.fire)
+  val read_set_idx_next = utils.HackedAPI.HackedRegEnable(io.read.bits.vSetIdx, io.read.fire)
   val valid_array = RegInit(VecInit(Seq.fill(nWays)(0.U(nSets.W))))
   val valid_metas = Wire(Vec(PortNumber, Vec(nWays, Bool())))
   // valid read
@@ -249,7 +249,7 @@ class ICacheMetaArray()(implicit p: Parameters) extends ICacheArray
     val read_meta_wrong = read_meta_decoded.map{ way_bits_decoded => way_bits_decoded.error}
     val read_meta_corrected = VecInit(read_meta_decoded.map{ way_bits_decoded => way_bits_decoded.corrected})
     read_metas(i) := read_meta_corrected.asTypeOf(Vec(nWays,new ICacheMetadata()))
-    (0 until nWays).foreach{ w => io.readResp.errors(i)(w) := RegEnable(read_meta_wrong(w), read_fire_delay1) && read_fire_delay2}
+    (0 until nWays).foreach{ w => io.readResp.errors(i)(w) := utils.HackedAPI.HackedRegEnable(read_meta_wrong(w), read_fire_delay1) && read_fire_delay2}
   }
 
   //Parity Encode
@@ -441,7 +441,7 @@ class ICacheDataArray(implicit p: Parameters) extends ICacheArray
     * read logic
     ******************************************************************************
     */
-  val isDoubleLineReg = RegEnable(io.read.bits.last.isDoubleLine, io.read.fire)
+  val isDoubleLineReg = utils.HackedAPI.HackedRegEnable(io.read.bits.last.isDoubleLine, io.read.fire)
   val read_data_bits = Wire(Vec(2,Vec(nWays,UInt(halfBlockBits.W))))
   val read_code_bits = Wire(Vec(2,Vec(nWays,UInt(codeBits.W))))
 
@@ -629,7 +629,7 @@ class ICacheImp(outer: ICache) extends LazyModuleImp(outer) with HasICacheParame
 
   //Parity error port
   val errors = mainPipe.io.errors
-  io.error <> RegEnable(Mux1H(errors.map(e => e.valid -> e)),errors.map(e => e.valid).reduce(_|_))
+  io.error <> utils.HackedAPI.HackedRegEnable(Mux1H(errors.map(e => e.valid -> e)),errors.map(e => e.valid).reduce(_|_))
   io.error.valid := RegNext(errors.map(e => e.valid).reduce(_|_),init = false.B)
 
 

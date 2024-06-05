@@ -169,15 +169,15 @@ class LoadPipe(id: Int)(implicit p: Parameters) extends DCacheModule with HasPer
   // tag match, read data
 
   val s1_valid = RegInit(false.B)
-  val s1_req = RegEnable(s0_req, s0_fire)
+  val s1_req = utils.HackedAPI.HackedRegEnable(s0_req, s0_fire)
   // in stage 1, load unit gets the physical address
   val s1_paddr_dup_lsu = io.lsu.s1_paddr_dup_lsu
   val s1_paddr_dup_dcache = io.lsu.s1_paddr_dup_dcache
-  val s1_load128Req = RegEnable(s0_load128Req, s0_fire)
+  val s1_load128Req = utils.HackedAPI.HackedRegEnable(s0_load128Req, s0_fire)
   val s1_is_prefetch = s1_req.instrtype === DCACHE_PREFETCH_SOURCE.U
   // LSU may update the address from io.lsu.s1_paddr, which affects the bank read enable only.
   val s1_vaddr = Cat(s1_req.vaddr(VAddrBits - 1, blockOffBits), io.lsu.s1_paddr_dup_lsu(blockOffBits - 1, 0))
-  val s1_bank_oh = RegEnable(s0_bank_oh, s0_fire)
+  val s1_bank_oh = utils.HackedAPI.HackedRegEnable(s0_bank_oh, s0_fire)
   val s1_nack = RegNext(io.nack)
   val s1_fire = s1_valid && s2_ready
   s1_ready := !s1_valid || s1_fire
@@ -195,8 +195,8 @@ class LoadPipe(id: Int)(implicit p: Parameters) extends DCacheModule with HasPer
   // resp in s1
   val s1_tag_match_way_dup_dc = wayMap((w: Int) => tag_resp(w) === get_tag(s1_paddr_dup_dcache) && meta_resp(w).coh.isValid()).asUInt
   val s1_tag_match_way_dup_lsu = wayMap((w: Int) => tag_resp(w) === get_tag(s1_paddr_dup_lsu) && meta_resp(w).coh.isValid()).asUInt
-  val s1_wpu_pred_valid = RegEnable(io.dwpu.resp(0).valid, s0_fire)
-  val s1_wpu_pred_way_en = RegEnable(io.dwpu.resp(0).bits.s0_pred_way_en, s0_fire)
+  val s1_wpu_pred_valid = utils.HackedAPI.HackedRegEnable(io.dwpu.resp(0).valid, s0_fire)
+  val s1_wpu_pred_way_en = utils.HackedAPI.HackedRegEnable(io.dwpu.resp(0).bits.s0_pred_way_en, s0_fire)
 
   // lookup update
   io.dwpu.lookup_upd(0).valid := s1_valid
@@ -293,19 +293,19 @@ class LoadPipe(id: Int)(implicit p: Parameters) extends DCacheModule with HasPer
   // --------------------------------------------------------------------------------
   // return data
 
-  // val s2_valid = RegEnable(next = s1_valid && !io.lsu.s1_kill, init = false.B, enable = s1_fire)
+  // val s2_valid = utils.HackedAPI.HackedRegEnable(next = s1_valid && !io.lsu.s1_kill, init = false.B, enable = s1_fire)
   val s2_valid = RegInit(false.B)
-  val s2_req = RegEnable(s1_req, s1_fire)
-  val s2_load128Req = RegEnable(s1_load128Req, s1_fire)
-  val s2_paddr = RegEnable(s1_paddr_dup_dcache, s1_fire)
-  val s2_vaddr = RegEnable(s1_vaddr, s1_fire)
-  val s2_bank_oh = RegEnable(s1_bank_oh, s1_fire)
-  val s2_bank_oh_dup_0 = RegEnable(s1_bank_oh, s1_fire)
-  val s2_wpu_pred_fail = RegEnable(s1_wpu_pred_fail, s1_fire)
-  val s2_real_way_en = RegEnable(s1_tag_match_way_dup_dc, s1_fire)
-  val s2_pred_way_en = RegEnable(s1_pred_tag_match_way_dup_dc, s1_fire)
-  val s2_dm_way_num = RegEnable(s1_direct_map_way_num, s1_fire)
-  val s2_wpu_pred_fail_and_real_hit = RegEnable(s1_wpu_pred_fail_and_real_hit, s1_fire)
+  val s2_req = utils.HackedAPI.HackedRegEnable(s1_req, s1_fire)
+  val s2_load128Req = utils.HackedAPI.HackedRegEnable(s1_load128Req, s1_fire)
+  val s2_paddr = utils.HackedAPI.HackedRegEnable(s1_paddr_dup_dcache, s1_fire)
+  val s2_vaddr = utils.HackedAPI.HackedRegEnable(s1_vaddr, s1_fire)
+  val s2_bank_oh = utils.HackedAPI.HackedRegEnable(s1_bank_oh, s1_fire)
+  val s2_bank_oh_dup_0 = utils.HackedAPI.HackedRegEnable(s1_bank_oh, s1_fire)
+  val s2_wpu_pred_fail = utils.HackedAPI.HackedRegEnable(s1_wpu_pred_fail, s1_fire)
+  val s2_real_way_en = utils.HackedAPI.HackedRegEnable(s1_tag_match_way_dup_dc, s1_fire)
+  val s2_pred_way_en = utils.HackedAPI.HackedRegEnable(s1_pred_tag_match_way_dup_dc, s1_fire)
+  val s2_dm_way_num = utils.HackedAPI.HackedRegEnable(s1_direct_map_way_num, s1_fire)
+  val s2_wpu_pred_fail_and_real_hit = utils.HackedAPI.HackedRegEnable(s1_wpu_pred_fail_and_real_hit, s1_fire)
 
   s2_ready := true.B
 
@@ -319,28 +319,28 @@ class LoadPipe(id: Int)(implicit p: Parameters) extends DCacheModule with HasPer
 
   // hit, miss, nack, permission checking
   // dcache side tag match
-  val s2_tag_match_way = RegEnable(s1_tag_match_way_dup_dc, s1_fire)
-  val s2_tag_match = RegEnable(s1_tag_match_dup_dc, s1_fire)
+  val s2_tag_match_way = utils.HackedAPI.HackedRegEnable(s1_tag_match_way_dup_dc, s1_fire)
+  val s2_tag_match = utils.HackedAPI.HackedRegEnable(s1_tag_match_dup_dc, s1_fire)
 
   // lsu side tag match
   val s2_hit_dup_lsu = RegNext(s1_tag_match_dup_lsu)
 
   io.lsu.s2_hit := s2_hit_dup_lsu && !s2_wpu_pred_fail
 
-  val s2_hit_meta = RegEnable(s1_hit_meta, s1_fire)
-  val s2_hit_coh = RegEnable(s1_hit_coh, s1_fire)
+  val s2_hit_meta = utils.HackedAPI.HackedRegEnable(s1_hit_meta, s1_fire)
+  val s2_hit_coh = utils.HackedAPI.HackedRegEnable(s1_hit_coh, s1_fire)
   val s2_has_permission = s2_hit_coh.onAccess(s2_req.cmd)._1 // for write prefetch
   val s2_new_hit_coh = s2_hit_coh.onAccess(s2_req.cmd)._3 // for write prefetch
 
-  val s2_encTag = RegEnable(s1_encTag, s1_fire)
+  val s2_encTag = utils.HackedAPI.HackedRegEnable(s1_encTag, s1_fire)
 
   // when req got nacked, upper levels should replay this request
   // nacked or not
-  val s2_nack_hit = RegEnable(s1_nack, s1_fire)
+  val s2_nack_hit = utils.HackedAPI.HackedRegEnable(s1_nack, s1_fire)
   // can no allocate mshr for load miss
   val s2_nack_no_mshr = io.miss_req.valid && !io.miss_req.ready
   // Bank conflict on data arrays
-  val s2_nack_data = RegEnable(!io.banked_data_read.ready, s1_fire)
+  val s2_nack_data = utils.HackedAPI.HackedRegEnable(!io.banked_data_read.ready, s1_fire)
   val s2_nack = s2_nack_hit || s2_nack_no_mshr || s2_nack_data
   // s2 miss merged
   val s2_miss_merged = io.miss_req.fire && !io.mq_enq_cancel && io.miss_resp.merged
@@ -351,10 +351,10 @@ class LoadPipe(id: Int)(implicit p: Parameters) extends DCacheModule with HasPer
   val s2_instrtype = s2_req.instrtype
 
   val s2_tag_error = dcacheParameters.tagCode.decode(s2_encTag).error // error reported by tag ecc check
-  val s2_flag_error = RegEnable(s1_flag_error, s1_fire)
+  val s2_flag_error = utils.HackedAPI.HackedRegEnable(s1_flag_error, s1_fire)
 
-  val s2_hit_prefetch = RegEnable(s1_hit_prefetch, s1_fire)
-  val s2_hit_access = RegEnable(s1_hit_access, s1_fire)
+  val s2_hit_prefetch = utils.HackedAPI.HackedRegEnable(s1_hit_prefetch, s1_fire)
+  val s2_hit_access = utils.HackedAPI.HackedRegEnable(s1_hit_access, s1_fire)
 
   val s2_hit = s2_tag_match && s2_has_permission && s2_hit_coh === s2_new_hit_coh && !s2_wpu_pred_fail
 
@@ -364,7 +364,7 @@ class LoadPipe(id: Int)(implicit p: Parameters) extends DCacheModule with HasPer
   dump_pipeline_valids("LoadPipe s2", "s2_nack_hit", s2_valid && s2_nack_hit)
   dump_pipeline_valids("LoadPipe s2", "s2_nack_no_mshr", s2_valid && s2_nack_no_mshr)
 
-  val s2_can_send_miss_req = RegEnable(s1_will_send_miss_req, s1_fire)
+  val s2_can_send_miss_req = utils.HackedAPI.HackedRegEnable(s1_will_send_miss_req, s1_fire)
 
   // send load miss to miss queue
   io.miss_req.valid := s2_valid && s2_can_send_miss_req
@@ -466,21 +466,21 @@ class LoadPipe(id: Int)(implicit p: Parameters) extends DCacheModule with HasPer
   // report ecc error and get selected dcache data
 
   val s3_valid = RegNext(s2_valid)
-  val s3_load128Req = RegEnable(s2_load128Req, s2_fire)
-  val s3_vaddr = RegEnable(s2_vaddr, s2_fire)
-  val s3_paddr = RegEnable(s2_paddr, s2_fire)
-  val s3_hit = RegEnable(s2_hit, s2_fire)
-  val s3_tag_match_way = RegEnable(s2_tag_match_way, s2_fire)
-  val s3_req_instrtype = RegEnable(s2_req.instrtype, s2_fire)
+  val s3_load128Req = utils.HackedAPI.HackedRegEnable(s2_load128Req, s2_fire)
+  val s3_vaddr = utils.HackedAPI.HackedRegEnable(s2_vaddr, s2_fire)
+  val s3_paddr = utils.HackedAPI.HackedRegEnable(s2_paddr, s2_fire)
+  val s3_hit = utils.HackedAPI.HackedRegEnable(s2_hit, s2_fire)
+  val s3_tag_match_way = utils.HackedAPI.HackedRegEnable(s2_tag_match_way, s2_fire)
+  val s3_req_instrtype = utils.HackedAPI.HackedRegEnable(s2_req.instrtype, s2_fire)
   val s3_is_prefetch = s3_req_instrtype === DCACHE_PREFETCH_SOURCE.U
 
   val s3_data128bit = Cat(io.banked_data_resp(1).raw_data, io.banked_data_resp(0).raw_data)
   val s3_data64bit = Fill(2, io.banked_data_resp(0).raw_data)
   val s3_banked_data_resp_word = Mux(s3_load128Req, s3_data128bit, s3_data64bit)
   val s3_data_error = Mux(s3_load128Req, io.read_error_delayed.asUInt.orR, io.read_error_delayed(0)) && s3_hit
-  val s3_tag_error = RegEnable(s2_tag_error, s2_fire)
-  val s3_flag_error = RegEnable(s2_flag_error, s2_fire)
-  val s3_hit_prefetch = RegEnable(s2_hit_prefetch, s2_fire)
+  val s3_tag_error = utils.HackedAPI.HackedRegEnable(s2_tag_error, s2_fire)
+  val s3_flag_error = utils.HackedAPI.HackedRegEnable(s2_flag_error, s2_fire)
+  val s3_hit_prefetch = utils.HackedAPI.HackedRegEnable(s2_hit_prefetch, s2_fire)
   val s3_error = s3_tag_error || s3_flag_error || s3_data_error
 
   // error_delayed signal will be used to update uop.exception 1 cycle after load writeback

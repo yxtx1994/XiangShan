@@ -28,7 +28,7 @@ class GPAMemImp(override val wrapper: GPAMem)(implicit p: Parameters) extends La
   mem.io.ren.get.head := io.exceptionReadAddr.valid
   mem.io.raddr.head := io.exceptionReadAddr.bits.ftqPtr.value
 
-  private val ftqOffset = RegEnable(io.exceptionReadAddr.bits.ftqOffset, io.exceptionReadAddr.valid)
+  private val ftqOffset = utils.HackedAPI.HackedRegEnable(io.exceptionReadAddr.bits.ftqOffset, io.exceptionReadAddr.valid)
 
   private val gpabase = mem.io.rdata.head
   private val gpa = gpabase + Cat(ftqOffset, 0.U(instOffsetBits.W))

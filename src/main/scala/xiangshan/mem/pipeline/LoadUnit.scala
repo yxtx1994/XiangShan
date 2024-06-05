@@ -743,13 +743,13 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   val s1_kill       = Wire(Bool())
   val s1_can_go     = s2_ready
   val s1_fire       = s1_valid && !s1_kill && s1_can_go
-  val s1_vecActive        = RegEnable(s0_out.vecActive, true.B, s0_fire)
+  val s1_vecActive        = utils.HackedAPI.HackedRegEnable(s0_out.vecActive, true.B, s0_fire)
 
   s1_ready := !s1_valid || s1_kill || s2_ready
   when (s0_fire) { s1_valid := true.B }
   .elsewhen (s1_fire) { s1_valid := false.B }
   .elsewhen (s1_kill) { s1_valid := false.B }
-  s1_in   := RegEnable(s0_out, s0_fire)
+  s1_in   := utils.HackedAPI.HackedRegEnable(s0_out, s0_fire)
 
   val s1_fast_rep_dly_kill = RegNext(io.fast_rep_in.bits.lateKill) && s1_in.isFastReplay
   val s1_fast_rep_dly_err =  RegNext(io.fast_rep_in.bits.delayedLoadError) && s1_in.isFastReplay
@@ -844,7 +844,7 @@ class LoadUnit(implicit p: Parameters) extends XSModule
 
   // pointer chasing
   val s1_try_ptr_chasing       = RegNext(s0_do_try_ptr_chasing, false.B)
-  val s1_ptr_chasing_vaddr     = RegEnable(s0_ptr_chasing_vaddr, s0_do_try_ptr_chasing)
+  val s1_ptr_chasing_vaddr     = utils.HackedAPI.HackedRegEnable(s0_ptr_chasing_vaddr, s0_do_try_ptr_chasing)
   val s1_fu_op_type_not_ld     = WireInit(false.B)
   val s1_not_fast_match        = WireInit(false.B)
   val s1_addr_mismatch         = WireInit(false.B)
@@ -857,21 +857,21 @@ class LoadUnit(implicit p: Parameters) extends XSModule
              s1_cancel_ptr_chasing ||
              s1_in.uop.robIdx.needFlush(io.redirect) ||
             (s1_in.uop.robIdx.needFlush(RegNext(io.redirect)) && !RegNext(s0_try_ptr_chasing)) ||
-             RegEnable(s0_kill, false.B, io.ldin.valid || io.vecldin.valid || io.replay.valid || io.l2l_fwd_in.valid || io.fast_rep_in.valid)
+             utils.HackedAPI.HackedRegEnable(s0_kill, false.B, io.ldin.valid || io.vecldin.valid || io.replay.valid || io.l2l_fwd_in.valid || io.fast_rep_in.valid)
 
   if (EnableLoadToLoadForward) {
     // Sometimes, we need to cancel the load-load forwarding.
     // These can be put at S0 if timing is bad at S1.
     // Case 0: CACHE_SET(base + offset) != CACHE_SET(base) (lowest 6-bit addition has an overflow)
     s1_addr_mismatch     := s1_ptr_chasing_vaddr(6) ||
-                             RegEnable(io.ld_fast_imm(11, 6).orR, s0_do_try_ptr_chasing)
+                             utils.HackedAPI.HackedRegEnable(io.ld_fast_imm(11, 6).orR, s0_do_try_ptr_chasing)
     // Case 1: the address is not 64-bit aligned or the fuOpType is not LD
     s1_addr_misaligned := s1_ptr_chasing_vaddr(2, 0).orR
     s1_fu_op_type_not_ld := io.ldin.bits.uop.fuOpType =/= LSUOpType.ld
     // Case 2: this load-load uop is cancelled
     s1_ptr_chasing_canceled := !io.ldin.valid
     // Case 3: fast mismatch
-    s1_fast_mismatch := RegEnable(!io.ld_fast_match, s0_do_try_ptr_chasing)
+    s1_fast_mismatch := utils.HackedAPI.HackedRegEnable(!io.ld_fast_match, s0_do_try_ptr_chasing)
 
     when (s1_try_ptr_chasing) {
       s1_cancel_ptr_chasing := s1_addr_mismatch ||
@@ -930,15 +930,15 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   val s2_kill   = Wire(Bool())
   val s2_can_go = s3_ready
   val s2_fire   = s2_valid && !s2_kill && s2_can_go
-  val s2_vecActive = RegEnable(s1_out.vecActive, true.B, s1_fire)
-  val s2_isvec  = RegEnable(s1_out.isvec, false.B, s1_fire)
+  val s2_vecActive = utils.HackedAPI.HackedRegEnable(s1_out.vecActive, true.B, s1_fire)
+  val s2_isvec  = utils.HackedAPI.HackedRegEnable(s1_out.isvec, false.B, s1_fire)
 
   s2_kill := s2_in.uop.robIdx.needFlush(io.redirect)
   s2_ready := !s2_valid || s2_kill || s3_ready
   when (s1_fire) { s2_valid := true.B }
   .elsewhen (s2_fire) { s2_valid := false.B }
   .elsewhen (s2_kill) { s2_valid := false.B }
-  s2_in := RegEnable(s1_out, s1_fire)
+  s2_in := utils.HackedAPI.HackedRegEnable(s1_out, s1_fire)
 
   val s2_pmp = WireInit(io.pmp)
 
@@ -1151,7 +1151,7 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   io.fast_uop.bits := RegNext(s1_out.uop)
 
   //
-  io.s2_ptr_chasing                    := RegEnable(s1_try_ptr_chasing && !s1_cancel_ptr_chasing, false.B, s1_fire)
+  io.s2_ptr_chasing                    := utils.HackedAPI.HackedRegEnable(s1_try_ptr_chasing && !s1_cancel_ptr_chasing, false.B, s1_fire)
 
   // RegNext prefetch train for better timing
   // ** Now, prefetch train is valid at load s3 **
@@ -1159,9 +1159,9 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   s2_prefetch_train_valid              := s2_valid && !s2_actually_mmio && !s2_in.tlbMiss
   io.prefetch_train.valid              := GatedValidRegNext(s2_prefetch_train_valid)
   io.prefetch_train.bits.fromLsPipelineBundle(s2_in, latch = true)
-  io.prefetch_train.bits.miss          := RegEnable(io.dcache.resp.bits.miss, s2_prefetch_train_valid) // TODO: use trace with bank conflict?
-  io.prefetch_train.bits.meta_prefetch := RegEnable(io.dcache.resp.bits.meta_prefetch, s2_prefetch_train_valid)
-  io.prefetch_train.bits.meta_access   := RegEnable(io.dcache.resp.bits.meta_access, s2_prefetch_train_valid)
+  io.prefetch_train.bits.miss          := utils.HackedAPI.HackedRegEnable(io.dcache.resp.bits.miss, s2_prefetch_train_valid) // TODO: use trace with bank conflict?
+  io.prefetch_train.bits.meta_prefetch := utils.HackedAPI.HackedRegEnable(io.dcache.resp.bits.meta_prefetch, s2_prefetch_train_valid)
+  io.prefetch_train.bits.meta_access   := utils.HackedAPI.HackedRegEnable(io.dcache.resp.bits.meta_access, s2_prefetch_train_valid)
   io.s1_prefetch_spec := s1_fire
   io.s0_prefetch_spec := s0_fire
 
@@ -1194,18 +1194,18 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   // --------------------------------------------------------------------------------
   // writeback and update load queue
   val s3_valid        = RegNext(s2_valid && !s2_out.isHWPrefetch && !s2_out.uop.robIdx.needFlush(io.redirect))
-  val s3_in           = RegEnable(s2_out, s2_fire)
+  val s3_in           = utils.HackedAPI.HackedRegEnable(s2_out, s2_fire)
   val s3_out          = Wire(Valid(new MemExuOutput))
-  val s3_dcache_rep   = RegEnable(s2_dcache_fast_rep && s2_troublem, false.B, s2_fire)
-  val s3_ld_valid_dup = RegEnable(s2_ld_valid_dup, s2_fire)
+  val s3_dcache_rep   = utils.HackedAPI.HackedRegEnable(s2_dcache_fast_rep && s2_troublem, false.B, s2_fire)
+  val s3_ld_valid_dup = utils.HackedAPI.HackedRegEnable(s2_ld_valid_dup, s2_fire)
   val s3_fast_rep     = Wire(Bool())
   val s3_troublem     = RegNext(s2_troublem)
   val s3_kill         = s3_in.uop.robIdx.needFlush(io.redirect)
   val s3_vecout       = Wire(new OnlyVecExuOutput)
-  val s3_vecActive    = RegEnable(s2_out.vecActive, true.B, s2_fire)
-  val s3_isvec        = RegEnable(s2_out.isvec, false.B, s2_fire)
-  val s3_vec_alignedType = RegEnable(s2_out.alignedType, s2_fire)
-  val s3_vec_mBIndex     = RegEnable(s2_out.mbIndex, s2_fire)
+  val s3_vecActive    = utils.HackedAPI.HackedRegEnable(s2_out.vecActive, true.B, s2_fire)
+  val s3_isvec        = utils.HackedAPI.HackedRegEnable(s2_out.isvec, false.B, s2_fire)
+  val s3_vec_alignedType = utils.HackedAPI.HackedRegEnable(s2_out.alignedType, s2_fire)
+  val s3_vec_mBIndex     = utils.HackedAPI.HackedRegEnable(s2_out.mbIndex, s2_fire)
   val s3_mmio         = Wire(Valid(new MemExuOutput))
   // TODO: Fix vector load merge buffer nack
   val s3_vec_mb_nack  = Wire(Bool())
@@ -1218,7 +1218,7 @@ class LoadUnit(implicit p: Parameters) extends XSModule
 
   // forwrad last beat
   val (s3_fwd_frm_d_chan, s3_fwd_data_frm_d_chan) = io.tl_d_channel.forward(s2_valid && s2_out.forward_tlDchannel, s2_out.mshrid, s2_out.paddr)
-  val s3_fwd_data_valid = RegEnable(s2_fwd_data_valid, false.B, s2_valid)
+  val s3_fwd_data_valid = utils.HackedAPI.HackedRegEnable(s2_fwd_data_valid, false.B, s2_valid)
   val s3_fwd_frm_d_chan_valid = (s3_fwd_frm_d_chan && s3_fwd_data_valid && s3_in.handledByMSHR)
   val s3_fast_rep_canceled = io.replay.valid && io.replay.bits.forward_tlDchannel || !io.dcache.req.ready
 
@@ -1354,15 +1354,15 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   // data from dcache hit
   val s3_ld_raw_data_frm_cache = Wire(new LoadDataFromDcacheBundle)
   s3_ld_raw_data_frm_cache.respDcacheData       := io.dcache.resp.bits.data_delayed
-  s3_ld_raw_data_frm_cache.forwardMask          := RegEnable(s2_fwd_mask, s2_valid)
-  s3_ld_raw_data_frm_cache.forwardData          := RegEnable(s2_fwd_data, s2_valid)
-  s3_ld_raw_data_frm_cache.uop                  := RegEnable(s2_out.uop, s2_valid)
-  s3_ld_raw_data_frm_cache.addrOffset           := RegEnable(s2_out.paddr(3, 0), s2_valid)
-  s3_ld_raw_data_frm_cache.forward_D            := RegEnable(s2_fwd_frm_d_chan, false.B, s2_valid) || s3_fwd_frm_d_chan_valid
-  s3_ld_raw_data_frm_cache.forwardData_D        := Mux(s3_fwd_frm_d_chan_valid, s3_fwd_data_frm_d_chan, RegEnable(s2_fwd_data_frm_d_chan, s2_valid))
-  s3_ld_raw_data_frm_cache.forward_mshr         := RegEnable(s2_fwd_frm_mshr, false.B, s2_valid)
-  s3_ld_raw_data_frm_cache.forwardData_mshr     := RegEnable(s2_fwd_data_frm_mshr, s2_valid)
-  s3_ld_raw_data_frm_cache.forward_result_valid := RegEnable(s2_fwd_data_valid, false.B, s2_valid)
+  s3_ld_raw_data_frm_cache.forwardMask          := utils.HackedAPI.HackedRegEnable(s2_fwd_mask, s2_valid)
+  s3_ld_raw_data_frm_cache.forwardData          := utils.HackedAPI.HackedRegEnable(s2_fwd_data, s2_valid)
+  s3_ld_raw_data_frm_cache.uop                  := utils.HackedAPI.HackedRegEnable(s2_out.uop, s2_valid)
+  s3_ld_raw_data_frm_cache.addrOffset           := utils.HackedAPI.HackedRegEnable(s2_out.paddr(3, 0), s2_valid)
+  s3_ld_raw_data_frm_cache.forward_D            := utils.HackedAPI.HackedRegEnable(s2_fwd_frm_d_chan, false.B, s2_valid) || s3_fwd_frm_d_chan_valid
+  s3_ld_raw_data_frm_cache.forwardData_D        := Mux(s3_fwd_frm_d_chan_valid, s3_fwd_data_frm_d_chan, utils.HackedAPI.HackedRegEnable(s2_fwd_data_frm_d_chan, s2_valid))
+  s3_ld_raw_data_frm_cache.forward_mshr         := utils.HackedAPI.HackedRegEnable(s2_fwd_frm_mshr, false.B, s2_valid)
+  s3_ld_raw_data_frm_cache.forwardData_mshr     := utils.HackedAPI.HackedRegEnable(s2_fwd_data_frm_mshr, s2_valid)
+  s3_ld_raw_data_frm_cache.forward_result_valid := utils.HackedAPI.HackedRegEnable(s2_fwd_data_valid, false.B, s2_valid)
 
   val s3_merged_data_frm_cache = s3_ld_raw_data_frm_cache.mergedData()
   val s3_picked_data_frm_cache = LookupTree(s3_ld_raw_data_frm_cache.addrOffset, List(
@@ -1446,7 +1446,7 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   }
 
    // trigger
-  val last_valid_data = RegNext(RegEnable(io.ldout.bits.data, io.ldout.fire))
+  val last_valid_data = RegNext(utils.HackedAPI.HackedRegEnable(io.ldout.bits.data, io.ldout.fire))
   val hit_ld_addr_trig_hit_vec = Wire(Vec(TriggerNum, Bool()))
   val lq_ld_addr_trig_hit_vec = io.lsq.trigger.lqLoadAddrTriggerHitVec
   (0 until TriggerNum).map{i => {

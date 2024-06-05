@@ -136,8 +136,8 @@ class Entries(implicit p: Parameters, params: IssueBlockParams) extends XSModule
     enqEntry.io.commonIn.transSel             := (if (params.isAllComp || params.isAllSimp) enqCanTrans2Others.get && othersTransSelVec.get(entryIdx).valid
                                                   else enqCanTrans2Simp.get && simpTransSelVec.get(entryIdx).valid || enqCanTrans2Comp.get && compTransSelVec.get(entryIdx).valid)
     EntriesConnect(enqEntry.io.commonIn, enqEntry.io.commonOut, entryIdx)
-    enqEntry.io.enqDelayIn1.wakeUpFromWB      := RegEnable(io.wakeUpFromWB, io.enq(entryIdx).valid)
-    enqEntry.io.enqDelayIn1.wakeUpFromIQ      := RegEnable(io.wakeUpFromIQ, io.enq(entryIdx).valid)
+    enqEntry.io.enqDelayIn1.wakeUpFromWB      := utils.HackedAPI.HackedRegEnable(io.wakeUpFromWB, io.enq(entryIdx).valid)
+    enqEntry.io.enqDelayIn1.wakeUpFromIQ      := utils.HackedAPI.HackedRegEnable(io.wakeUpFromIQ, io.enq(entryIdx).valid)
     enqEntry.io.enqDelayIn1.og0Cancel         := RegNext(io.og0Cancel.asUInt)
     enqEntry.io.enqDelayIn1.ldCancel          := RegNext(io.ldCancel)
     // note: these signals with 2 cycle delay should not be enabled by io.enq.valid

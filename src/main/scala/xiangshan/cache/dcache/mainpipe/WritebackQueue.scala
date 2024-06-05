@@ -333,7 +333,7 @@ class WritebackQueue(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheModu
   io.mem_grant.ready   := false.B
 
   // delay data write in writeback req for 1 cycle
-  val req_data = RegEnable(io.req.bits.toWritebackReqData(), io.req.valid)
+  val req_data = utils.HackedAPI.HackedRegEnable(io.req.bits.toWritebackReqData(), io.req.valid)
 
   require(isPow2(cfg.nMissEntries))
   val grant_source = io.mem_grant.bits.source

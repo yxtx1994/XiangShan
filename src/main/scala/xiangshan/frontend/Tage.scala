@@ -181,7 +181,7 @@ class TageBTable(implicit p: Parameters) extends XSModule with TBTParams{
   bt.io.r.req.bits.setIdx := s0_idx
 
   val s1_read = bt.io.r.resp.data
-  val s1_idx = RegEnable(s0_idx, s0_fire)
+  val s1_idx = utils.HackedAPI.HackedRegEnable(s0_idx, s0_fire)
 
 
   val per_br_ctr = VecInit((0 until numBr).map(i => Mux1H(UIntToOH(get_phy_br_idx(s1_idx, i), numBr), s1_read)))
@@ -330,12 +330,12 @@ class TageTable
   us.io.r.req.bits.setIdx := s0_idx
 
 
-  val s1_unhashed_idx = RegEnable(req_unhashed_idx, io.req.fire)
-  val s1_idx = RegEnable(s0_idx, io.req.fire)
-  val s1_tag = RegEnable(s0_tag, io.req.fire)
-  val s1_pc  = RegEnable(io.req.bits.pc, io.req.fire)
-  val s1_bank_req_1h = RegEnable(s0_bank_req_1h, io.req.fire)
-  val s1_bank_has_write_on_this_req = RegEnable(VecInit(table_banks.map(_.io.w.req.valid)), io.req.valid)
+  val s1_unhashed_idx = utils.HackedAPI.HackedRegEnable(req_unhashed_idx, io.req.fire)
+  val s1_idx = utils.HackedAPI.HackedRegEnable(s0_idx, io.req.fire)
+  val s1_tag = utils.HackedAPI.HackedRegEnable(s0_tag, io.req.fire)
+  val s1_pc  = utils.HackedAPI.HackedRegEnable(io.req.bits.pc, io.req.fire)
+  val s1_bank_req_1h = utils.HackedAPI.HackedRegEnable(s0_bank_req_1h, io.req.fire)
+  val s1_bank_has_write_on_this_req = utils.HackedAPI.HackedRegEnable(VecInit(table_banks.map(_.io.w.req.valid)), io.req.valid)
 
   val resp_invalid_by_write = Wire(Bool())
 
@@ -573,11 +573,11 @@ class Tage(implicit p: Parameters) extends BaseTage {
   val s1_resps = VecInit(tables.map(_.io.resps))
 
   //val s1_bim = io.in.bits.resp_in(0).s1.full_pred
-  // val s2_bim = RegEnable(s1_bim, io.s1_fire)
+  // val s2_bim = utils.HackedAPI.HackedRegEnable(s1_bim, io.s1_fire)
 
   val debug_pc_s0 = s0_pc_dup(1)
-  val debug_pc_s1 = RegEnable(s0_pc_dup(1), io.s0_fire(1))
-  val debug_pc_s2 = RegEnable(debug_pc_s1, io.s1_fire(1))
+  val debug_pc_s1 = utils.HackedAPI.HackedRegEnable(s0_pc_dup(1), io.s0_fire(1))
+  val debug_pc_s2 = utils.HackedAPI.HackedRegEnable(debug_pc_s1, io.s1_fire(1))
 
   val s1_provideds        = Wire(Vec(numBr, Bool()))
   val s1_providers        = Wire(Vec(numBr, UInt(log2Ceil(TageNTables).W)))
@@ -590,16 +590,16 @@ class Tage(implicit p: Parameters) extends BaseTage {
   val s1_basecnts         = Wire(Vec(numBr, UInt(2.W)))
   val s1_useAltOnNa       = Wire(Vec(numBr, Bool()))
 
-  val s2_provideds        = RegEnable(s1_provideds, io.s1_fire(1))
-  val s2_providers        = RegEnable(s1_providers, io.s1_fire(1))
-  val s2_providerResps    = RegEnable(s1_providerResps, io.s1_fire(1))
-  // val s2_altProvideds     = RegEnable(s1_altProvideds, io.s1_fire)
-  // val s2_altProviders     = RegEnable(s1_altProviders, io.s1_fire)
-  // val s2_altProviderResps = RegEnable(s1_altProviderResps, io.s1_fire)
-  val s2_altUsed          = RegEnable(s1_altUsed, io.s1_fire(1))
-  val s2_tageTakens_dup   = io.s1_fire.map(f => RegEnable(s1_tageTakens, f))
-  val s2_basecnts         = RegEnable(s1_basecnts, io.s1_fire(1))
-  val s2_useAltOnNa       = RegEnable(s1_useAltOnNa, io.s1_fire(1))
+  val s2_provideds        = utils.HackedAPI.HackedRegEnable(s1_provideds, io.s1_fire(1))
+  val s2_providers        = utils.HackedAPI.HackedRegEnable(s1_providers, io.s1_fire(1))
+  val s2_providerResps    = utils.HackedAPI.HackedRegEnable(s1_providerResps, io.s1_fire(1))
+  // val s2_altProvideds     = utils.HackedAPI.HackedRegEnable(s1_altProvideds, io.s1_fire)
+  // val s2_altProviders     = utils.HackedAPI.HackedRegEnable(s1_altProviders, io.s1_fire)
+  // val s2_altProviderResps = utils.HackedAPI.HackedRegEnable(s1_altProviderResps, io.s1_fire)
+  val s2_altUsed          = utils.HackedAPI.HackedRegEnable(s1_altUsed, io.s1_fire(1))
+  val s2_tageTakens_dup   = io.s1_fire.map(f => utils.HackedAPI.HackedRegEnable(s1_tageTakens, f))
+  val s2_basecnts         = utils.HackedAPI.HackedRegEnable(s1_basecnts, io.s1_fire(1))
+  val s2_useAltOnNa       = utils.HackedAPI.HackedRegEnable(s1_useAltOnNa, io.s1_fire(1))
 
   io.out := io.in.bits.resp_in(0)
   io.out.last_stage_meta := resp_meta.asUInt
@@ -662,26 +662,26 @@ class Tage(implicit p: Parameters) extends BaseTage {
     // s1_altProviders(i)   := altProviderInfo.tableIdx
     // s1_altProviderResps(i) := altProviderInfo.resp
 
-    resp_meta.providers(i).valid    := RegEnable(s2_provideds(i), io.s2_fire(1))
-    resp_meta.providers(i).bits     := RegEnable(s2_providers(i), io.s2_fire(1))
-    resp_meta.providerResps(i)      := RegEnable(s2_providerResps(i), io.s2_fire(1))
-    // resp_meta.altProviders(i).valid := RegEnable(s2_altProvideds(i), io.s2_fire)
-    // resp_meta.altProviders(i).bits  := RegEnable(s2_altProviders(i), io.s2_fire)
-    // resp_meta.altProviderResps(i)   := RegEnable(s2_altProviderResps(i), io.s2_fire)
-    resp_meta.pred_cycle.map(_ := RegEnable(GTimer(), io.s2_fire(1)))
-    resp_meta.use_alt_on_na.map(_(i) := RegEnable(s2_useAltOnNa(i), io.s2_fire(1)))
+    resp_meta.providers(i).valid    := utils.HackedAPI.HackedRegEnable(s2_provideds(i), io.s2_fire(1))
+    resp_meta.providers(i).bits     := utils.HackedAPI.HackedRegEnable(s2_providers(i), io.s2_fire(1))
+    resp_meta.providerResps(i)      := utils.HackedAPI.HackedRegEnable(s2_providerResps(i), io.s2_fire(1))
+    // resp_meta.altProviders(i).valid := utils.HackedAPI.HackedRegEnable(s2_altProvideds(i), io.s2_fire)
+    // resp_meta.altProviders(i).bits  := utils.HackedAPI.HackedRegEnable(s2_altProviders(i), io.s2_fire)
+    // resp_meta.altProviderResps(i)   := utils.HackedAPI.HackedRegEnable(s2_altProviderResps(i), io.s2_fire)
+    resp_meta.pred_cycle.map(_ := utils.HackedAPI.HackedRegEnable(GTimer(), io.s2_fire(1)))
+    resp_meta.use_alt_on_na.map(_(i) := utils.HackedAPI.HackedRegEnable(s2_useAltOnNa(i), io.s2_fire(1)))
 
     // Create a mask fo tables which did not hit our query, and also contain useless entries
     // and also uses a longer history than the provider
     val allocatableSlots =
-      RegEnable(
+      utils.HackedAPI.HackedRegEnable(
         VecInit(s1_per_br_resp.map(r => !r.valid && !r.bits.u)).asUInt &
           ~(LowerMask(UIntToOH(s1_providers(i)), TageNTables) &
             Fill(TageNTables, s1_provideds(i).asUInt)),
         io.s1_fire(1)
       )
 
-    resp_meta.allocates(i) := RegEnable(allocatableSlots, io.s2_fire(1))
+    resp_meta.allocates(i) := utils.HackedAPI.HackedRegEnable(allocatableSlots, io.s2_fire(1))
 
     val s1_bimCtr = bt.io.s1_cnt(i)
     s1_altUsed(i)       := !provided || providerInfo.use_alt_on_unconf
@@ -693,8 +693,8 @@ class Tage(implicit p: Parameters) extends BaseTage {
     s1_basecnts(i)      := s1_bimCtr
     s1_useAltOnNa(i)    := providerInfo.use_alt_on_unconf
 
-    resp_meta.altUsed(i)    := RegEnable(s2_altUsed(i), io.s2_fire(1))
-    resp_meta.basecnts(i)   := RegEnable(s2_basecnts(i), io.s2_fire(1))
+    resp_meta.altUsed(i)    := utils.HackedAPI.HackedRegEnable(s2_altUsed(i), io.s2_fire(1))
+    resp_meta.basecnts(i)   := utils.HackedAPI.HackedRegEnable(s2_basecnts(i), io.s2_fire(1))
 
     val tage_enable_dup = dup(RegNext(io.ctrl.tage_enable))
     for (tage_enable & fp & s2_tageTakens <- tage_enable_dup zip resp_s2.full_pred zip s2_tageTakens_dup) {
@@ -829,21 +829,21 @@ class Tage(implicit p: Parameters) extends BaseTage {
       val realWen = realWens(i)
       tables(i).io.update.reset_u(w) := RegNext(updateResetU(w))
       tables(i).io.update.mask(w)    := RegNext(updateMask(w)(i))
-      tables(i).io.update.takens(w) := RegEnable(updateTakens(w)(i), realWen)
-      tables(i).io.update.alloc(w) := RegEnable(updateAlloc(w)(i), realWen)
-      tables(i).io.update.oldCtrs(w) := RegEnable(updateOldCtrs(w)(i), realWen)
+      tables(i).io.update.takens(w) := utils.HackedAPI.HackedRegEnable(updateTakens(w)(i), realWen)
+      tables(i).io.update.alloc(w) := utils.HackedAPI.HackedRegEnable(updateAlloc(w)(i), realWen)
+      tables(i).io.update.oldCtrs(w) := utils.HackedAPI.HackedRegEnable(updateOldCtrs(w)(i), realWen)
 
-      tables(i).io.update.uMask(w) := RegEnable(updateUMask(w)(i), realWen)
-      tables(i).io.update.us(w) := RegEnable(updateU(w)(i), realWen)
+      tables(i).io.update.uMask(w) := utils.HackedAPI.HackedRegEnable(updateUMask(w)(i), realWen)
+      tables(i).io.update.us(w) := utils.HackedAPI.HackedRegEnable(updateU(w)(i), realWen)
       // use fetch pc instead of instruction pc
-      tables(i).io.update.pc := RegEnable(update.pc, realWen)
-      tables(i).io.update.ghist := RegEnable(io.update.bits.ghist, realWen)
+      tables(i).io.update.pc := utils.HackedAPI.HackedRegEnable(update.pc, realWen)
+      tables(i).io.update.ghist := utils.HackedAPI.HackedRegEnable(io.update.bits.ghist, realWen)
     }
   }
   bt.io.update_mask := RegNext(baseupdate)
-  bt.io.update_cnt := RegEnable(updatebcnt, baseupdate.reduce(_ | _))
-  bt.io.update_pc := RegEnable(update.pc, baseupdate.reduce(_ | _))
-  bt.io.update_takens := RegEnable(bUpdateTakens, baseupdate.reduce(_ | _))
+  bt.io.update_cnt := utils.HackedAPI.HackedRegEnable(updatebcnt, baseupdate.reduce(_ | _))
+  bt.io.update_pc := utils.HackedAPI.HackedRegEnable(update.pc, baseupdate.reduce(_ | _))
+  bt.io.update_takens := utils.HackedAPI.HackedRegEnable(bUpdateTakens, baseupdate.reduce(_ | _))
 
   // all should be ready for req
   io.s1_ready := tables.map(_.io.req.ready).reduce(_ && _) && bt.io.req.ready
@@ -899,7 +899,7 @@ class Tage(implicit p: Parameters) extends BaseTage {
       m.providerResps(b).ctr, m.allocates(b)
     )
   }
-  val s2_resps = RegEnable(s1_resps, io.s1_fire(1))
+  val s2_resps = utils.HackedAPI.HackedRegEnable(s1_resps, io.s1_fire(1))
   XSDebug("req: v=%d, pc=0x%x\n", io.s0_fire(1), s0_pc_dup(1))
   XSDebug("s1_fire:%d, resp: pc=%x\n", io.s1_fire(1), debug_pc_s1)
   XSDebug("s2_fireOnLastCycle: resp: pc=%x, target=%x, hits=%b, takens=%b\n",

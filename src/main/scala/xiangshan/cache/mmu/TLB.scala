@@ -67,7 +67,7 @@ class TLB(Width: Int, nRespDups: Int = 1, Block: Seq[Boolean], q: TLBParameters)
   val flush_pipe = io.flushPipe
   val redirect = io.redirect
   val req_in = req
-  val req_out = req.map(a => RegEnable(a.bits, a.fire))
+  val req_out = req.map(a => utils.HackedAPI.HackedRegEnable(a.bits, a.fire))
   val req_out_v = (0 until Width).map(i => ValidHold(req_in(i).fire && !req_in(i).bits.kill, resp(i).fire, flush_pipe(i)))
 
   val isHyperInst = (0 until Width).map(i => req_out_v(i) && req_out(i).hyperinst)
@@ -78,7 +78,7 @@ class TLB(Width: Int, nRespDups: Int = 1, Block: Seq[Boolean], q: TLBParameters)
   val mode_tmp = if (q.useDmode) csr.priv.dmode else csr.priv.imode
   val mode = (0 until Width).map(i => Mux(isHyperInst(i), csr.priv.spvp, mode_tmp))
   val virt_in = csr.priv.virt
-  val virt_out = req.map(a => RegEnable(csr.priv.virt, a.fire))
+  val virt_out = req.map(a => utils.HackedAPI.HackedRegEnable(csr.priv.virt, a.fire))
   val sum = (0 until Width).map(i => Mux(virt_out(i) || isHyperInst(i), io.csr.priv.vsum, io.csr.priv.sum))
   val mxr = (0 until Width).map(i => Mux(virt_out(i) || isHyperInst(i), io.csr.priv.vmxr || io.csr.priv.mxr, io.csr.priv.mxr))
   val req_in_s2xlate = (0 until Width).map(i => MuxCase(noS2xlate, Seq(
@@ -317,7 +317,7 @@ class TLB(Width: Int, nRespDups: Int = 1, Block: Seq[Boolean], q: TLBParameters)
       (csr.vsatp.mode === 0.U) -> onlyStage2,
       (csr.hgatp.mode === 0.U || req_need_gpa) -> onlyStage1
     ))
-    val miss_req_s2xlate_reg = RegEnable(miss_req_s2xlate, io.ptw.req(idx).fire)
+    val miss_req_s2xlate_reg = utils.HackedAPI.HackedRegEnable(miss_req_s2xlate, io.ptw.req(idx).fire)
     val hasS2xlate = miss_req_s2xlate_reg =/= noS2xlate
     val onlyS2 = miss_req_s2xlate_reg === onlyStage2
     val hit_s1 = io.ptw.resp.bits.s1.hit(miss_req_vpn, Mux(hasS2xlate, io.csr.vsatp.asid, io.csr.satp.asid), io.csr.hgatp.asid, allType = true, false, hasS2xlate)
@@ -388,11 +388,11 @@ class TLB(Width: Int, nRespDups: Int = 1, Block: Seq[Boolean], q: TLBParameters)
     val ppn_s1 = ptw.resp.bits.s1.genPPN(vpn)
     val gvpn = Mux(onlyS2, vpn, ppn_s1)
     val ppn_s2 = ptw.resp.bits.s2.genPPNS2(gvpn)
-    val p_ppn = RegEnable(Mux(hasS2xlate, ppn_s2, ppn_s1), io.ptw.resp.fire)
-    val p_perm = RegEnable(ptwresp_to_tlbperm(ptw.resp.bits.s1), io.ptw.resp.fire)
-    val p_gvpn = RegEnable(Mux(onlyS2, ptw.resp.bits.s2.entry.tag, ppn_s1), io.ptw.resp.fire)
-    val p_g_perm = RegEnable(hptwresp_to_tlbperm(ptw.resp.bits.s2), io.ptw.resp.fire)
-    val p_s2xlate = RegEnable(ptw.resp.bits.s2xlate, io.ptw.resp.fire)
+    val p_ppn = utils.HackedAPI.HackedRegEnable(Mux(hasS2xlate, ppn_s2, ppn_s1), io.ptw.resp.fire)
+    val p_perm = utils.HackedAPI.HackedRegEnable(ptwresp_to_tlbperm(ptw.resp.bits.s1), io.ptw.resp.fire)
+    val p_gvpn = utils.HackedAPI.HackedRegEnable(Mux(onlyS2, ptw.resp.bits.s2.entry.tag, ppn_s1), io.ptw.resp.fire)
+    val p_g_perm = utils.HackedAPI.HackedRegEnable(hptwresp_to_tlbperm(ptw.resp.bits.s2), io.ptw.resp.fire)
+    val p_s2xlate = utils.HackedAPI.HackedRegEnable(ptw.resp.bits.s2xlate, io.ptw.resp.fire)
     (p_hit, p_ppn, p_perm, p_gvpn, p_g_perm, p_s2xlate)
   }
 

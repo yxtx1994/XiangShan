@@ -426,11 +426,11 @@ class MutiLevelPrefetchFilter(implicit p: Parameters) extends XSModule with HasL
 
   // s1: alloc or update
   val s1_l1_valid = RegNext(s0_l1_valid)
-  val s1_l1_region = RegEnable(s0_l1_region, s0_l1_valid)
-  val s1_l1_region_hash = RegEnable(s0_l1_region_hash, s0_l1_valid)
-  val s1_l1_hit = RegEnable(s0_l1_hit, s0_l1_valid)
-  val s1_l1_index = RegEnable(s0_l1_index, s0_l1_valid)
-  val s1_l1_prefetch_req = RegEnable(s0_l1_prefetch_req, s0_l1_valid)
+  val s1_l1_region = utils.HackedAPI.HackedRegEnable(s0_l1_region, s0_l1_valid)
+  val s1_l1_region_hash = utils.HackedAPI.HackedRegEnable(s0_l1_region_hash, s0_l1_valid)
+  val s1_l1_hit = utils.HackedAPI.HackedRegEnable(s0_l1_hit, s0_l1_valid)
+  val s1_l1_index = utils.HackedAPI.HackedRegEnable(s0_l1_index, s0_l1_valid)
+  val s1_l1_prefetch_req = utils.HackedAPI.HackedRegEnable(s0_l1_prefetch_req, s0_l1_valid)
   val s1_l1_alloc = s1_l1_valid && !s1_l1_hit
   val s1_l1_update = s1_l1_valid && s1_l1_hit
   s0_l1_can_accept := !(s1_l1_valid && s1_l1_alloc && (s0_l1_region_hash === s1_l1_region_hash))
@@ -475,11 +475,11 @@ class MutiLevelPrefetchFilter(implicit p: Parameters) extends XSModule with HasL
 
   // s1: alloc or update
   val s1_l2_valid = RegNext(s0_l2_valid)
-  val s1_l2_region = RegEnable(s0_l2_region, s0_l2_valid)
-  val s1_l2_region_hash = RegEnable(s0_l2_region_hash, s0_l2_valid)
-  val s1_l2_hit = RegEnable(s0_l2_hit, s0_l2_valid)
-  val s1_l2_index = RegEnable(s0_l2_index, s0_l2_valid)
-  val s1_l2_prefetch_req = RegEnable(s0_l2_prefetch_req, s0_l2_valid)
+  val s1_l2_region = utils.HackedAPI.HackedRegEnable(s0_l2_region, s0_l2_valid)
+  val s1_l2_region_hash = utils.HackedAPI.HackedRegEnable(s0_l2_region_hash, s0_l2_valid)
+  val s1_l2_hit = utils.HackedAPI.HackedRegEnable(s0_l2_hit, s0_l2_valid)
+  val s1_l2_index = utils.HackedAPI.HackedRegEnable(s0_l2_index, s0_l2_valid)
+  val s1_l2_prefetch_req = utils.HackedAPI.HackedRegEnable(s0_l2_prefetch_req, s0_l2_valid)
   val s1_l2_alloc = s1_l2_valid && !s1_l2_hit
   val s1_l2_update = s1_l2_valid && s1_l2_hit
   s0_l2_can_accept := !(s1_l2_valid && s1_l2_alloc && (s0_l2_region_hash === s1_l2_region_hash))
@@ -585,8 +585,8 @@ class MutiLevelPrefetchFilter(implicit p: Parameters) extends XSModule with HasL
 
   // s1: send out the req
   val s1_tlb_req_valid = GatedValidRegNext(tlb_req_arb.io.out.valid)
-  val s1_tlb_req_bits = RegEnable(tlb_req_arb.io.out.bits, tlb_req_arb.io.out.valid)
-  val s1_tlb_req_index = RegEnable(OHToUInt(s0_tlb_fire_vec.asUInt), tlb_req_arb.io.out.valid)
+  val s1_tlb_req_bits = utils.HackedAPI.HackedRegEnable(tlb_req_arb.io.out.bits, tlb_req_arb.io.out.valid)
+  val s1_tlb_req_index = utils.HackedAPI.HackedRegEnable(OHToUInt(s0_tlb_fire_vec.asUInt), tlb_req_arb.io.out.valid)
   val s1_l1_tlb_evict = s1_l1_alloc && (s1_l1_index === s1_tlb_req_index)
   val s1_l2_tlb_evict = s1_l2_alloc && ((s1_l2_index + MLP_L1_SIZE.U) === s1_tlb_req_index)
   val s1_tlb_evict = s1_l1_tlb_evict || s1_l2_tlb_evict
@@ -600,7 +600,7 @@ class MutiLevelPrefetchFilter(implicit p: Parameters) extends XSModule with HasL
 
   // s2: get response from tlb
   val s2_tlb_resp = io.tlb_req.resp
-  val s2_tlb_update_index = RegEnable(s1_tlb_req_index, s1_tlb_req_valid)
+  val s2_tlb_update_index = utils.HackedAPI.HackedRegEnable(s1_tlb_req_index, s1_tlb_req_valid)
   val s2_l1_tlb_evict = s1_l1_alloc && (s1_l1_index === s2_tlb_update_index)
   val s2_l2_tlb_evict = s1_l2_alloc && ((s1_l2_index + MLP_L1_SIZE.U) === s2_tlb_update_index)
   val s2_tlb_evict = s2_l1_tlb_evict || s2_l2_tlb_evict
@@ -663,9 +663,9 @@ class MutiLevelPrefetchFilter(implicit p: Parameters) extends XSModule with HasL
 
   // s1: send out to dcache
   val s1_pf_valid = Reg(Bool())
-  val s1_pf_bits = RegEnable(l1_pf_req_arb.io.out.bits, l1_pf_req_arb.io.out.fire)
-  val s1_pf_index = RegEnable(s0_pf_index, l1_pf_req_arb.io.out.fire)
-  val s1_pf_candidate_oh = RegEnable(s0_pf_candidate_oh, l1_pf_req_arb.io.out.fire)
+  val s1_pf_bits = utils.HackedAPI.HackedRegEnable(l1_pf_req_arb.io.out.bits, l1_pf_req_arb.io.out.fire)
+  val s1_pf_index = utils.HackedAPI.HackedRegEnable(s0_pf_index, l1_pf_req_arb.io.out.fire)
+  val s1_pf_candidate_oh = utils.HackedAPI.HackedRegEnable(s0_pf_candidate_oh, l1_pf_req_arb.io.out.fire)
   val s1_pf_evict = s1_l1_alloc && (s1_l1_index === s1_pf_index)
   val s1_pf_update = s1_l1_update && (s1_l1_index === s1_pf_index)
   val s1_pf_can_go = io.l1_req.ready && !s1_pf_evict && !s1_pf_update

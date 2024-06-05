@@ -101,7 +101,7 @@ class VirtualLoadQueue(implicit p: Parameters) extends XSModule
   }
   val lastEnqCancel = GatedRegNext(enqCancelNum.reduce(_ + _))
   val lastCycleCancelCount = PopCount(lastNeedCancel)
-  val redirectCancelCount = RegEnable(lastCycleCancelCount + lastEnqCancel, 0.U, lastCycleRedirect.valid)
+  val redirectCancelCount = utils.HackedAPI.HackedRegEnable(lastCycleCancelCount + lastEnqCancel, 0.U, lastCycleRedirect.valid)
 
   // update enqueue pointer
   val vLoadFlow = io.enq.req.map(_.bits.numLsElem)
@@ -146,7 +146,7 @@ class VirtualLoadQueue(implicit p: Parameters) extends XSModule
   // cycle 2: update deqPtr
   val deqPtrUpdateEna = lastCommitCount =/= 0.U
   deqPtrNext := deqPtr + lastCommitCount
-  deqPtr := RegEnable(deqPtrNext, 0.U.asTypeOf(new LqPtr), deqPtrUpdateEna)
+  deqPtr := utils.HackedAPI.HackedRegEnable(deqPtrNext, 0.U.asTypeOf(new LqPtr), deqPtrUpdateEna)
 
   io.lqDeq := GatedRegNext(lastCommitCount)
   io.lqCancelCnt := redirectCancelCount

@@ -973,7 +973,7 @@ class DCacheImp(outer: DCache) extends LazyModuleImp(outer) with HasDCacheParame
     accessArray.io.read.last.bits.way_en := mainPipe.io.prefetch_flag_write.bits.way_en
 
     val extra_flag_valid = RegNext(mainPipe.io.prefetch_flag_write.valid)
-    val extra_flag_way_en = RegEnable(mainPipe.io.prefetch_flag_write.bits.way_en, mainPipe.io.prefetch_flag_write.valid)
+    val extra_flag_way_en = utils.HackedAPI.HackedRegEnable(mainPipe.io.prefetch_flag_write.bits.way_en, mainPipe.io.prefetch_flag_write.valid)
     val extra_flag_prefetch = Mux1H(extra_flag_way_en, prefetchArray.io.resp.last)
     val extra_flag_access = Mux1H(extra_flag_way_en, accessArray.io.resp.last)
 

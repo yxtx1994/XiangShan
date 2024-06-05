@@ -83,7 +83,7 @@ class BypassNetwork()(implicit p: Parameters, params: BackendParams) extends XSM
   )
 
   private val bypassDataVec = VecInit(
-    fromExus.map(x => ZeroExt(RegEnable(x.bits.data, x.valid), RegDataMaxWidth))
+    fromExus.map(x => ZeroExt(utils.HackedAPI.HackedRegEnable(x.bits.data, x.valid), RegDataMaxWidth))
   )
 
   private val intExuNum = params.intSchdParams.get.numExu
@@ -108,7 +108,7 @@ class BypassNetwork()(implicit p: Parameters, params: BackendParams) extends XSM
     fromExus.map(x => GatedValidRegNext(x.valid))
   ).asUInt
   private val bypass2DataVec = VecInit(
-    fromDPsHasBypass2Source.map(x => RegEnable(bypassDataVec(x), bypass2DateEn(x).asBool))
+    fromDPsHasBypass2Source.map(x => utils.HackedAPI.HackedRegEnable(bypassDataVec(x), bypass2DateEn(x).asBool))
   )
 
   println(s"[BypassNetwork] HasBypass2SourceExuNum: ${fromDPsHasBypass2Source.size} HasBypass2SinkExuNum: ${fromDPsHasBypass2Sink.size} bypass2DataVecSize: ${bypass2DataVec.length}")

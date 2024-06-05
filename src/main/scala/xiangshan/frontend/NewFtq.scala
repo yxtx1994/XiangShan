@@ -495,7 +495,7 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   val backendRedirect = Wire(Valid(new BranchPredictionRedirect))
   val backendRedirectReg = Wire(Valid(new BranchPredictionRedirect))
   backendRedirectReg.valid := RegNext(Mux(realAhdValid, false.B, backendRedirect.valid))
-  backendRedirectReg.bits := RegEnable(backendRedirect.bits, backendRedirect.valid)
+  backendRedirectReg.bits := utils.HackedAPI.HackedRegEnable(backendRedirect.bits, backendRedirect.valid)
   val fromBackendRedirect = Wire(Valid(new BranchPredictionRedirect))
   fromBackendRedirect := Mux(realAhdValid, backendRedirect, backendRedirectReg)
 
@@ -621,17 +621,17 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
 
   // modify registers one cycle later to cut critical path
   val last_cycle_bpu_in = RegNext(bpu_in_fire)
-  val last_cycle_bpu_in_ptr = RegEnable(bpu_in_resp_ptr, bpu_in_fire)
+  val last_cycle_bpu_in_ptr = utils.HackedAPI.HackedRegEnable(bpu_in_resp_ptr, bpu_in_fire)
   val last_cycle_bpu_in_idx = last_cycle_bpu_in_ptr.value
-  val last_cycle_bpu_target = RegEnable(bpu_in_resp.getTarget(3), bpu_in_fire)
-  val last_cycle_cfiIndex = RegEnable(bpu_in_resp.cfiIndex(3), bpu_in_fire)
-  val last_cycle_bpu_in_stage = RegEnable(bpu_in_stage, bpu_in_fire)
+  val last_cycle_bpu_target = utils.HackedAPI.HackedRegEnable(bpu_in_resp.getTarget(3), bpu_in_fire)
+  val last_cycle_cfiIndex = utils.HackedAPI.HackedRegEnable(bpu_in_resp.cfiIndex(3), bpu_in_fire)
+  val last_cycle_bpu_in_stage = utils.HackedAPI.HackedRegEnable(bpu_in_stage, bpu_in_fire)
 
   def extra_copyNum_for_commitStateQueue = 2
   val copied_last_cycle_bpu_in =
     VecInit(Seq.fill(copyNum + extra_copyNum_for_commitStateQueue)(RegNext(bpu_in_fire)))
   val copied_last_cycle_bpu_in_ptr_for_ftq =
-    VecInit(Seq.fill(extra_copyNum_for_commitStateQueue)(RegEnable(bpu_in_resp_ptr, bpu_in_fire)))
+    VecInit(Seq.fill(extra_copyNum_for_commitStateQueue)(utils.HackedAPI.HackedRegEnable(bpu_in_resp_ptr, bpu_in_fire)))
 
   newest_entry_target_modified := false.B
   newest_entry_ptr_modified := false.B
@@ -649,7 +649,7 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
 
   // reduce fanout by delay write for a cycle
   when (RegNext(last_cycle_bpu_in)) {
-    mispredict_vec(RegEnable(last_cycle_bpu_in_idx, last_cycle_bpu_in)) :=
+    mispredict_vec(utils.HackedAPI.HackedRegEnable(last_cycle_bpu_in_idx, last_cycle_bpu_in)) :=
       WireInit(VecInit(Seq.fill(PredictWidth)(false.B)))
   }
 
@@ -728,13 +728,13 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   // **************************** to ifu ****************************
   // ****************************************************************
   // 0  for ifu, and 1-4 for ICache
-  val bpu_in_bypass_buf = RegEnable(ftq_pc_mem.io.wdata, bpu_in_fire)
-  val copied_bpu_in_bypass_buf = VecInit(Seq.fill(copyNum)(RegEnable(ftq_pc_mem.io.wdata, bpu_in_fire)))
+  val bpu_in_bypass_buf = utils.HackedAPI.HackedRegEnable(ftq_pc_mem.io.wdata, bpu_in_fire)
+  val copied_bpu_in_bypass_buf = VecInit(Seq.fill(copyNum)(utils.HackedAPI.HackedRegEnable(ftq_pc_mem.io.wdata, bpu_in_fire)))
   val bpu_in_bypass_buf_for_ifu = bpu_in_bypass_buf
-  val bpu_in_bypass_ptr = RegEnable(bpu_in_resp_ptr, bpu_in_fire)
+  val bpu_in_bypass_ptr = utils.HackedAPI.HackedRegEnable(bpu_in_resp_ptr, bpu_in_fire)
   val last_cycle_to_ifu_fire = RegNext(io.toIfu.req.fire)
 
-  val copied_bpu_in_bypass_ptr = VecInit(Seq.fill(copyNum)(RegEnable(bpu_in_resp_ptr, bpu_in_fire)))
+  val copied_bpu_in_bypass_ptr = VecInit(Seq.fill(copyNum)(utils.HackedAPI.HackedRegEnable(bpu_in_resp_ptr, bpu_in_fire)))
   val copied_last_cycle_to_ifu_fire = VecInit(Seq.fill(copyNum)(RegNext(io.toIfu.req.fire)))
 
   // read pc and target
@@ -858,9 +858,9 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   val hit_pd_valid = entry_hit_status(ifu_wb_idx) === h_hit && ifu_wb_valid
   val hit_pd_mispred = hit_pd_valid && pdWb.bits.misOffset.valid
   val hit_pd_mispred_reg = RegNext(hit_pd_mispred, init=false.B)
-  val pd_reg       = RegEnable(pds,             pdWb.valid)
-  val start_pc_reg = RegEnable(pdWb.bits.pc(0), pdWb.valid)
-  val wb_idx_reg   = RegEnable(ifu_wb_idx,      pdWb.valid)
+  val pd_reg       = utils.HackedAPI.HackedRegEnable(pds,             pdWb.valid)
+  val start_pc_reg = utils.HackedAPI.HackedRegEnable(pdWb.bits.pc(0), pdWb.valid)
+  val wb_idx_reg   = utils.HackedAPI.HackedRegEnable(ifu_wb_idx,      pdWb.valid)
 
   when (ifu_wb_valid) {
     val comm_stq_wen = VecInit(pds.map(_.valid).zip(pdWb.bits.instrRange).map{
@@ -1013,14 +1013,14 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   // **********************************************************************
   // to backend pc mem / target
   io.toBackend.pc_mem_wen := RegNext(last_cycle_bpu_in)
-  io.toBackend.pc_mem_waddr := RegEnable(last_cycle_bpu_in_idx, last_cycle_bpu_in)
-  io.toBackend.pc_mem_wdata := RegEnable(bpu_in_bypass_buf_for_ifu, last_cycle_bpu_in)
+  io.toBackend.pc_mem_waddr := utils.HackedAPI.HackedRegEnable(last_cycle_bpu_in_idx, last_cycle_bpu_in)
+  io.toBackend.pc_mem_wdata := utils.HackedAPI.HackedRegEnable(bpu_in_bypass_buf_for_ifu, last_cycle_bpu_in)
 
   // num cycle is fixed
   val newest_entry_en: Bool = RegNext(last_cycle_bpu_in || backendRedirect.valid || ifuRedirectToBpu.valid)
   io.toBackend.newest_entry_en := RegNext(newest_entry_en)
-  io.toBackend.newest_entry_ptr := RegEnable(newest_entry_ptr, newest_entry_en)
-  io.toBackend.newest_entry_target := RegEnable(newest_entry_target, newest_entry_en)
+  io.toBackend.newest_entry_ptr := utils.HackedAPI.HackedRegEnable(newest_entry_ptr, newest_entry_en)
+  io.toBackend.newest_entry_target := utils.HackedAPI.HackedRegEnable(newest_entry_target, newest_entry_en)
 
   // *********************************************************************
   // **************************** wb from exu ****************************
@@ -1211,7 +1211,7 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   val commit_pc_bundle = RegNext(ftq_pc_mem.io.commPtr_rdata)
   val commit_target =
     Mux(RegNext(commPtr === newest_entry_ptr),
-      RegEnable(newest_entry_target, newest_entry_target_modified),
+      utils.HackedAPI.HackedRegEnable(newest_entry_target, newest_entry_target_modified),
       RegNext(ftq_pc_mem.io.commPtrPlus1_rdata.startAddr))
   ftq_pd_mem.io.ren.get.last := canCommit
   ftq_pd_mem.io.raddr.last := commPtr.value
@@ -1225,30 +1225,30 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   val commit_ftb_entry = ftq_meta_1r_sram.io.rdata(0).ftb_entry
 
   // need one cycle to read mem and srams
-  val do_commit_ptr = RegEnable(commPtr, canCommit)
+  val do_commit_ptr = utils.HackedAPI.HackedRegEnable(commPtr, canCommit)
   val do_commit = RegNext(canCommit, init=false.B)
   when (canCommit) {
     commPtr_write := commPtrPlus1
     commPtrPlus1_write := commPtrPlus1 + 1.U
   }
-  val commit_state = RegEnable(commitStateQueueReg(commPtr.value), canCommit)
+  val commit_state = utils.HackedAPI.HackedRegEnable(commitStateQueueReg(commPtr.value), canCommit)
   val can_commit_cfi = WireInit(cfiIndex_vec(commPtr.value))
   val do_commit_cfi = WireInit(cfiIndex_vec(do_commit_ptr.value))
   //
   //when (commitStateQueue(commPtr.value)(can_commit_cfi.bits) =/= c_commited) {
   //  can_commit_cfi.valid := false.B
   //}
-  val commit_cfi = RegEnable(can_commit_cfi, canCommit)
+  val commit_cfi = utils.HackedAPI.HackedRegEnable(can_commit_cfi, canCommit)
   val debug_cfi = commitStateQueueReg(do_commit_ptr.value)(do_commit_cfi.bits) =/= c_commited && do_commit_cfi.valid
 
-  val commit_mispredict  : Vec[Bool] = VecInit((RegEnable(mispredict_vec(commPtr.value), canCommit) zip commit_state).map {
+  val commit_mispredict  : Vec[Bool] = VecInit((utils.HackedAPI.HackedRegEnable(mispredict_vec(commPtr.value), canCommit) zip commit_state).map {
     case (mis, state) => mis && state === c_commited
   })
   val commit_instCommited: Vec[Bool] = VecInit(commit_state.map(_ === c_commited)) // [PredictWidth]
   val can_commit_hit                 = entry_hit_status(commPtr.value)
-  val commit_hit                     = RegEnable(can_commit_hit, canCommit)
-  val diff_commit_target             = RegEnable(update_target(commPtr.value), canCommit) // TODO: remove this
-  val commit_stage                   = RegEnable(pred_stage(commPtr.value), canCommit)
+  val commit_hit                     = utils.HackedAPI.HackedRegEnable(can_commit_hit, canCommit)
+  val diff_commit_target             = utils.HackedAPI.HackedRegEnable(update_target(commPtr.value), canCommit) // TODO: remove this
+  val commit_stage                   = utils.HackedAPI.HackedRegEnable(pred_stage(commPtr.value), canCommit)
   val commit_valid                   = commit_hit === h_hit || commit_cfi.valid // hit or taken
 
   val to_bpu_hit = can_commit_hit === h_hit || can_commit_hit === h_false_hit

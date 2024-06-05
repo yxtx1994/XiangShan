@@ -459,7 +459,7 @@ class Rename(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHe
       assert(x.bits.ldest =/= 0.U, "rfWen cannot be 1 when Int regfile ldest is 0")
     }
   }
-  val debugRedirect = RegEnable(io.redirect.bits, io.redirect.valid)
+  val debugRedirect = utils.HackedAPI.HackedRegEnable(io.redirect.bits, io.redirect.valid)
   // bad speculation
   val recStall = io.redirect.valid || io.rabCommits.isWalk
   val ctrlRecStall = Mux(io.redirect.valid, io.redirect.bits.debugIsCtrl, io.rabCommits.isWalk && debugRedirect.debugIsCtrl)

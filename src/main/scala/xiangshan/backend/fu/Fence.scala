@@ -65,7 +65,7 @@ class Fence(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg) {
 
   val sbuffer = toSbuffer.flushSb
   val sbEmpty = toSbuffer.sbIsEmpty
-  val uop = RegEnable(io.in.bits, io.in.fire)
+  val uop = utils.HackedAPI.HackedRegEnable(io.in.bits, io.in.fire)
   val func = uop.ctrl.fuOpType
 
   // NOTE: icache & tlb & sbuffer must receive flush signal at any time
@@ -77,8 +77,8 @@ class Fence(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg) {
   sfence.bits.flushPipe := uop.ctrl.flushPipe.get
   sfence.bits.hv := !disableHfencev && func === FenceOpType.hfence_v
   sfence.bits.hg := !disableHfenceg && func === FenceOpType.hfence_g
-  sfence.bits.addr := RegEnable(io.in.bits.data.src(0), io.in.fire)
-  sfence.bits.id   := RegEnable(io.in.bits.data.src(1), io.in.fire)
+  sfence.bits.addr := utils.HackedAPI.HackedRegEnable(io.in.bits.data.src(0), io.in.fire)
+  sfence.bits.id   := utils.HackedAPI.HackedRegEnable(io.in.bits.data.src(1), io.in.fire)
 
   when (state === s_idle && io.in.valid) { state := s_wait }
   when (state === s_wait && func === FenceOpType.fencei && sbEmpty) { state := s_icache }

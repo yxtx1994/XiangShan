@@ -369,7 +369,7 @@ class RAS(implicit p: Parameters) extends BasePredictor {
     XSPerfAccumulate("ras_top_mismatch", diffTop =/= timingTop.retAddr);
     // could diff when more pop than push and a commit stack is updated with inflight info
 
-    val realWriteEntry_next = RegEnable(writeEntry, io.s2_fire || io.redirect_isCall)
+    val realWriteEntry_next = utils.HackedAPI.HackedRegEnable(writeEntry, io.s2_fire || io.redirect_isCall)
     val s3_missPushEntry = Wire(new RASEntry)
     val s3_missPushAddr = Wire(new RASPtr)
     val s3_missPushNos = Wire(new RASPtr)
@@ -385,16 +385,16 @@ class RAS(implicit p: Parameters) extends BasePredictor {
       Mux(io.s3_missed_push, s3_missPushEntry,
       realWriteEntry_next))
 
-    val realWriteAddr_next = RegEnable(Mux(io.redirect_valid && io.redirect_isCall, io.redirect_meta_TOSW, TOSW), io.s2_fire || (io.redirect_valid && io.redirect_isCall))
+    val realWriteAddr_next = utils.HackedAPI.HackedRegEnable(Mux(io.redirect_valid && io.redirect_isCall, io.redirect_meta_TOSW, TOSW), io.s2_fire || (io.redirect_valid && io.redirect_isCall))
     val realWriteAddr = Mux(io.redirect_isCall, realWriteAddr_next,
       Mux(io.s3_missed_push, s3_missPushAddr,
       realWriteAddr_next))
-    val realNos_next = RegEnable(Mux(io.redirect_valid && io.redirect_isCall, io.redirect_meta_TOSR, TOSR), io.s2_fire || (io.redirect_valid && io.redirect_isCall))
+    val realNos_next = utils.HackedAPI.HackedRegEnable(Mux(io.redirect_valid && io.redirect_isCall, io.redirect_meta_TOSR, TOSR), io.s2_fire || (io.redirect_valid && io.redirect_isCall))
     val realNos = Mux(io.redirect_isCall, realNos_next,
       Mux(io.s3_missed_push, s3_missPushNos,
       realNos_next))
 
-    realPush := (io.s3_fire && (!io.s3_cancel && RegEnable(io.spec_push_valid, io.s2_fire) || io.s3_missed_push)) || RegNext(io.redirect_valid && io.redirect_isCall)
+    realPush := (io.s3_fire && (!io.s3_cancel && utils.HackedAPI.HackedRegEnable(io.spec_push_valid, io.s2_fire) || io.s3_missed_push)) || RegNext(io.redirect_valid && io.redirect_isCall)
 
     when (realPush) {
       spec_queue(realWriteAddr.value) := realWriteEntry
@@ -582,8 +582,8 @@ class RAS(implicit p: Parameters) extends BasePredictor {
   s2_meta.TOSW := stack.TOSW
   s2_meta.NOS := stack.NOS
 
-  val s3_top = RegEnable(stack.spec_pop_addr, io.s2_fire(2))
-  val s3_spec_new_addr = RegEnable(s2_spec_new_addr, io.s2_fire(2))
+  val s3_top = utils.HackedAPI.HackedRegEnable(stack.spec_pop_addr, io.s2_fire(2))
+  val s3_spec_new_addr = utils.HackedAPI.HackedRegEnable(s2_spec_new_addr, io.s2_fire(2))
 
   // val s3_jalr_target = io.out.s3.full_pred.jalr_target
   // val s3_last_target_in = io.in.bits.resp_in(0).s3.full_pred(2).targets.last
@@ -600,8 +600,8 @@ class RAS(implicit p: Parameters) extends BasePredictor {
     a.targets.last := Mux(s3_is_jalr, io.out.s3.full_pred(i).jalr_target, io.in.bits.resp_in(0).s3.full_pred(i).targets.last)
   }
 
-  val s3_pushed_in_s2 = RegEnable(s2_spec_push, io.s2_fire(2))
-  val s3_popped_in_s2 = RegEnable(s2_spec_pop,  io.s2_fire(2))
+  val s3_pushed_in_s2 = utils.HackedAPI.HackedRegEnable(s2_spec_push, io.s2_fire(2))
+  val s3_popped_in_s2 = utils.HackedAPI.HackedRegEnable(s2_spec_pop,  io.s2_fire(2))
   val s3_push = io.in.bits.resp_in(0).s3.full_pred(2).hit_taken_on_call
   val s3_pop  = io.in.bits.resp_in(0).s3.full_pred(2).hit_taken_on_ret
 
@@ -611,7 +611,7 @@ class RAS(implicit p: Parameters) extends BasePredictor {
 
   stack.s3_cancel := s3_cancel
 
-  val s3_meta = RegEnable(s2_meta, io.s2_fire(2))
+  val s3_meta = utils.HackedAPI.HackedRegEnable(s2_meta, io.s2_fire(2))
 
   stack.s3_meta := s3_meta
   stack.s3_missed_pop := s3_pop && !s3_popped_in_s2

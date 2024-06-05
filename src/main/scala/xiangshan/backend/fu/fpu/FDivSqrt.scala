@@ -65,8 +65,8 @@ class FDivSqrtDataModule(implicit p: Parameters) extends FPUDataModule {
   val src2 = FPU.unbox(io.in.src(1), tag)
 
   val typeSel = VecInit(FPU.ftypes.zipWithIndex.map(_._2.U === tag))
-  val outSel = RegEnable(typeSel, VecInit.fill(typeSel.length)(true.B), in_fire)  // inelegant
-  val outDataSel = RegEnable(MaskExpand(typeSel, 64), in_fire)
+  val outSel = utils.HackedAPI.HackedRegEnable(typeSel, VecInit.fill(typeSel.length)(true.B), in_fire)  // inelegant
+  val outDataSel = utils.HackedAPI.HackedRegEnable(MaskExpand(typeSel, 64), in_fire)
 
   val divSqrt = FPU.ftypes.map{ t =>
     val fdiv = FDivGen(t)
@@ -91,7 +91,7 @@ class FDivSqrtDataModule(implicit p: Parameters) extends FPUDataModule {
 
 class FDivSqrt(cfg: FuConfig)(implicit p: Parameters) extends FPUSubModule(cfg) {
 
-  val robIdxReg = RegEnable(io.in.bits.ctrl.robIdx, io.in.fire)
+  val robIdxReg = utils.HackedAPI.HackedRegEnable(io.in.bits.ctrl.robIdx, io.in.fire)
   val kill_r = !io.in.ready && robIdxReg.needFlush(io.flush)
 
   override val dataModule = Module(new FDivSqrtDataModule)

@@ -482,7 +482,7 @@ class SramedDataArray(implicit p: Parameters) extends AbstractBankedDataArray {
         ecc_banks match {
           case Some(_) =>
             val ecc_data = read_result(div_index)(bank_index)(way_index).asECCData()
-            val ecc_data_delayed = RegEnable(ecc_data, RegNext(read_en))
+            val ecc_data_delayed = utils.HackedAPI.HackedRegEnable(ecc_data, RegNext(read_en))
             read_result(div_index)(bank_index)(way_index).error_delayed := dcacheParameters.dataCode.decode(ecc_data_delayed).error
             read_error_delayed_result(div_index)(bank_index)(way_index) := read_result(div_index)(bank_index)(way_index).error_delayed
           case None =>
@@ -873,7 +873,7 @@ class BankedDataArray(implicit p: Parameters) extends AbstractBankedDataArray {
       ecc_banks match {
         case Some(_) =>
           val ecc_data = bank_result(div_index)(bank_index).asECCData()
-          val ecc_data_delayed = RegEnable(ecc_data, RegNext(read_enable))
+          val ecc_data_delayed = utils.HackedAPI.HackedRegEnable(ecc_data, RegNext(read_enable))
           bank_result(div_index)(bank_index).error_delayed := dcacheParameters.dataCode.decode(ecc_data_delayed).error
           read_bank_error_delayed(div_index)(bank_index) := bank_result(div_index)(bank_index).error_delayed
         case None =>

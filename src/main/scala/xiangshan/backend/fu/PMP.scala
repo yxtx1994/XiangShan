@@ -449,7 +449,7 @@ trait PMPCheckMethod extends PMPConst {
     cfg_vec(num) := pmpDefault
 
     if (leaveHitMux) {
-      ParallelPriorityMux(match_vec.map(RegEnable(_, false.B, valid)), RegEnable(cfg_vec, valid))
+      ParallelPriorityMux(match_vec.map(utils.HackedAPI.HackedRegEnable(_, false.B, valid)), utils.HackedAPI.HackedRegEnable(cfg_vec, valid))
     } else {
       ParallelPriorityMux(match_vec, cfg_vec)
     }
@@ -539,7 +539,7 @@ class PMPChecker
   if (sameCycle || leaveHitMux) {
     io.resp := resp
   } else {
-    io.resp := RegEnable(resp, io.req.valid)
+    io.resp := utils.HackedAPI.HackedRegEnable(resp, io.req.valid)
   }
 }
 
@@ -566,7 +566,7 @@ class PMPCheckerv2
   if (sameCycle || leaveHitMux) {
     io.resp := resp
   } else {
-    io.resp := RegEnable(resp, io.req.valid)
+    io.resp := utils.HackedAPI.HackedRegEnable(resp, io.req.valid)
   }
 
   def and(pmp: PMPEntry, pma: PMPEntry): PMPConfig = {

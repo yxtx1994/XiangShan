@@ -463,7 +463,7 @@ class RobImp(override val wrapper: Rob)(implicit p: Parameters, params: BackendP
 
   for (i <- 0 until LoadPipelineWidth) {
     when(RegNext(io.lsq.mmio(i))) {
-      robEntries(RegEnable(io.lsq.uop(i).robIdx, io.lsq.mmio(i)).value).mmio := true.B
+      robEntries(utils.HackedAPI.HackedRegEnable(io.lsq.uop(i).robIdx, io.lsq.mmio(i)).value).mmio := true.B
     }
   }
 
@@ -512,19 +512,19 @@ class RobImp(override val wrapper: Rob)(implicit p: Parameters, params: BackendP
 
   val exceptionHappen = (state === s_idle) && robEntries(deqPtr.value).valid && (intrEnable || exceptionEnable) && !lastCycleFlush
   io.exception.valid := RegNext(exceptionHappen)
-  io.exception.bits.pc := RegEnable(debug_deqUop.pc, exceptionHappen)
+  io.exception.bits.pc := utils.HackedAPI.HackedRegEnable(debug_deqUop.pc, exceptionHappen)
   io.exception.bits.gpaddr := io.readGPAMemData
-  io.exception.bits.instr := RegEnable(debug_deqUop.instr, exceptionHappen)
-  io.exception.bits.commitType := RegEnable(deqDispatchData.commitType, exceptionHappen)
-  io.exception.bits.exceptionVec := RegEnable(exceptionDataRead.bits.exceptionVec, exceptionHappen)
-  io.exception.bits.singleStep := RegEnable(exceptionDataRead.bits.singleStep, exceptionHappen)
-  io.exception.bits.crossPageIPFFix := RegEnable(exceptionDataRead.bits.crossPageIPFFix, exceptionHappen)
-  io.exception.bits.isInterrupt := RegEnable(intrEnable, exceptionHappen)
-  io.exception.bits.isHls := RegEnable(deqDispatchData.isHls, exceptionHappen)
-  io.exception.bits.vls := RegEnable(robEntries(deqPtr.value).vls, exceptionHappen)
-  io.exception.bits.trigger := RegEnable(exceptionDataRead.bits.trigger, exceptionHappen)
-  io.csr.vstart.valid := RegEnable(exceptionDataRead.bits.vstartEn, false.B, exceptionHappen)
-  io.csr.vstart.bits := RegEnable(exceptionDataRead.bits.vstart, exceptionHappen)
+  io.exception.bits.instr := utils.HackedAPI.HackedRegEnable(debug_deqUop.instr, exceptionHappen)
+  io.exception.bits.commitType := utils.HackedAPI.HackedRegEnable(deqDispatchData.commitType, exceptionHappen)
+  io.exception.bits.exceptionVec := utils.HackedAPI.HackedRegEnable(exceptionDataRead.bits.exceptionVec, exceptionHappen)
+  io.exception.bits.singleStep := utils.HackedAPI.HackedRegEnable(exceptionDataRead.bits.singleStep, exceptionHappen)
+  io.exception.bits.crossPageIPFFix := utils.HackedAPI.HackedRegEnable(exceptionDataRead.bits.crossPageIPFFix, exceptionHappen)
+  io.exception.bits.isInterrupt := utils.HackedAPI.HackedRegEnable(intrEnable, exceptionHappen)
+  io.exception.bits.isHls := utils.HackedAPI.HackedRegEnable(deqDispatchData.isHls, exceptionHappen)
+  io.exception.bits.vls := utils.HackedAPI.HackedRegEnable(robEntries(deqPtr.value).vls, exceptionHappen)
+  io.exception.bits.trigger := utils.HackedAPI.HackedRegEnable(exceptionDataRead.bits.trigger, exceptionHappen)
+  io.csr.vstart.valid := utils.HackedAPI.HackedRegEnable(exceptionDataRead.bits.vstartEn, false.B, exceptionHappen)
+  io.csr.vstart.bits := utils.HackedAPI.HackedRegEnable(exceptionDataRead.bits.vstart, exceptionHappen)
 
   // data will be one cycle after valid
   io.readGPAMemAddr.valid := exceptionHappen
@@ -980,7 +980,7 @@ class RobImp(override val wrapper: Rob)(implicit p: Parameters, params: BackendP
       // Thus, we don't allow load/store instructions to trigger an interrupt.
       // TODO: support non-MMIO load-store instructions to trigger interrupts
       val allow_interrupts = !CommitType.isLoadStore(io.enq.req(i).bits.commitType)
-      robEntries(RegEnable(allocatePtrVec(i).value, canEnqueue(i))).interrupt_safe := RegEnable(allow_interrupts, canEnqueue(i))
+      robEntries(utils.HackedAPI.HackedRegEnable(allocatePtrVec(i).value, canEnqueue(i))).interrupt_safe := utils.HackedAPI.HackedRegEnable(allow_interrupts, canEnqueue(i))
     }
   }
 

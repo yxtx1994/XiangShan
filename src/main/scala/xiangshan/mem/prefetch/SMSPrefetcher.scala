@@ -122,7 +122,7 @@ class StridePF()(implicit p: Parameters) extends XSModule with HasSMSModuleHelpe
   })
 
   val prev_valid = GatedValidRegNext(io.s0_lookup.valid, false.B)
-  val prev_pc = RegEnable(io.s0_lookup.bits.pc, io.s0_lookup.valid)
+  val prev_pc = utils.HackedAPI.HackedRegEnable(io.s0_lookup.bits.pc, io.s0_lookup.valid)
 
   val s0_valid = io.s0_lookup.valid && !(prev_valid && prev_pc === io.s0_lookup.bits.pc)
 
@@ -148,12 +148,12 @@ class StridePF()(implicit p: Parameters) extends XSModule with HasSMSModuleHelpe
 
   val s1_hit = GatedValidRegNext(s0_hit) && io.s1_valid
   val s1_alloc = GatedValidRegNext(s0_miss) && io.s1_valid
-  val s1_vaddr = RegEnable(io.s0_lookup.bits.vaddr, s0_valid)
-  val s1_paddr = RegEnable(io.s0_lookup.bits.paddr, s0_valid)
-  val s1_conf = RegEnable(s0_matched_conf, s0_valid)
-  val s1_last_addr = RegEnable(s0_matched_last_addr, s0_valid)
-  val s1_last_stride = RegEnable(s0_matched_last_stride, s0_valid)
-  val s1_match_vec = RegEnable(VecInit(s0_match_vec), s0_valid)
+  val s1_vaddr = utils.HackedAPI.HackedRegEnable(io.s0_lookup.bits.vaddr, s0_valid)
+  val s1_paddr = utils.HackedAPI.HackedRegEnable(io.s0_lookup.bits.paddr, s0_valid)
+  val s1_conf = utils.HackedAPI.HackedRegEnable(s0_matched_conf, s0_valid)
+  val s1_last_addr = utils.HackedAPI.HackedRegEnable(s0_matched_last_addr, s0_valid)
+  val s1_last_stride = utils.HackedAPI.HackedRegEnable(s0_matched_last_stride, s0_valid)
+  val s1_match_vec = utils.HackedAPI.HackedRegEnable(VecInit(s0_match_vec), s0_valid)
 
   val BLOCK_OFFSET = log2Up(dcacheParameters.blockBytes)
   val s1_new_stride_vaddr = s1_vaddr(BLOCK_OFFSET + STRIDE_BLK_ADDR_BITS - 1, BLOCK_OFFSET)
@@ -196,9 +196,9 @@ class StridePF()(implicit p: Parameters) extends XSModule with HasSMSModuleHelpe
   val s1_pf_cross_page = s1_pf_block_vaddr(BLOCK_ADDR_PAGE_BIT) =/= s1_block_vaddr(BLOCK_ADDR_PAGE_BIT)
 
   val s2_pf_gen_valid = GatedValidRegNext(s1_hit && s1_stride_match, false.B)
-  val s2_pf_gen_paddr_valid = RegEnable(!s1_pf_cross_page, s1_hit && s1_stride_match)
-  val s2_pf_block_vaddr = RegEnable(s1_pf_block_vaddr, s1_hit && s1_stride_match)
-  val s2_block_paddr = RegEnable(block_addr(s1_paddr), s1_hit && s1_stride_match)
+  val s2_pf_gen_paddr_valid = utils.HackedAPI.HackedRegEnable(!s1_pf_cross_page, s1_hit && s1_stride_match)
+  val s2_pf_block_vaddr = utils.HackedAPI.HackedRegEnable(s1_pf_block_vaddr, s1_hit && s1_stride_match)
+  val s2_block_paddr = utils.HackedAPI.HackedRegEnable(block_addr(s1_paddr), s1_hit && s1_stride_match)
 
   val s2_pf_block_addr = Mux(s2_pf_gen_paddr_valid,
     Cat(
@@ -296,7 +296,7 @@ class ActiveGenerationTable()(implicit p: Parameters) extends XSModule with HasS
   val s0_dcache_evict_valid = io.s0_dcache_evict.valid
   val s0_dcache_evict_tag = block_hash_tag(s0_dcache_evict.vaddr).head(REGION_TAG_WIDTH)
 
-  val prev_lookup = RegEnable(s0_lookup, s0_lookup_valid)
+  val prev_lookup = utils.HackedAPI.HackedRegEnable(s0_lookup, s0_lookup_valid)
   val prev_lookup_valid = GatedValidRegNext(s0_lookup_valid, false.B)
 
   val s0_match_prev = prev_lookup_valid && s0_lookup.region_tag === prev_lookup.region_tag
@@ -362,25 +362,25 @@ class ActiveGenerationTable()(implicit p: Parameters) extends XSModule with HasS
   // stage1: update/alloc
   // region hit, update entry
   val s1_update = GatedValidRegNext(s0_update, false.B)
-  val s1_update_mask = RegEnable(VecInit(region_match_vec_s0), s0_lookup_valid)
-  val s1_agt_entry = RegEnable(s0_agt_entry, s0_lookup_valid)
-  val s1_cross_region_match = RegEnable(s0_cross_region_hit, s0_lookup_valid)
+  val s1_update_mask = utils.HackedAPI.HackedRegEnable(VecInit(region_match_vec_s0), s0_lookup_valid)
+  val s1_agt_entry = utils.HackedAPI.HackedRegEnable(s0_agt_entry, s0_lookup_valid)
+  val s1_cross_region_match = utils.HackedAPI.HackedRegEnable(s0_cross_region_hit, s0_lookup_valid)
   val s1_alloc = GatedValidRegNext(s0_alloc, false.B)
   val s1_alloc_entry = s1_agt_entry
   val s1_do_dcache_evict = GatedValidRegNext(s0_do_dcache_evict, false.B)
   val s1_replace_mask = Mux(
     s1_do_dcache_evict,
-    RegEnable(VecInit(region_match_vec_dcache_evict_s0).asUInt, s0_do_dcache_evict),
-    RegEnable(s0_replace_mask, s0_lookup_valid)
+    utils.HackedAPI.HackedRegEnable(VecInit(region_match_vec_dcache_evict_s0).asUInt, s0_do_dcache_evict),
+    utils.HackedAPI.HackedRegEnable(s0_replace_mask, s0_lookup_valid)
   )
   s1_replace_mask_w := s1_replace_mask & Fill(smsParams.active_gen_table_size, s1_alloc || s1_do_dcache_evict)
   val s1_evict_entry = Mux1H(s1_replace_mask, entries)
   val s1_evict_valid = Mux1H(s1_replace_mask, valids)
   // pf gen
-  val s1_pf_gen_match_vec = RegEnable(VecInit(s0_pf_gen_match_vec), s0_lookup_valid)
-  val s1_region_paddr = RegEnable(s0_lookup.region_paddr, s0_lookup_valid)
-  val s1_region_vaddr = RegEnable(s0_lookup.region_vaddr, s0_lookup_valid)
-  val s1_region_offset = RegEnable(s0_lookup.region_offset, s0_lookup_valid)
+  val s1_pf_gen_match_vec = utils.HackedAPI.HackedRegEnable(VecInit(s0_pf_gen_match_vec), s0_lookup_valid)
+  val s1_region_paddr = utils.HackedAPI.HackedRegEnable(s0_lookup.region_paddr, s0_lookup_valid)
+  val s1_region_vaddr = utils.HackedAPI.HackedRegEnable(s0_lookup.region_vaddr, s0_lookup_valid)
+  val s1_region_offset = utils.HackedAPI.HackedRegEnable(s0_lookup.region_offset, s0_lookup_valid)
   for(i <- entries.indices){
     val alloc = s1_replace_mask(i) && s1_alloc
     val update = s1_update_mask(i) && s1_update
@@ -469,17 +469,17 @@ class ActiveGenerationTable()(implicit p: Parameters) extends XSModule with HasS
 
   // stage2: gen pf reg / evict entry to pht
   val s2_do_dcache_evict = GatedValidRegNext(s1_do_dcache_evict, false.B)
-  val s2_evict_entry = RegEnable(s1_evict_entry, (s1_alloc || s1_do_dcache_evict) && s1_evict_valid)
+  val s2_evict_entry = utils.HackedAPI.HackedRegEnable(s1_evict_entry, (s1_alloc || s1_do_dcache_evict) && s1_evict_valid)
   val s2_evict_valid = GatedValidRegNext((s1_alloc || s1_do_dcache_evict) && s1_evict_valid, false.B)
-  val s2_paddr_valid = RegEnable(s1_pf_gen_paddr_valid, s1_pf_gen_valid)
-  val s2_pf_gen_region_tag = RegEnable(s1_pf_gen_region_tag, s1_pf_gen_valid)
-  val s2_pf_gen_decr_mode = RegEnable(s1_pf_gen_decr_mode, s1_pf_gen_valid)
-  val s2_pf_gen_region_paddr = RegEnable(s1_pf_gen_region_addr, s1_pf_gen_valid)
-  val s2_pf_gen_alias_bits = RegEnable(get_alias_bits(s1_pf_gen_vaddr), s1_pf_gen_valid)
-  val s2_pf_gen_region_bits = RegEnable(s1_pf_gen_region_bits, s1_pf_gen_valid)
+  val s2_paddr_valid = utils.HackedAPI.HackedRegEnable(s1_pf_gen_paddr_valid, s1_pf_gen_valid)
+  val s2_pf_gen_region_tag = utils.HackedAPI.HackedRegEnable(s1_pf_gen_region_tag, s1_pf_gen_valid)
+  val s2_pf_gen_decr_mode = utils.HackedAPI.HackedRegEnable(s1_pf_gen_decr_mode, s1_pf_gen_valid)
+  val s2_pf_gen_region_paddr = utils.HackedAPI.HackedRegEnable(s1_pf_gen_region_addr, s1_pf_gen_valid)
+  val s2_pf_gen_alias_bits = utils.HackedAPI.HackedRegEnable(get_alias_bits(s1_pf_gen_vaddr), s1_pf_gen_valid)
+  val s2_pf_gen_region_bits = utils.HackedAPI.HackedRegEnable(s1_pf_gen_region_bits, s1_pf_gen_valid)
   val s2_pf_gen_valid = GatedValidRegNext(s1_pf_gen_valid, false.B)
   val s2_pht_lookup_valid = GatedValidRegNext(s1_pht_lookup_valid, false.B) && !io.s2_stride_hit
-  val s2_pht_lookup = RegEnable(s1_pht_lookup, s1_pht_lookup_valid)
+  val s2_pht_lookup = utils.HackedAPI.HackedRegEnable(s1_pht_lookup, s1_pht_lookup_valid)
 
   io.s2_evict.valid := s2_evict_valid && (s2_evict_entry.access_cnt > 1.U)
   io.s2_evict.bits := s2_evict_entry
@@ -601,18 +601,18 @@ class PatternHistoryTable()(implicit p: Parameters) extends XSModule with HasSMS
   s1_valid_r := Mux(s1_valid && s1_wait, true.B, s0_valid)
   s1_valid := s1_valid_r
   val s1_reg_en = s0_valid && (!s1_wait || !s1_valid)
-  val s1_ram_raddr = RegEnable(s0_ram_raddr, s1_reg_en)
-  val s1_tag = RegEnable(s0_tag, s1_reg_en)
-  val s1_region_bits = RegEnable(s0_region_bits, s1_reg_en)
-  val s1_decr_mode = RegEnable(s0_decr_mode, s1_reg_en)
-  val s1_region_paddr = RegEnable(s0_region_paddr, s1_reg_en)
-  val s1_region_vaddr = RegEnable(s0_region_vaddr, s1_reg_en)
-  val s1_region_offset = RegEnable(s0_region_offset, s1_reg_en)
+  val s1_ram_raddr = utils.HackedAPI.HackedRegEnable(s0_ram_raddr, s1_reg_en)
+  val s1_tag = utils.HackedAPI.HackedRegEnable(s0_tag, s1_reg_en)
+  val s1_region_bits = utils.HackedAPI.HackedRegEnable(s0_region_bits, s1_reg_en)
+  val s1_decr_mode = utils.HackedAPI.HackedRegEnable(s0_decr_mode, s1_reg_en)
+  val s1_region_paddr = utils.HackedAPI.HackedRegEnable(s0_region_paddr, s1_reg_en)
+  val s1_region_vaddr = utils.HackedAPI.HackedRegEnable(s0_region_vaddr, s1_reg_en)
+  val s1_region_offset = utils.HackedAPI.HackedRegEnable(s0_region_offset, s1_reg_en)
   val s1_pht_valids = pht_valids_reg.map(way => Mux1H(
     (0 until PHT_SETS).map(i => i.U === s1_ram_raddr),
     way
   ))
-  val s1_evict = RegEnable(s0_evict, s1_reg_en)
+  val s1_evict = utils.HackedAPI.HackedRegEnable(s0_evict, s1_reg_en)
   val s1_replace_way = Mux1H(
     (0 until PHT_SETS).map(i => i.U === s1_ram_raddr),
     replacement.map(_.way)
@@ -630,19 +630,19 @@ class PatternHistoryTable()(implicit p: Parameters) extends XSModule with HasSMS
   // pipe s2: generate ram write addr/data
   val s2_valid = GatedValidRegNext(s1_valid && !s1_wait, false.B)
   val s2_reg_en = s1_valid && !s1_wait
-  val s2_hist_update_mask = RegEnable(s1_hist_update_mask, s2_reg_en)
-  val s2_hist_bits = RegEnable(s1_hist_bits, s2_reg_en)
-  val s2_tag = RegEnable(s1_tag, s2_reg_en)
-  val s2_region_bits = RegEnable(s1_region_bits, s2_reg_en)
-  val s2_decr_mode = RegEnable(s1_decr_mode, s2_reg_en)
-  val s2_region_paddr = RegEnable(s1_region_paddr, s2_reg_en)
-  val s2_region_vaddr = RegEnable(s1_region_vaddr, s2_reg_en)
-  val s2_region_offset = RegEnable(s1_region_offset, s2_reg_en)
+  val s2_hist_update_mask = utils.HackedAPI.HackedRegEnable(s1_hist_update_mask, s2_reg_en)
+  val s2_hist_bits = utils.HackedAPI.HackedRegEnable(s1_hist_bits, s2_reg_en)
+  val s2_tag = utils.HackedAPI.HackedRegEnable(s1_tag, s2_reg_en)
+  val s2_region_bits = utils.HackedAPI.HackedRegEnable(s1_region_bits, s2_reg_en)
+  val s2_decr_mode = utils.HackedAPI.HackedRegEnable(s1_decr_mode, s2_reg_en)
+  val s2_region_paddr = utils.HackedAPI.HackedRegEnable(s1_region_paddr, s2_reg_en)
+  val s2_region_vaddr = utils.HackedAPI.HackedRegEnable(s1_region_vaddr, s2_reg_en)
+  val s2_region_offset = utils.HackedAPI.HackedRegEnable(s1_region_offset, s2_reg_en)
   val s2_region_offset_mask = region_offset_to_bits(s2_region_offset)
-  val s2_evict = RegEnable(s1_evict, s2_reg_en)
-  val s2_pht_valids = s1_pht_valids.map(v => RegEnable(v, s2_reg_en))
-  val s2_replace_way = RegEnable(s1_replace_way, s2_reg_en)
-  val s2_ram_waddr = RegEnable(s1_ram_raddr, s2_reg_en)
+  val s2_evict = utils.HackedAPI.HackedRegEnable(s1_evict, s2_reg_en)
+  val s2_pht_valids = s1_pht_valids.map(v => utils.HackedAPI.HackedRegEnable(v, s2_reg_en))
+  val s2_replace_way = utils.HackedAPI.HackedRegEnable(s1_replace_way, s2_reg_en)
+  val s2_ram_waddr = utils.HackedAPI.HackedRegEnable(s1_ram_raddr, s2_reg_en)
   val s2_ram_rdata = pht_ram.io.r.resp.data
   val s2_ram_rtags = s2_ram_rdata.map(_.tag)
   val s2_tag_match_vec = s2_ram_rtags.map(t => t === s2_tag)
@@ -668,25 +668,25 @@ class PatternHistoryTable()(implicit p: Parameters) extends XSModule with HasSMS
 
   // pipe s3: send addr/data to ram, gen pf_req
   val s3_valid = GatedValidRegNext(s2_valid, false.B)
-  val s3_evict = RegEnable(s2_evict, s2_valid)
-  val s3_hist = RegEnable(s2_hist, s2_valid)
-  val s3_hist_pf_gen = RegEnable(s2_hist_pf_gen, s2_valid)
-  val s3_hist_update_mask = RegEnable(s2_hist_update_mask.asUInt, s2_valid)
-  val s3_region_offset = RegEnable(s2_region_offset, s2_valid)
-  val s3_region_offset_mask = RegEnable(s2_region_offset_mask, s2_valid)
-  val s3_decr_mode = RegEnable(s2_decr_mode, s2_valid)
-  val s3_region_paddr = RegEnable(s2_region_paddr, s2_valid)
-  val s3_region_vaddr = RegEnable(s2_region_vaddr, s2_valid)
-  val s3_pht_tag = RegEnable(s2_tag, s2_valid)
-  val s3_hit_vec = s2_hit_vec.map(h => RegEnable(h, s2_valid))
+  val s3_evict = utils.HackedAPI.HackedRegEnable(s2_evict, s2_valid)
+  val s3_hist = utils.HackedAPI.HackedRegEnable(s2_hist, s2_valid)
+  val s3_hist_pf_gen = utils.HackedAPI.HackedRegEnable(s2_hist_pf_gen, s2_valid)
+  val s3_hist_update_mask = utils.HackedAPI.HackedRegEnable(s2_hist_update_mask.asUInt, s2_valid)
+  val s3_region_offset = utils.HackedAPI.HackedRegEnable(s2_region_offset, s2_valid)
+  val s3_region_offset_mask = utils.HackedAPI.HackedRegEnable(s2_region_offset_mask, s2_valid)
+  val s3_decr_mode = utils.HackedAPI.HackedRegEnable(s2_decr_mode, s2_valid)
+  val s3_region_paddr = utils.HackedAPI.HackedRegEnable(s2_region_paddr, s2_valid)
+  val s3_region_vaddr = utils.HackedAPI.HackedRegEnable(s2_region_vaddr, s2_valid)
+  val s3_pht_tag = utils.HackedAPI.HackedRegEnable(s2_tag, s2_valid)
+  val s3_hit_vec = s2_hit_vec.map(h => utils.HackedAPI.HackedRegEnable(h, s2_valid))
   val s3_hit = Cat(s3_hit_vec).orR
   val s3_hit_way = OHToUInt(s3_hit_vec)
-  val s3_repl_way = RegEnable(s2_replace_way, s2_valid)
-  val s3_repl_way_mask = RegEnable(s2_repl_way_mask, s2_valid)
-  val s3_repl_update_mask = RegEnable(VecInit((0 until PHT_SETS).map(i => i.U === s2_ram_waddr)), s2_valid)
-  val s3_ram_waddr = RegEnable(s2_ram_waddr, s2_valid)
-  val s3_incr_region_vaddr = RegEnable(s2_incr_region_vaddr, s2_valid)
-  val s3_decr_region_vaddr = RegEnable(s2_decr_region_vaddr, s2_valid)
+  val s3_repl_way = utils.HackedAPI.HackedRegEnable(s2_replace_way, s2_valid)
+  val s3_repl_way_mask = utils.HackedAPI.HackedRegEnable(s2_repl_way_mask, s2_valid)
+  val s3_repl_update_mask = utils.HackedAPI.HackedRegEnable(VecInit((0 until PHT_SETS).map(i => i.U === s2_ram_waddr)), s2_valid)
+  val s3_ram_waddr = utils.HackedAPI.HackedRegEnable(s2_ram_waddr, s2_valid)
+  val s3_incr_region_vaddr = utils.HackedAPI.HackedRegEnable(s2_incr_region_vaddr, s2_valid)
+  val s3_decr_region_vaddr = utils.HackedAPI.HackedRegEnable(s2_decr_region_vaddr, s2_valid)
   s3_ram_en := s3_valid && s3_evict
   val s3_ram_wdata = Wire(new PhtEntry())
   s3_ram_wdata.hist := s3_hist
@@ -849,7 +849,7 @@ class PrefetchFilter()(implicit p: Parameters) extends XSModule with HasSMSModul
   val replacement = ReplacementPolicy.fromString("plru", smsParams.pf_filter_size)
 
   val prev_valid = GatedValidRegNext(io.gen_req.valid, false.B)
-  val prev_gen_req = RegEnable(io.gen_req.bits, io.gen_req.valid)
+  val prev_gen_req = utils.HackedAPI.HackedRegEnable(io.gen_req.bits, io.gen_req.valid)
 
   val tlb_req_arb = Module(new RRArbiterInit(new TlbReq, smsParams.pf_filter_size))
   val pf_req_arb = Module(new RRArbiterInit(UInt(PAddrBits.W), smsParams.pf_filter_size))
@@ -923,14 +923,14 @@ class PrefetchFilter()(implicit p: Parameters) extends XSModule with HasSMSModul
 
   // s1: update or alloc
   val s1_valid_r = GatedValidRegNext(s0_gen_req_valid, false.B)
-  val s1_hit_r = RegEnable(s0_hit, false.B, s0_gen_req_valid)
-  val s1_gen_req = RegEnable(s0_gen_req, s0_gen_req_valid)
-  val s1_replace_vec_r = RegEnable(s0_replace_vec, s0_gen_req_valid && !s0_hit)
-  val s1_update_vec = RegEnable(VecInit(s0_match_vec).asUInt, s0_gen_req_valid && s0_hit)
+  val s1_hit_r = utils.HackedAPI.HackedRegEnable(s0_hit, false.B, s0_gen_req_valid)
+  val s1_gen_req = utils.HackedAPI.HackedRegEnable(s0_gen_req, s0_gen_req_valid)
+  val s1_replace_vec_r = utils.HackedAPI.HackedRegEnable(s0_replace_vec, s0_gen_req_valid && !s0_hit)
+  val s1_update_vec = utils.HackedAPI.HackedRegEnable(VecInit(s0_match_vec).asUInt, s0_gen_req_valid && s0_hit)
   val s1_tlb_fire_vec_r = GatedValidRegNext(s0_tlb_fire_vec)
   // tlb req will latch one cycle after tlb_arb
   val s1_tlb_req_valid = GatedValidRegNext(tlb_req_arb.io.out.fire)
-  val s1_tlb_req_bits  = RegEnable(tlb_req_arb.io.out.bits, tlb_req_arb.io.out.fire)
+  val s1_tlb_req_bits  = utils.HackedAPI.HackedRegEnable(tlb_req_arb.io.out.bits, tlb_req_arb.io.out.fire)
   val s1_alloc_entry = Wire(new PrefetchFilterEntry())
   s1_valid := s1_valid_r
   s1_hit := s1_hit_r
@@ -1138,19 +1138,19 @@ class SMSPrefetcher()(implicit p: Parameters) extends BasePrefecher with HasSMSM
   val pf_filter = Module(new PrefetchFilter())
 
   val train_vld_s0 = GatedValidRegNext(train_vld, false.B)
-  val train_s0 = RegEnable(train_ld, train_vld)
-  val train_region_tag_s0 = RegEnable(train_region_tag, train_vld)
-  val train_region_p1_tag_s0 = RegEnable(train_region_p1_tag, train_vld)
-  val train_region_m1_tag_s0 = RegEnable(train_region_m1_tag, train_vld)
-  val train_allow_cross_region_p1_s0 = RegEnable(train_allow_cross_region_p1, train_vld)
-  val train_allow_cross_region_m1_s0 = RegEnable(train_allow_cross_region_m1, train_vld)
-  val train_pht_tag_s0 = RegEnable(pht_tag(train_ld.pc), train_vld)
-  val train_pht_index_s0 = RegEnable(pht_index(train_ld.pc), train_vld)
-  val train_region_offset_s0 = RegEnable(train_region_offset, train_vld)
-  val train_region_p1_cross_page_s0 = RegEnable(train_region_p1_cross_page, train_vld)
-  val train_region_m1_cross_page_s0 = RegEnable(train_region_m1_cross_page, train_vld)
-  val train_region_paddr_s0 = RegEnable(train_region_paddr, train_vld)
-  val train_region_vaddr_s0 = RegEnable(train_region_vaddr, train_vld)
+  val train_s0 = utils.HackedAPI.HackedRegEnable(train_ld, train_vld)
+  val train_region_tag_s0 = utils.HackedAPI.HackedRegEnable(train_region_tag, train_vld)
+  val train_region_p1_tag_s0 = utils.HackedAPI.HackedRegEnable(train_region_p1_tag, train_vld)
+  val train_region_m1_tag_s0 = utils.HackedAPI.HackedRegEnable(train_region_m1_tag, train_vld)
+  val train_allow_cross_region_p1_s0 = utils.HackedAPI.HackedRegEnable(train_allow_cross_region_p1, train_vld)
+  val train_allow_cross_region_m1_s0 = utils.HackedAPI.HackedRegEnable(train_allow_cross_region_m1, train_vld)
+  val train_pht_tag_s0 = utils.HackedAPI.HackedRegEnable(pht_tag(train_ld.pc), train_vld)
+  val train_pht_index_s0 = utils.HackedAPI.HackedRegEnable(pht_index(train_ld.pc), train_vld)
+  val train_region_offset_s0 = utils.HackedAPI.HackedRegEnable(train_region_offset, train_vld)
+  val train_region_p1_cross_page_s0 = utils.HackedAPI.HackedRegEnable(train_region_p1_cross_page, train_vld)
+  val train_region_m1_cross_page_s0 = utils.HackedAPI.HackedRegEnable(train_region_m1_cross_page, train_vld)
+  val train_region_paddr_s0 = utils.HackedAPI.HackedRegEnable(train_region_paddr, train_vld)
+  val train_region_vaddr_s0 = utils.HackedAPI.HackedRegEnable(train_region_vaddr, train_vld)
 
   active_gen_table.io.agt_en := io_agt_en
   active_gen_table.io.act_threshold := io_act_threshold

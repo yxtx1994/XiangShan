@@ -48,7 +48,7 @@ class LqExceptionBuffer(implicit p: Parameters) extends XSModule with HasCircula
 
   // s2: delay 1 cycle
   val s2_req = (0 until LoadPipelineWidth + VecLoadPipelineWidth).map(i => {
-    RegEnable(s1_req(i), s1_valid(i))})
+    utils.HackedAPI.HackedRegEnable(s1_req(i), s1_valid(i))})
   val s2_valid = (0 until LoadPipelineWidth + VecLoadPipelineWidth).map(i =>
     RegNext(s1_valid(i)) &&
     !s2_req(i).uop.robIdx.needFlush(RegNext(io.redirect)) &&

@@ -43,7 +43,7 @@ class L2TlbPrefetch(implicit p: Parameters) extends XSModule with HasPtwConst {
 
   val flush = io.sfence.valid || (io.csr.priv.virt && io.csr.vsatp.changed)
   val next_line = get_next_line(io.in.bits.vpn)
-  val next_req = RegEnable(next_line, io.in.valid)
+  val next_req = utils.HackedAPI.HackedRegEnable(next_line, io.in.valid)
   val input_valid = io.in.valid && !flush && !already_have(next_line)
   val v = ValidHold(input_valid, io.out.fire, flush)
   val s2xlate = Wire(UInt(2.W))

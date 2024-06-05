@@ -226,7 +226,7 @@ class ICacheMetaArrayNoBanked()(implicit p: Parameters) extends ICacheArray
   tagArray.io.w.req.valid := io.write.valid
   tagArray.io.w.req.bits.apply(data=write_meta_bits, setIdx=io.write.bits.virIdx, waymask=io.write.bits.waymask)
 
-  val read_set_idx_next = RegEnable(io.read.bits.idx, io.read.fire)
+  val read_set_idx_next = utils.HackedAPI.HackedRegEnable(io.read.bits.idx, io.read.fire)
   val valid_array = RegInit(VecInit(Seq.fill(nWays)(0.U(nSets.W))))
   val valid_metas = Wire(Vec(nWays, Bool()))
   (0 until nWays).foreach( way =>

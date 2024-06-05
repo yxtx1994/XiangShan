@@ -80,9 +80,9 @@ class L1CohMetaArray(readPorts: Int, writePorts: Int)(implicit p: Parameters) ex
           }
         )
         resp(way) := Mux(
-          RegEnable(read_way_bypass, read.valid),
-          RegEnable(bypass_data, read_way_bypass),
-          RegEnable(meta_array(read.bits.idx)(way), read.valid)
+          utils.HackedAPI.HackedRegEnable(read_way_bypass, read.valid),
+          utils.HackedAPI.HackedRegEnable(bypass_data, read_way_bypass),
+          utils.HackedAPI.HackedRegEnable(meta_array(read.bits.idx)(way), read.valid)
         )
       })
   }
@@ -94,8 +94,8 @@ class L1CohMetaArray(readPorts: Int, writePorts: Int)(implicit p: Parameters) ex
         case (wen, way) =>
           s0_way_wen(way)(wport) := write.valid && wen
           s1_way_wen(way)(wport) := RegNext(s0_way_wen(way)(wport))
-          s1_way_waddr(way)(wport) := RegEnable(write.bits.idx, s0_way_wen(way)(wport))
-          s1_way_wdata(way)(wport) := RegEnable(write.bits.meta, s0_way_wen(way)(wport))
+          s1_way_waddr(way)(wport) := utils.HackedAPI.HackedRegEnable(write.bits.idx, s0_way_wen(way)(wport))
+          s1_way_wdata(way)(wport) := utils.HackedAPI.HackedRegEnable(write.bits.meta, s0_way_wen(way)(wport))
           when (s1_way_wen(way)(wport)) {
             meta_array(s1_way_waddr(way)(wport))(way) := s1_way_wdata(way)(wport)
           }
@@ -137,9 +137,9 @@ class L1FlagMetaArray(readPorts: Int, writePorts: Int)(implicit p: Parameters) e
           }
         )
         resp(way) := Mux(
-          RegEnable(read_way_bypass, read.valid),
-          RegEnable(bypass_data, read_way_bypass),
-          meta_array(RegEnable(read.bits.idx, read.valid))(way)
+          utils.HackedAPI.HackedRegEnable(read_way_bypass, read.valid),
+          utils.HackedAPI.HackedRegEnable(bypass_data, read_way_bypass),
+          meta_array(utils.HackedAPI.HackedRegEnable(read.bits.idx, read.valid))(way)
         )
       })
   }
@@ -151,8 +151,8 @@ class L1FlagMetaArray(readPorts: Int, writePorts: Int)(implicit p: Parameters) e
         case (wen, way) =>
           s0_way_wen(way)(wport) := write.valid && wen
           s1_way_wen(way)(wport) := RegNext(s0_way_wen(way)(wport))
-          s1_way_waddr(way)(wport) := RegEnable(write.bits.idx, s0_way_wen(way)(wport))
-          s1_way_wdata(way)(wport) := RegEnable(write.bits.flag, s0_way_wen(way)(wport))
+          s1_way_waddr(way)(wport) := utils.HackedAPI.HackedRegEnable(write.bits.idx, s0_way_wen(way)(wport))
+          s1_way_wdata(way)(wport) := utils.HackedAPI.HackedRegEnable(write.bits.flag, s0_way_wen(way)(wport))
           when (s1_way_wen(way)(wport)) {
             meta_array(s1_way_waddr(way)(wport))(way) := s1_way_wdata(way)(wport)
           }
@@ -196,9 +196,9 @@ class L1PrefetchSourceArray(readPorts: Int, writePorts: Int)(implicit p: Paramet
           }
         )
         resp(way) := Mux(
-          RegEnable(read_way_bypass, read.valid),
-          RegEnable(bypass_data, read_way_bypass),
-          meta_array(RegEnable(read.bits.idx, read.valid))(way)
+          utils.HackedAPI.HackedRegEnable(read_way_bypass, read.valid),
+          utils.HackedAPI.HackedRegEnable(bypass_data, read_way_bypass),
+          meta_array(utils.HackedAPI.HackedRegEnable(read.bits.idx, read.valid))(way)
         )
       })
   }
@@ -210,8 +210,8 @@ class L1PrefetchSourceArray(readPorts: Int, writePorts: Int)(implicit p: Paramet
         case (wen, way) =>
           s0_way_wen(way)(wport) := write.valid && wen
           s1_way_wen(way)(wport) := RegNext(s0_way_wen(way)(wport))
-          s1_way_waddr(way)(wport) := RegEnable(write.bits.idx, s0_way_wen(way)(wport))
-          s1_way_wdata(way)(wport) := RegEnable(write.bits.source, s0_way_wen(way)(wport))
+          s1_way_waddr(way)(wport) := utils.HackedAPI.HackedRegEnable(write.bits.idx, s0_way_wen(way)(wport))
+          s1_way_wdata(way)(wport) := utils.HackedAPI.HackedRegEnable(write.bits.source, s0_way_wen(way)(wport))
           when (s1_way_wen(way)(wport)) {
             meta_array(s1_way_waddr(way)(wport))(way) := s1_way_wdata(way)(wport)
           }

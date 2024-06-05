@@ -1027,10 +1027,10 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
   csrio.customCtrl.distribute_csr.w.bits.addr := addr
 
   when (RegNext(csrio.fpu.fflags.valid)) {
-    fcsr := fflags_wfn(update = true)(RegEnable(csrio.fpu.fflags.bits, csrio.fpu.fflags.valid))
+    fcsr := fflags_wfn(update = true)(utils.HackedAPI.HackedRegEnable(csrio.fpu.fflags.bits, csrio.fpu.fflags.valid))
   }
   when(RegNext(csrio.vpu.set_vxsat.valid)) {
-    vcsr := vxsat_wfn(update = true)(RegEnable(csrio.vpu.set_vxsat.bits, csrio.vpu.set_vxsat.valid))
+    vcsr := vxsat_wfn(update = true)(utils.HackedAPI.HackedRegEnable(csrio.vpu.set_vxsat.bits, csrio.vpu.set_vxsat.valid))
   }
 
   // set fs and sd in mstatus
@@ -1049,13 +1049,13 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
   csrio.fpu.frm := fcsr.asTypeOf(new FcsrStruct).frm
 
   when (RegNext(csrio.vpu.set_vstart.valid)) {
-    vstart := RegEnable(csrio.vpu.set_vstart.bits, csrio.vpu.set_vstart.valid)
+    vstart := utils.HackedAPI.HackedRegEnable(csrio.vpu.set_vstart.bits, csrio.vpu.set_vstart.valid)
   }
   when (RegNext(csrio.vpu.set_vtype.valid)) {
-    vtype := RegEnable(csrio.vpu.set_vtype.bits, csrio.vpu.set_vtype.valid)
+    vtype := utils.HackedAPI.HackedRegEnable(csrio.vpu.set_vtype.bits, csrio.vpu.set_vtype.valid)
   }
   when (RegNext(csrio.vpu.set_vl.valid)) {
-    vl := RegEnable(csrio.vpu.set_vl.bits, csrio.vpu.set_vl.valid)
+    vl := utils.HackedAPI.HackedRegEnable(csrio.vpu.set_vl.bits, csrio.vpu.set_vl.valid)
   }
   // set vs and sd in mstatus
   when(csrw_dirty_vs_state || RegNext(csrio.vpu.dirty_vs)) {
@@ -1451,8 +1451,8 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
     isXRetFlag := true.B
   }
   csrio.isXRet := isXRetFlag
-  private val retTargetReg = RegEnable(retTarget, isXRet && !illegalRetTarget)
-  private val illegalXret = RegEnable(illegalMret || illegalSret || illegalSModeSret || illegalVSModeSret, isXRet)
+  private val retTargetReg = utils.HackedAPI.HackedRegEnable(retTarget, isXRet && !illegalRetTarget)
+  private val illegalXret = utils.HackedAPI.HackedRegEnable(illegalMret || illegalSret || illegalSModeSret || illegalVSModeSret, isXRet)
 
   private val xtvec = Mux(delegS, Mux(delegVS, vstvec, stvec), mtvec)
   private val xtvecBase = xtvec(VAddrBits - 1, 2)
@@ -1465,7 +1465,7 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
   // XRet sends redirect instead of Flush and isXRetFlag is true.B before redirect.valid.
   // ROB sends exception at T0 while CSR receives at T2.
   // We add a RegNext here and trapTarget is valid at T3.
-  csrio.trapTarget := RegEnable(
+  csrio.trapTarget := utils.HackedAPI.HackedRegEnable(
     MuxCase(pcFromXtvec, Seq(
       (isXRetFlag && !illegalXret) -> retTargetReg,
       ((hasDebugTrap && !debugMode) || ebreakEnterParkLoop) -> debugTrapTarget

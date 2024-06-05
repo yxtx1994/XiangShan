@@ -107,7 +107,7 @@ class TLBFA(
     val access = io.access(i)
 
     val vpn = req.bits.vpn
-    val vpn_reg = RegEnable(vpn, req.fire)
+    val vpn_reg = utils.HackedAPI.HackedRegEnable(vpn, req.fire)
     val hasS2xlate = req.bits.s2xlate =/= noS2xlate
     val OnlyS2 = req.bits.s2xlate === onlyStage2
     val OnlyS1 = req.bits.s2xlate === onlyStage1
@@ -122,7 +122,7 @@ class TLBFA(
 
     hitVec.suggestName("hitVec")
 
-    val hitVecReg = RegEnable(hitVec, req.fire)
+    val hitVecReg = utils.HackedAPI.HackedRegEnable(hitVec, req.fire)
     // Sector tlb may trigger multi-hit, see def "wbhit"
     XSPerfAccumulate(s"port${i}_multi_hit", !(!resp.valid || (PopCount(hitVecReg) === 0.U || PopCount(hitVecReg) === 1.U)))
 
@@ -130,17 +130,17 @@ class TLBFA(
     resp.bits.hit := Cat(hitVecReg).orR
     if (nWays == 1) {
       for (d <- 0 until nDups) {
-        resp.bits.ppn(d) := RegEnable(entries(0).genPPN(saveLevel, req.valid)(vpn), req.fire)
-        resp.bits.perm(d) := RegEnable(entries(0).perm, req.fire)
-        resp.bits.g_perm(d) := RegEnable(entries(0).g_perm, req.fire)
-        resp.bits.s2xlate(d) := RegEnable(entries(0).s2xlate, req.fire)
+        resp.bits.ppn(d) := utils.HackedAPI.HackedRegEnable(entries(0).genPPN(saveLevel, req.valid)(vpn), req.fire)
+        resp.bits.perm(d) := utils.HackedAPI.HackedRegEnable(entries(0).perm, req.fire)
+        resp.bits.g_perm(d) := utils.HackedAPI.HackedRegEnable(entries(0).g_perm, req.fire)
+        resp.bits.s2xlate(d) := utils.HackedAPI.HackedRegEnable(entries(0).s2xlate, req.fire)
       }
     } else {
       for (d <- 0 until nDups) {
-        resp.bits.ppn(d) := RegEnable(ParallelMux(hitVec zip entries.map(_.genPPN(saveLevel, req.valid)(vpn))), req.fire)
-        resp.bits.perm(d) := RegEnable(ParallelMux(hitVec zip entries.map(_.perm)), req.fire)
-        resp.bits.g_perm(d) := RegEnable(ParallelMux(hitVec zip entries.map(_.g_perm)), req.fire)
-        resp.bits.s2xlate(d) := RegEnable(ParallelMux(hitVec zip entries.map(_.s2xlate)), req.fire)
+        resp.bits.ppn(d) := utils.HackedAPI.HackedRegEnable(ParallelMux(hitVec zip entries.map(_.genPPN(saveLevel, req.valid)(vpn))), req.fire)
+        resp.bits.perm(d) := utils.HackedAPI.HackedRegEnable(ParallelMux(hitVec zip entries.map(_.perm)), req.fire)
+        resp.bits.g_perm(d) := utils.HackedAPI.HackedRegEnable(ParallelMux(hitVec zip entries.map(_.g_perm)), req.fire)
+        resp.bits.s2xlate(d) := utils.HackedAPI.HackedRegEnable(ParallelMux(hitVec zip entries.map(_.s2xlate)), req.fire)
       }
     }
 

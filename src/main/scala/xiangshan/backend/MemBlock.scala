@@ -374,8 +374,8 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
         l1Prefetcher.stride_train(i).bits := source.bits
         l1Prefetcher.stride_train(i).bits.uop.pc := Mux(
           loadUnits(i).io.s2_ptr_chasing,
-          RegEnable(io.ooo_to_mem.loadPc(i), loadUnits(i).io.s1_prefetch_spec),
-          RegEnable(RegEnable(io.ooo_to_mem.loadPc(i), loadUnits(i).io.s0_prefetch_spec), loadUnits(i).io.s1_prefetch_spec)
+          utils.HackedAPI.HackedRegEnable(io.ooo_to_mem.loadPc(i), loadUnits(i).io.s1_prefetch_spec),
+          utils.HackedAPI.HackedRegEnable(utils.HackedAPI.HackedRegEnable(io.ooo_to_mem.loadPc(i), loadUnits(i).io.s0_prefetch_spec), loadUnits(i).io.s1_prefetch_spec)
         )
       }
       for (i <- 0 until HyuCnt) {
@@ -608,7 +608,7 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
     }
   }
 
-  val ptw_resp_next = RegEnable(ptwio.resp.bits, ptwio.resp.valid)
+  val ptw_resp_next = utils.HackedAPI.HackedRegEnable(ptwio.resp.bits, ptwio.resp.valid)
   val ptw_resp_v = RegNext(ptwio.resp.valid && !(sfence.valid && tlbcsr.satp.changed && tlbcsr.vsatp.changed && tlbcsr.hgatp.changed), init = false.B)
   ptwio.resp.ready := true.B
 
@@ -764,8 +764,8 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
       pf.io.ld_in(i).bits := source.bits
       pf.io.ld_in(i).bits.uop.pc := Mux(
         loadUnits(i).io.s2_ptr_chasing,
-        RegEnable(io.ooo_to_mem.loadPc(i), loadUnits(i).io.s1_prefetch_spec),
-        RegEnable(RegEnable(io.ooo_to_mem.loadPc(i), loadUnits(i).io.s0_prefetch_spec), loadUnits(i).io.s1_prefetch_spec)
+        utils.HackedAPI.HackedRegEnable(io.ooo_to_mem.loadPc(i), loadUnits(i).io.s1_prefetch_spec),
+        utils.HackedAPI.HackedRegEnable(utils.HackedAPI.HackedRegEnable(io.ooo_to_mem.loadPc(i), loadUnits(i).io.s0_prefetch_spec), loadUnits(i).io.s1_prefetch_spec)
       )
     })
     l1PrefetcherOpt.foreach(pf => {
@@ -1104,7 +1104,7 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
           )
       )
       pf.io.st_in(i).bits := stu.io.prefetch_train.bits
-      pf.io.st_in(i).bits.uop.pc := RegEnable(RegEnable(io.ooo_to_mem.storePc(i), stu.io.s0_prefetch_spec), stu.io.s1_prefetch_spec)
+      pf.io.st_in(i).bits.uop.pc := utils.HackedAPI.HackedRegEnable(utils.HackedAPI.HackedRegEnable(io.ooo_to_mem.storePc(i), stu.io.s0_prefetch_spec), stu.io.s1_prefetch_spec)
     })
 
     // 1. sync issue info to store set LFST
@@ -1525,8 +1525,8 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
   }.elsewhen (atomicsUnit.io.exceptionAddr.valid) {
     atomicsException := true.B
   }
-  val atomicsExceptionAddress = RegEnable(atomicsUnit.io.exceptionAddr.bits.vaddr, atomicsUnit.io.exceptionAddr.valid)
-  val atomicsExceptionGPAddress = RegEnable(atomicsUnit.io.exceptionAddr.bits.gpaddr, atomicsUnit.io.exceptionAddr.valid)
+  val atomicsExceptionAddress = utils.HackedAPI.HackedRegEnable(atomicsUnit.io.exceptionAddr.bits.vaddr, atomicsUnit.io.exceptionAddr.valid)
+  val atomicsExceptionGPAddress = utils.HackedAPI.HackedRegEnable(atomicsUnit.io.exceptionAddr.bits.gpaddr, atomicsUnit.io.exceptionAddr.valid)
   io.mem_to_ooo.lsqio.vaddr := RegNext(Mux(
     atomicsException,
     atomicsExceptionAddress,

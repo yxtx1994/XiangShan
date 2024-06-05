@@ -207,9 +207,9 @@ class ITTageTable
   val s0_unhashed_idx = getUnhashedIdx(io.req.bits.pc)
 
   val (s0_idx, s0_tag) = compute_tag_and_hash(s0_unhashed_idx, io.req.bits.folded_hist)
-  val (s1_idx, s1_tag) = (RegEnable(s0_idx, io.req.fire), RegEnable(s0_tag, io.req.fire))
+  val (s1_idx, s1_tag) = (utils.HackedAPI.HackedRegEnable(s0_idx, io.req.fire), utils.HackedAPI.HackedRegEnable(s0_tag, io.req.fire))
   val s0_bank_req_1h = get_bank_mask(s0_idx)
-  val s1_bank_req_1h = RegEnable(s0_bank_req_1h, io.req.fire)
+  val s1_bank_req_1h = utils.HackedAPI.HackedRegEnable(s0_bank_req_1h, io.req.fire)
 
   val us = Module(new Folded1WDataModuleTemplate(
     Bool(), nRows, 1, isSync=true, width=uFoldedWidth, hasRen=true))
@@ -235,7 +235,7 @@ class ITTageTable
   io.resp.bits.u := us.io.rdata(0)
   io.resp.bits.target := resp_selected.target
 
-  val s1_bank_has_write_on_this_req = RegEnable(VecInit(table_banks.map(_.io.w.req.valid)), io.req.valid)
+  val s1_bank_has_write_on_this_req = utils.HackedAPI.HackedRegEnable(VecInit(table_banks.map(_.io.w.req.valid)), io.req.valid)
 
   // Use fetchpc to compute hash
   val update_folded_hist = WireInit(0.U.asTypeOf(new AllFoldedHistories(foldedGHistInfos)))
@@ -371,11 +371,11 @@ class ITTage(implicit p: Parameters) extends BaseITTage {
   // Keep the table responses to process in s2
 
   val s1_resps = VecInit(tables.map(t => t.io.resp))
-  val s2_resps = RegEnable(s1_resps, io.s1_fire(3))
+  val s2_resps = utils.HackedAPI.HackedRegEnable(s1_resps, io.s1_fire(3))
 
-  val debug_pc_s1 = RegEnable(s0_pc_dup(3), io.s0_fire(3))
-  val debug_pc_s2 = RegEnable(debug_pc_s1, io.s1_fire(3))
-  val debug_pc_s3 = RegEnable(debug_pc_s2, io.s2_fire(3))
+  val debug_pc_s1 = utils.HackedAPI.HackedRegEnable(s0_pc_dup(3), io.s0_fire(3))
+  val debug_pc_s2 = utils.HackedAPI.HackedRegEnable(debug_pc_s1, io.s1_fire(3))
+  val debug_pc_s3 = utils.HackedAPI.HackedRegEnable(debug_pc_s2, io.s2_fire(3))
 
   val s2_tageTarget        = Wire(UInt(VAddrBits.W))
   val s2_providerTarget    = Wire(UInt(VAddrBits.W))
@@ -388,16 +388,16 @@ class ITTage(implicit p: Parameters) extends BaseITTage {
   val s2_providerCtr       = Wire(UInt(ITTageCtrBits.W))
   val s2_altProviderCtr    = Wire(UInt(ITTageCtrBits.W))
 
-  val s3_tageTarget_dup    = io.s2_fire.map(f => RegEnable(s2_tageTarget, f))
-  val s3_providerTarget    = RegEnable(s2_providerTarget, io.s2_fire(3))
-  val s3_altProviderTarget = RegEnable(s2_altProviderTarget, io.s2_fire(3))
-  val s3_provided          = RegEnable(s2_provided, io.s2_fire(3))
-  val s3_provider          = RegEnable(s2_provider, io.s2_fire(3))
-  val s3_altProvided       = RegEnable(s2_altProvided, io.s2_fire(3))
-  val s3_altProvider       = RegEnable(s2_altProvider, io.s2_fire(3))
-  val s3_providerU         = RegEnable(s2_providerU, io.s2_fire(3))
-  val s3_providerCtr       = RegEnable(s2_providerCtr, io.s2_fire(3))
-  val s3_altProviderCtr    = RegEnable(s2_altProviderCtr, io.s2_fire(3))
+  val s3_tageTarget_dup    = io.s2_fire.map(f => utils.HackedAPI.HackedRegEnable(s2_tageTarget, f))
+  val s3_providerTarget    = utils.HackedAPI.HackedRegEnable(s2_providerTarget, io.s2_fire(3))
+  val s3_altProviderTarget = utils.HackedAPI.HackedRegEnable(s2_altProviderTarget, io.s2_fire(3))
+  val s3_provided          = utils.HackedAPI.HackedRegEnable(s2_provided, io.s2_fire(3))
+  val s3_provider          = utils.HackedAPI.HackedRegEnable(s2_provider, io.s2_fire(3))
+  val s3_altProvided       = utils.HackedAPI.HackedRegEnable(s2_altProvided, io.s2_fire(3))
+  val s3_altProvider       = utils.HackedAPI.HackedRegEnable(s2_altProvider, io.s2_fire(3))
+  val s3_providerU         = utils.HackedAPI.HackedRegEnable(s2_providerU, io.s2_fire(3))
+  val s3_providerCtr       = utils.HackedAPI.HackedRegEnable(s2_providerCtr, io.s2_fire(3))
+  val s3_altProviderCtr    = utils.HackedAPI.HackedRegEnable(s2_altProviderCtr, io.s2_fire(3))
 
   // val updateBank = u.pc(log2Ceil(TageBanks)+instOffsetBits-1, instOffsetBits)
   val resp_meta = WireInit(0.U.asTypeOf(new ITTageMeta))
@@ -496,8 +496,8 @@ class ITTage(implicit p: Parameters) extends BaseITTage {
   val s2_firstEntry  = PriorityEncoder(s2_allocatableSlots)
   val s2_maskedEntry = PriorityEncoder(s2_allocatableSlots & s2_allocLFSR)
   val s2_allocEntry  = Mux(s2_allocatableSlots(s2_maskedEntry), s2_maskedEntry, s2_firstEntry)
-  resp_meta.allocate.valid := RegEnable(s2_allocatableSlots =/= 0.U, io.s2_fire(3))
-  resp_meta.allocate.bits  := RegEnable(s2_allocEntry, io.s2_fire(3))
+  resp_meta.allocate.valid := utils.HackedAPI.HackedRegEnable(s2_allocatableSlots =/= 0.U, io.s2_fire(3))
+  resp_meta.allocate.bits  := utils.HackedAPI.HackedRegEnable(s2_allocEntry, io.s2_fire(3))
 
   // Update in loop
   val updateRealTarget = update.full_target
@@ -562,17 +562,17 @@ class ITTage(implicit p: Parameters) extends BaseITTage {
   for (i <- 0 until ITTageNTables) {
     tables(i).io.update.valid := RegNext(updateMask(i), init = false.B)
     tables(i).io.update.reset_u := RegNext(updateResetU, init = false.B)
-    tables(i).io.update.correct := RegEnable(updateCorrect(i), updateMask(i))
-    tables(i).io.update.target := RegEnable(updateTarget(i), updateMask(i))
-    tables(i).io.update.old_target := RegEnable(updateOldTarget(i), updateMask(i))
-    tables(i).io.update.alloc := RegEnable(updateAlloc(i), updateMask(i))
-    tables(i).io.update.oldCtr := RegEnable(updateOldCtr(i), updateMask(i))
+    tables(i).io.update.correct := utils.HackedAPI.HackedRegEnable(updateCorrect(i), updateMask(i))
+    tables(i).io.update.target := utils.HackedAPI.HackedRegEnable(updateTarget(i), updateMask(i))
+    tables(i).io.update.old_target := utils.HackedAPI.HackedRegEnable(updateOldTarget(i), updateMask(i))
+    tables(i).io.update.alloc := utils.HackedAPI.HackedRegEnable(updateAlloc(i), updateMask(i))
+    tables(i).io.update.oldCtr := utils.HackedAPI.HackedRegEnable(updateOldCtr(i), updateMask(i))
 
-    tables(i).io.update.uValid := RegEnable(updateUMask(i), false.B, updateMask(i))
-    tables(i).io.update.u := RegEnable(updateU(i), updateMask(i))
-    tables(i).io.update.pc := RegEnable(update.pc, updateMask(i))
+    tables(i).io.update.uValid := utils.HackedAPI.HackedRegEnable(updateUMask(i), false.B, updateMask(i))
+    tables(i).io.update.u := utils.HackedAPI.HackedRegEnable(updateU(i), updateMask(i))
+    tables(i).io.update.pc := utils.HackedAPI.HackedRegEnable(update.pc, updateMask(i))
     // use fetch pc instead of instruction pc
-    tables(i).io.update.ghist := RegEnable(update.ghist, updateMask(i))
+    tables(i).io.update.ghist := utils.HackedAPI.HackedRegEnable(update.ghist, updateMask(i))
   }
 
   // all should be ready for req
@@ -639,7 +639,7 @@ class ITTage(implicit p: Parameters) extends BaseITTage {
     //     0.U, m.provider.valid, m.provider.bits, m.altDiffers, m.providerU, m.providerCtr, m.allocate.valid, m.allocate.bits
     //   )
     // }
-    val s2_resps = RegEnable(s1_resps, io.s1_fire(3))
+    val s2_resps = utils.HackedAPI.HackedRegEnable(s1_resps, io.s1_fire(3))
     XSDebug("req: v=%d, pc=0x%x\n", io.s0_fire(3), s0_pc_dup(3))
     XSDebug("s1_fire:%d, resp: pc=%x\n", io.s1_fire(3), debug_pc_s1)
     XSDebug("s2_fireOnLastCycle: resp: pc=%x, target=%x, hit=%b\n",

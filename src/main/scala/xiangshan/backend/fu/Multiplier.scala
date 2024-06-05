@@ -137,7 +137,7 @@ class ArrayMulDataModule(len: Int) extends Module {
 
       val needReg = depth == 4
       val toNextLayer = if(needReg)
-        columns_next.map(_.map(x => RegEnable(x, io.regEnables(1))))
+        columns_next.map(_.map(x => utils.HackedAPI.HackedRegEnable(x, io.regEnables(1))))
       else
         columns_next
 
@@ -145,7 +145,7 @@ class ArrayMulDataModule(len: Int) extends Module {
     }
   }
 
-  val columns_reg = columns.map(col => col.map(b => RegEnable(b, io.regEnables(0))))
+  val columns_reg = columns.map(col => col.map(b => utils.HackedAPI.HackedRegEnable(b, io.regEnables(0))))
   val (sum, carry) = addAll(cols = columns_reg, depth = 0)
 
   io.result := sum + carry

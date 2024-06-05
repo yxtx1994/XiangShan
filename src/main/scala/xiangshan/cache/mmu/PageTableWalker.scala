@@ -121,25 +121,25 @@ class PTW()(implicit p: Parameters) extends XSModule with HasPtwConst with HasPe
   val sent_to_pmp = idle === false.B && (s_pmp_check === false.B || mem_addr_update) && !finish
 
   val pageFault = pte.isPf(level)
-  val accessFault = RegEnable(io.pmp.resp.ld || io.pmp.resp.mmio, sent_to_pmp)
+  val accessFault = utils.HackedAPI.HackedRegEnable(io.pmp.resp.ld || io.pmp.resp.mmio, sent_to_pmp)
 
   val hptw_pageFault = RegInit(false.B)
   val hptw_accessFault = RegInit(false.B)
   val last_s2xlate = RegInit(false.B)
-  val stage1Hit = RegEnable(io.req.bits.stage1Hit, io.req.fire)
-  val stage1 = RegEnable(io.req.bits.stage1, io.req.fire)
+  val stage1Hit = utils.HackedAPI.HackedRegEnable(io.req.bits.stage1Hit, io.req.fire)
+  val stage1 = utils.HackedAPI.HackedRegEnable(io.req.bits.stage1, io.req.fire)
   val hptw_resp_stage2 = Reg(Bool()) 
 
   val ppn_af = pte.isAf()
   val find_pte = pte.isLeaf() || ppn_af || pageFault
   val to_find_pte = level === 1.U && find_pte === false.B
-  val source = RegEnable(io.req.bits.req_info.source, io.req.fire)
+  val source = utils.HackedAPI.HackedRegEnable(io.req.bits.req_info.source, io.req.fire)
 
   val l1addr = MakeAddr(satp.ppn, getVpnn(vpn, 2))
   val l2addr = MakeAddr(Mux(l1Hit, ppn, pte.ppn), getVpnn(vpn, 1))
   val mem_addr = Mux(af_level === 0.U, l1addr, l2addr)
 
-  val hptw_resp = RegEnable(io.hptw.resp.bits.h_resp, io.hptw.resp.fire)
+  val hptw_resp = utils.HackedAPI.HackedRegEnable(io.hptw.resp.bits.h_resp, io.hptw.resp.fire)
   val gpaddr = MuxCase(mem_addr, Seq(
     stage1Hit -> Cat(stage1.genPPN(), 0.U(offLen.W)),
     onlyS2xlate -> Cat(vpn, 0.U(offLen.W)),
@@ -520,7 +520,7 @@ class LLPTW(implicit p: Parameters) extends XSModule with HasPtwConst with HasPe
   val gpaddr = MakeGPAddr(io.in.bits.ppn, getVpnn(io.in.bits.req_info.vpn, 0))
   val hptw_resp = entries(hptw_resp_ptr_reg).hptw_resp
   val hpaddr = Cat(hptw_resp.genPPNS2(get_pn(gpaddr)), get_off(gpaddr))
-  val addr = RegEnable(MakeAddr(io.in.bits.ppn, getVpnn(io.in.bits.req_info.vpn, 0)), io.in.fire)
+  val addr = utils.HackedAPI.HackedRegEnable(MakeAddr(io.in.bits.ppn, getVpnn(io.in.bits.req_info.vpn, 0)), io.in.fire)
   io.pmp.req.valid := need_addr_check || hptw_need_addr_check
   io.pmp.req.bits.addr := Mux(hptw_need_addr_check, hpaddr, addr)
   io.pmp.req.bits.cmd := TlbCmd.read
@@ -755,14 +755,14 @@ class HPTW()(implicit p: Parameters) extends XSModule with HasPtwConst {
 
   val sent_to_pmp = !idle && (!s_pmp_check || mem_addr_update) && !finish
   val pageFault = pte.isPf(level)
-  val accessFault = RegEnable(io.pmp.resp.ld || io.pmp.resp.mmio, sent_to_pmp)
+  val accessFault = utils.HackedAPI.HackedRegEnable(io.pmp.resp.ld || io.pmp.resp.mmio, sent_to_pmp)
 
   val ppn_af = pte.isAf()
   val find_pte = pte.isLeaf() || ppn_af || pageFault
 
   val resp_valid = !idle && mem_addr_update && ((w_mem_resp && find_pte) || (s_pmp_check && accessFault))
   val id = Reg(UInt(log2Up(l2tlbParams.llptwsize).W))
-  val source = RegEnable(io.req.bits.source, io.req.fire)
+  val source = utils.HackedAPI.HackedRegEnable(io.req.bits.source, io.req.fire)
 
   io.req.ready := idle
   val resp = Wire(new HptwResp())

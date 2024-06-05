@@ -291,7 +291,7 @@ class UncacheBuffer(implicit p: Parameters) extends XSModule with HasCircularQue
 
   // s2: enqueue
   val s2_req = (0 until LoadPipelineWidth).map(i => {
-    RegEnable(s1_req(i), s1_valid(i))})
+    utils.HackedAPI.HackedRegEnable(s1_req(i), s1_valid(i))})
   val s2_valid = (0 until LoadPipelineWidth).map(i => {
     RegNext(s1_valid(i)) &&
     !s2_req(i).uop.robIdx.needFlush(RegNext(io.redirect)) &&
@@ -382,12 +382,12 @@ class UncacheBuffer(implicit p: Parameters) extends XSModule with HasCircularQue
   // uncache Writeback
   AddPipelineReg(ldout, io.ldout(0), false.B)
 
-  io.ld_raw_data(0)      := RegEnable(ld_raw_data, ldout.fire)
+  io.ld_raw_data(0)      := utils.HackedAPI.HackedRegEnable(ld_raw_data, ldout.fire)
   io.trigger(0).lqLoadAddrTriggerHitVec := RegNext(lqLoadAddrTriggerHitVec)
 
   for (i <- 0 until LoadPipelineWidth) {
     io.rob.mmio(i) := RegNext(s1_valid(i) && s1_req(i).mmio)
-    io.rob.uop(i) := RegEnable(s1_req(i).uop, s1_valid(i))
+    io.rob.uop(i) := utils.HackedAPI.HackedRegEnable(s1_req(i).uop, s1_valid(i))
   }
 
   // UncacheBuffer deallocate
@@ -456,13 +456,13 @@ class UncacheBuffer(implicit p: Parameters) extends XSModule with HasCircularQue
   })
   val oldestOneHot = selectOldestRedirect(allRedirect)
   val oldestRedirect = Mux1H(oldestOneHot, allRedirect)
-  val lastCycleRedirect = RegEnable(io.redirect, io.redirect.valid)
-  val lastLastCycleRedirect = RegEnable(lastCycleRedirect, lastCycleRedirect.valid)
+  val lastCycleRedirect = utils.HackedAPI.HackedRegEnable(io.redirect, io.redirect.valid)
+  val lastLastCycleRedirect = utils.HackedAPI.HackedRegEnable(lastCycleRedirect, lastCycleRedirect.valid)
   io.rollback.valid := GatedValidRegNext(oldestRedirect.valid &&
                       !oldestRedirect.bits.robIdx.needFlush(io.redirect) &&
                       !oldestRedirect.bits.robIdx.needFlush(lastCycleRedirect) &&
                       !oldestRedirect.bits.robIdx.needFlush(lastLastCycleRedirect))
-  io.rollback.bits := RegEnable(oldestRedirect.bits, oldestRedirect.valid)
+  io.rollback.bits := utils.HackedAPI.HackedRegEnable(oldestRedirect.bits, oldestRedirect.valid)
 
   //  perf counter
   val validCount = freeList.io.validCount

@@ -87,9 +87,9 @@ class FtbSlot(val offsetLen: Int, val subOffsetLen: Option[Int] = None)(implicit
         val last_stage_pc = last_stage.get._1
         val last_stage_pc_h = last_stage_pc(VAddrBits-1, offLen+1)
         val stage_en = last_stage.get._2
-        higher := RegEnable(last_stage_pc_h, stage_en)
-        higher_plus_one := RegEnable(last_stage_pc_h+1.U, stage_en)
-        higher_minus_one := RegEnable(last_stage_pc_h-1.U, stage_en)
+        higher := utils.HackedAPI.HackedRegEnable(last_stage_pc_h, stage_en)
+        higher_plus_one := utils.HackedAPI.HackedRegEnable(last_stage_pc_h+1.U, stage_en)
+        higher_minus_one := utils.HackedAPI.HackedRegEnable(last_stage_pc_h-1.U, stage_en)
       } else {
         higher := h
         higher_plus_one := h + 1.U
@@ -210,7 +210,7 @@ class FTBEntry(implicit p: Parameters) extends FTBEntry_part with FTBParams with
   def getOffsetVec = VecInit(brSlots.map(_.offset) :+ tailSlot.offset)
   def getFallThrough(pc: UInt, last_stage_entry: Option[Tuple2[FTBEntry, Bool]] = None) = {
     if (last_stage_entry.isDefined) {
-      var stashed_carry = RegEnable(last_stage_entry.get._1.carry, last_stage_entry.get._2)
+      var stashed_carry = utils.HackedAPI.HackedRegEnable(last_stage_entry.get._1.carry, last_stage_entry.get._2)
       getFallThroughAddr(pc, stashed_carry, pftAddr)
     } else {
       getFallThroughAddr(pc, carry, pftAddr)
@@ -357,10 +357,10 @@ class FTB(implicit p: Parameters) extends BasePredictor with FTBParams with BPUU
     io.req_pc.ready := ftb.io.r.req.ready
     io.u_req_pc.ready := ftb.io.r.req.ready
 
-    val req_tag = RegEnable(ftbAddr.getTag(io.req_pc.bits)(tagSize-1, 0), io.req_pc.valid)
-    val req_idx = RegEnable(ftbAddr.getIdx(io.req_pc.bits), io.req_pc.valid)
+    val req_tag = utils.HackedAPI.HackedRegEnable(ftbAddr.getTag(io.req_pc.bits)(tagSize-1, 0), io.req_pc.valid)
+    val req_idx = utils.HackedAPI.HackedRegEnable(ftbAddr.getIdx(io.req_pc.bits), io.req_pc.valid)
 
-    val u_req_tag = RegEnable(ftbAddr.getTag(io.u_req_pc.bits)(tagSize-1, 0), io.u_req_pc.valid)
+    val u_req_tag = utils.HackedAPI.HackedRegEnable(ftbAddr.getTag(io.u_req_pc.bits)(tagSize-1, 0), io.u_req_pc.valid)
 
     val read_entries = pred_rdata.map(_.entry)
     val read_tags    = pred_rdata.map(_.tag)
@@ -461,15 +461,15 @@ class FTB(implicit p: Parameters) extends BasePredictor with FTBParams with BPUU
   ftbBank.io.req_pc.bits := s0_pc_dup(0)
 
   val btb_enable_dup = dup(RegNext(io.ctrl.btb_enable))
-  val s2_ftb_entry_dup = io.s1_fire.map(f => RegEnable(ftbBank.io.read_resp, f))
-  val s3_ftb_entry_dup = io.s2_fire.zip(s2_ftb_entry_dup).map {case (f, e) => RegEnable(e, f)}
+  val s2_ftb_entry_dup = io.s1_fire.map(f => utils.HackedAPI.HackedRegEnable(ftbBank.io.read_resp, f))
+  val s3_ftb_entry_dup = io.s2_fire.zip(s2_ftb_entry_dup).map {case (f, e) => utils.HackedAPI.HackedRegEnable(e, f)}
 
   val s1_hit = ftbBank.io.read_hits.valid && io.ctrl.btb_enable
-  val s2_hit_dup = io.s1_fire.map(f => RegEnable(s1_hit, 0.B, f))
-  val s3_hit_dup = io.s2_fire.zip(s2_hit_dup).map {case (f, h) => RegEnable(h, 0.B, f)}
+  val s2_hit_dup = io.s1_fire.map(f => utils.HackedAPI.HackedRegEnable(s1_hit, 0.B, f))
+  val s3_hit_dup = io.s2_fire.zip(s2_hit_dup).map {case (f, h) => utils.HackedAPI.HackedRegEnable(h, 0.B, f)}
   val writeWay = ftbBank.io.read_hits.bits
 
-  // io.out.bits.resp := RegEnable(io.in.bits.resp_in(0), 0.U.asTypeOf(new BranchPredictionResp), io.s1_fire)
+  // io.out.bits.resp := utils.HackedAPI.HackedRegEnable(io.in.bits.resp_in(0), 0.U.asTypeOf(new BranchPredictionResp), io.s1_fire)
   io.out := io.in.bits.resp_in(0)
 
   io.out.s2.full_pred.zip(s2_hit_dup).map {case (fp, h) => fp.hit := h}
@@ -491,7 +491,7 @@ class FTB(implicit p: Parameters) extends BasePredictor with FTBParams with BPUU
       full_pred.fromFtbEntry(s3_ftb_entry, s3_pc, Some((s2_pc, s2_fire)))
 
   io.out.last_stage_ftb_entry := s3_ftb_entry_dup(0)
-  io.out.last_stage_meta := RegEnable(RegEnable(FTBMeta(writeWay.asUInt, s1_hit, GTimer()).asUInt, io.s1_fire(0)), io.s2_fire(0))
+  io.out.last_stage_meta := utils.HackedAPI.HackedRegEnable(utils.HackedAPI.HackedRegEnable(FTBMeta(writeWay.asUInt, s1_hit, GTimer()).asUInt, io.s1_fire(0)), io.s2_fire(0))
 
   // always taken logic
   for (i <- 0 until numBr) {

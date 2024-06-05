@@ -188,7 +188,7 @@ class ProbeQueue(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheModule w
 
   // delay probe req for 1 cycle
   val selected_req_valid = RegInit(false.B)
-  val selected_req_bits = RegEnable(pipe_req_arb.io.out.bits, pipe_req_arb.io.out.fire)
+  val selected_req_bits = utils.HackedAPI.HackedRegEnable(pipe_req_arb.io.out.bits, pipe_req_arb.io.out.fire)
   val selected_lrsc_blocked = Mux(
     pipe_req_arb.io.out.fire,
     io.lrsc_locked_block.valid && get_block(io.lrsc_locked_block.bits) === get_block(pipe_req_arb.io.out.bits.addr),

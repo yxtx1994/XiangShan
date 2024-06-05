@@ -32,15 +32,15 @@ class IntToFPDataModule(latency: Int)(implicit p: Parameters) extends FPUDataMod
   val ctrl = io.in.fpCtrl
   val in = io.in.src(0)
   val typ = ctrl.typ
-  val intValue = RegEnable(Mux(ctrl.wflags,
+  val intValue = utils.HackedAPI.HackedRegEnable(Mux(ctrl.wflags,
     Mux(typ(1),
       Mux(typ(0), ZeroExt(in, XLEN), SignExt(in, XLEN)),
       Mux(typ(0), ZeroExt(in(31, 0), XLEN), SignExt(in(31, 0), XLEN))
     ),
     in
   ), regEnables(0))
-  val ctrlReg = RegEnable(ctrl, regEnables(0))
-  val rmReg = RegEnable(rm, regEnables(0))
+  val ctrlReg = utils.HackedAPI.HackedRegEnable(ctrl, regEnables(0))
+  val rmReg = utils.HackedAPI.HackedRegEnable(rm, regEnables(0))
 
   // stage2
   val s2_tag = ctrlReg.typeTagOut
@@ -70,8 +70,8 @@ class IntToFPDataModule(latency: Int)(implicit p: Parameters) extends FPUDataMod
   }
 
   // stage3
-  val s3_out = RegEnable(mux, regEnables(1))
-  val s3_tag = RegEnable(s2_tag, regEnables(1))
+  val s3_out = utils.HackedAPI.HackedRegEnable(mux, regEnables(1))
+  val s3_tag = utils.HackedAPI.HackedRegEnable(s2_tag, regEnables(1))
 
   io.out.fflags := s3_out.exc
   io.out.data := FPU.box(s3_out.data, s3_tag)

@@ -163,7 +163,7 @@ class SSIT(implicit p: Parameters) extends XSModule {
 
   // update stage 0: read ssit
   val s1_mempred_update_req_valid = RegNext(io.update.valid)
-  val s1_mempred_update_req = RegEnable(io.update, io.update.valid)
+  val s1_mempred_update_req = utils.HackedAPI.HackedRegEnable(io.update, io.update.valid)
 
   // when io.update.valid, take over ssit read port
   when (io.update.valid) {
@@ -188,12 +188,12 @@ class SSIT(implicit p: Parameters) extends XSModule {
 
   // update stage 2, update ssit data_array
   val s2_mempred_update_req_valid = RegNext(s1_mempred_update_req_valid)
-  val s2_mempred_update_req = RegEnable(s1_mempred_update_req, s1_mempred_update_req_valid)
-  val s2_loadAssigned = RegEnable(s1_loadAssigned, s1_mempred_update_req_valid)
-  val s2_storeAssigned = RegEnable(s1_storeAssigned, s1_mempred_update_req_valid)
-  val s2_loadOldSSID = RegEnable(s1_loadOldSSID, s1_mempred_update_req_valid)
-  val s2_storeOldSSID = RegEnable(s1_storeOldSSID, s1_mempred_update_req_valid)
-  val s2_loadStrict = RegEnable(s1_loadStrict, s1_mempred_update_req_valid)
+  val s2_mempred_update_req = utils.HackedAPI.HackedRegEnable(s1_mempred_update_req, s1_mempred_update_req_valid)
+  val s2_loadAssigned = utils.HackedAPI.HackedRegEnable(s1_loadAssigned, s1_mempred_update_req_valid)
+  val s2_storeAssigned = utils.HackedAPI.HackedRegEnable(s1_storeAssigned, s1_mempred_update_req_valid)
+  val s2_loadOldSSID = utils.HackedAPI.HackedRegEnable(s1_loadOldSSID, s1_mempred_update_req_valid)
+  val s2_storeOldSSID = utils.HackedAPI.HackedRegEnable(s1_storeOldSSID, s1_mempred_update_req_valid)
+  val s2_loadStrict = utils.HackedAPI.HackedRegEnable(s1_loadStrict, s1_mempred_update_req_valid)
 
   val s2_ssidIsSame = s2_loadOldSSID === s2_storeOldSSID
   // for now we just use lowest bits of ldpc as store set id

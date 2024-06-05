@@ -179,7 +179,7 @@ class WbDataPath(params: BackendParams)(implicit p: Parameters) extends XSModule
 
       if (exuOut.bits.params.writeIntRf && exuOut.bits.params.isVfExeUnit) {
         intWrite := RegNext(exuOut.valid && writeCond._1(0))
-        intArbiterInput.bits := RegEnable(exuOut.bits, exuOut.valid)
+        intArbiterInput.bits := utils.HackedAPI.HackedRegEnable(exuOut.bits, exuOut.valid)
       }
 
       println(s"[WbDataPath] exu: ${exuOut.bits.params.exuIdx}, uncertain: ${exuOut.bits.params.hasUncertainLatency}, certain: ${exuOut.bits.params.latencyCertain}")

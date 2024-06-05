@@ -92,9 +92,9 @@ class SCTable(val nRows: Int, val ctrBits: Int, val histLen: Int)(implicit p: Pa
   def ctrUpdate(ctr: SInt, cond: Bool): SInt = signedSatUpdate(ctr, ctrBits, cond)
 
   val s0_idx = getIdx(io.req.bits.pc, io.req.bits.folded_hist)
-  val s1_idx = RegEnable(s0_idx, io.req.valid)
+  val s1_idx = utils.HackedAPI.HackedRegEnable(s0_idx, io.req.valid)
 
-  val s1_pc = RegEnable(io.req.bits.pc, io.req.fire)
+  val s1_pc = utils.HackedAPI.HackedRegEnable(io.req.bits.pc, io.req.fire)
   val s1_unhashed_idx = s1_pc >> instOffsetBits
 
   table.io.r.req.valid := io.req.valid
@@ -276,13 +276,13 @@ trait HasSC extends HasSCParameter with HasPerfEvents { this: Tage =>
           ParallelSingedExpandingAdd(s1_scResps map (r => getCentered(r.ctrs(w)(i)))) // TODO: rewrite with wallace tree
         }
       )
-      val s2_scTableSums = RegEnable(s1_scTableSums, io.s1_fire(3))
-      val s2_tagePrvdCtrCentered = getPvdrCentered(RegEnable(s1_providerResps(w).ctr, io.s1_fire(3)))
+      val s2_scTableSums = utils.HackedAPI.HackedRegEnable(s1_scTableSums, io.s1_fire(3))
+      val s2_tagePrvdCtrCentered = getPvdrCentered(utils.HackedAPI.HackedRegEnable(s1_providerResps(w).ctr, io.s1_fire(3)))
       val s2_totalSums = s2_scTableSums.map(_ +& s2_tagePrvdCtrCentered)
       val s2_sumAboveThresholds = VecInit((0 to 1).map(i => aboveThreshold(s2_scTableSums(i), s2_tagePrvdCtrCentered, useThresholds(w))))
       val s2_scPreds = VecInit(s2_totalSums.map(_ >= 0.S))
 
-      val s2_scResps = VecInit(RegEnable(s1_scResps, io.s1_fire(3)).map(_.ctrs(w)))
+      val s2_scResps = VecInit(utils.HackedAPI.HackedRegEnable(s1_scResps, io.s1_fire(3)).map(_.ctrs(w)))
       val s2_scCtrs = VecInit(s2_scResps.map(_(s2_tageTakens_dup(3)(w).asUInt)))
       val s2_chooseBit = s2_tageTakens_dup(3)(w)
 
@@ -292,11 +292,11 @@ trait HasSC extends HasSCParameter with HasPerfEvents { this: Tage =>
           s2_tageTakens_dup(3)(w)
         )
 
-      val s3_disagree = RegEnable(s2_disagree, io.s2_fire(3))
+      val s3_disagree = utils.HackedAPI.HackedRegEnable(s2_disagree, io.s2_fire(3))
       io.out.last_stage_spec_info.sc_disagree.map(_ := s3_disagree)
 
-      scMeta.scPreds(w)    := RegEnable(s2_scPreds(s2_chooseBit), io.s2_fire(3))
-      scMeta.ctrs(w)       := RegEnable(s2_scCtrs, io.s2_fire(3))
+      scMeta.scPreds(w)    := utils.HackedAPI.HackedRegEnable(s2_scPreds(s2_chooseBit), io.s2_fire(3))
+      scMeta.ctrs(w)       := utils.HackedAPI.HackedRegEnable(s2_scCtrs, io.s2_fire(3))
 
       when (s2_provideds(w)) {
         s2_sc_used(w) := true.B
@@ -315,7 +315,7 @@ trait HasSC extends HasSCParameter with HasPerfEvents { this: Tage =>
         }
       }
 
-      val s3_pred_dup = io.s2_fire.map(f => RegEnable(s2_pred, f))
+      val s3_pred_dup = io.s2_fire.map(f => utils.HackedAPI.HackedRegEnable(s2_pred, f))
       val sc_enable_dup = dup(RegNext(io.ctrl.sc_enable))
       for (sc_enable & fp & s3_pred <-
         sc_enable_dup zip io.out.s3.full_pred zip s3_pred_dup) {
@@ -377,11 +377,11 @@ trait HasSC extends HasSCParameter with HasPerfEvents { this: Tage =>
       for (i <- 0 until SCNTables) {
         val realWen = realWens(i)
         scTables(i).io.update.mask(b) := RegNext(scUpdateMask(b)(i))
-        scTables(i).io.update.tagePreds(b) := RegEnable(scUpdateTagePreds(b), realWen)
-        scTables(i).io.update.takens(b) := RegEnable(scUpdateTakens(b), realWen)
-        scTables(i).io.update.oldCtrs(b) := RegEnable(scUpdateOldCtrs(b)(i), realWen)
-        scTables(i).io.update.pc := RegEnable(update.pc, realWen)
-        scTables(i).io.update.ghist := RegEnable(io.update.bits.ghist, realWen)
+        scTables(i).io.update.tagePreds(b) := utils.HackedAPI.HackedRegEnable(scUpdateTagePreds(b), realWen)
+        scTables(i).io.update.takens(b) := utils.HackedAPI.HackedRegEnable(scUpdateTakens(b), realWen)
+        scTables(i).io.update.oldCtrs(b) := utils.HackedAPI.HackedRegEnable(scUpdateOldCtrs(b)(i), realWen)
+        scTables(i).io.update.pc := utils.HackedAPI.HackedRegEnable(update.pc, realWen)
+        scTables(i).io.update.ghist := utils.HackedAPI.HackedRegEnable(io.update.bits.ghist, realWen)
       }
     }
 

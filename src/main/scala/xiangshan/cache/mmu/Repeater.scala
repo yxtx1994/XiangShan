@@ -56,8 +56,8 @@ class PTWRepeater(Width: Int = 1, FenceDelay: Int)(implicit p: Parameters) exten
     arb.io.out
   }
   val (tlb, ptw, flush) = (io.tlb, io.ptw, DelayN(io.sfence.valid || io.csr.satp.changed || io.csr.vsatp.changed || io.csr.hgatp.changed, FenceDelay))
-  val req = RegEnable(req_in.bits, req_in.fire)
-  val resp = RegEnable(ptw.resp.bits, ptw.resp.fire)
+  val req = utils.HackedAPI.HackedRegEnable(req_in.bits, req_in.fire)
+  val resp = utils.HackedAPI.HackedRegEnable(ptw.resp.bits, ptw.resp.fire)
   val haveOne = BoolStopWatch(req_in.fire, tlb.resp.fire || flush)
   val sent = BoolStopWatch(ptw.req(0).fire, req_in.fire || flush)
   val recv = BoolStopWatch(ptw.resp.fire && haveOne, req_in.fire || flush)
@@ -105,14 +105,14 @@ class PTWRepeaterNB(Width: Int = 1, passReady: Boolean = false, FenceDelay: Int)
    */
 
   // tlb -> repeater -> ptw
-  val req = RegEnable(req_in.bits, req_in.fire)
+  val req = utils.HackedAPI.HackedRegEnable(req_in.bits, req_in.fire)
   val sent = BoolStopWatch(req_in.fire, ptw.req(0).fire || flush)
   req_in.ready := !sent || { if (passReady) ptw.req(0).ready else false.B }
   ptw.req(0).valid := sent
   ptw.req(0).bits := req
 
   // ptw -> repeater -> tlb
-  val resp = RegEnable(ptw.resp.bits, ptw.resp.fire)
+  val resp = utils.HackedAPI.HackedRegEnable(ptw.resp.bits, ptw.resp.fire)
   val recv = BoolStopWatch(ptw.resp.fire, tlb.resp.fire || flush)
   ptw.resp.ready := !recv || { if (passReady) tlb.resp.ready else false.B }
   tlb.resp.valid := recv
@@ -375,7 +375,7 @@ class PTWNewFilter(Width: Int, Size: Int, FenceDelay: Int)(implicit p: Parameter
   prefetch_filter.map(_.tlb.req := io.tlb.req.drop(LdExuCnt + 1 + StaCnt))
 
   val flush = DelayN(io.sfence.valid || io.csr.satp.changed || (io.csr.priv.virt && io.csr.vsatp.changed), FenceDelay)
-  val ptwResp = RegEnable(io.ptw.resp.bits, io.ptw.resp.fire)
+  val ptwResp = utils.HackedAPI.HackedRegEnable(io.ptw.resp.bits, io.ptw.resp.fire)
   val ptwResp_valid = Cat(filter.map(_.refill)).orR
   filter.map(_.tlb.resp.ready := true.B)
   filter.map(_.ptw.resp.valid := RegNext(io.ptw.resp.fire, init = false.B))
@@ -479,7 +479,7 @@ class PTWFilter(Width: Int, Size: Int, FenceDelay: Int)(implicit p: Parameters) 
   }
 
   val canEnqueue = Wire(Bool()) // NOTE: actually enqueue
-  val ptwResp = RegEnable(io.ptw.resp.bits, io.ptw.resp.fire)
+  val ptwResp = utils.HackedAPI.HackedRegEnable(io.ptw.resp.bits, io.ptw.resp.fire)
   val ptwResp_OldMatchVec = vpn.zip(v).zip(s2xlate).map { case (((vpn, v), s2xlate)) =>{
     v && ptwResp_hit(vpn, s2xlate, io.ptw.resp.bits)
   }
@@ -495,7 +495,7 @@ class PTWFilter(Width: Int, Size: Int, FenceDelay: Int)(implicit p: Parameters) 
       !(ptwResp_valid && ptwResp_hit(io.tlb.req(i).bits.vpn, io.tlb.req(i).bits.s2xlate, ptwResp)) &&
       !Cat(lastReqMatchVec_early(i)).orR,
       init = false.B)
-    tlb_req(i).bits := RegEnable(io.tlb.req(i).bits, io.tlb.req(i).valid)
+    tlb_req(i).bits := utils.HackedAPI.HackedRegEnable(io.tlb.req(i).bits, io.tlb.req(i).valid)
   }
 
   val oldMatchVec = oldMatchVec_early.map(a => RegNext(Cat(a).orR))
@@ -509,8 +509,8 @@ class PTWFilter(Width: Int, Size: Int, FenceDelay: Int)(implicit p: Parameters) 
   val update_ports = v.indices.map(i => oldMatchVec2.map(j => j(i)))
   val ports_init = (0 until Width).map(i => (1 << i).U(Width.W))
   val filter_ports = (0 until Width).map(i => ParallelMux(newMatchVec(i).zip(ports_init).drop(i)))
-  val resp_vector = RegEnable(ParallelMux(ptwResp_OldMatchVec zip ports), io.ptw.resp.fire)
-  val resp_getGpa = RegEnable(ParallelMux(ptwResp_OldMatchVec zip getGpa), io.ptw.resp.fire)
+  val resp_vector = utils.HackedAPI.HackedRegEnable(ParallelMux(ptwResp_OldMatchVec zip ports), io.ptw.resp.fire)
+  val resp_getGpa = utils.HackedAPI.HackedRegEnable(ParallelMux(ptwResp_OldMatchVec zip getGpa), io.ptw.resp.fire)
 
   def canMerge(index: Int) : Bool = {
     ptwResp_newMatchVec(index) || oldMatchVec(index) ||

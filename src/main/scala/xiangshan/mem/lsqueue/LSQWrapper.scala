@@ -371,9 +371,9 @@ class LsqEnqCtrl(implicit p: Parameters) extends XSModule
   io.enqLsq.req.zip(io.enq.req).zip(io.enq.resp).foreach{ case ((toLsq, enq), resp) =>
     val do_enq = enq.valid && !io.redirect.valid && io.enq.canAccept
     toLsq.valid := RegNext(do_enq)
-    toLsq.bits := RegEnable(enq.bits, do_enq)
-    toLsq.bits.lqIdx := RegEnable(resp.lqIdx, do_enq)
-    toLsq.bits.sqIdx := RegEnable(resp.sqIdx, do_enq)
+    toLsq.bits := utils.HackedAPI.HackedRegEnable(enq.bits, do_enq)
+    toLsq.bits.lqIdx := utils.HackedAPI.HackedRegEnable(resp.lqIdx, do_enq)
+    toLsq.bits.sqIdx := utils.HackedAPI.HackedRegEnable(resp.sqIdx, do_enq)
   }
 
 }

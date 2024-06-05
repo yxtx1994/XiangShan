@@ -121,10 +121,10 @@ class StrideMetaArray(implicit p: Parameters) extends XSModule with HasStridePre
 
   // s1: alloc or update
   val s1_valid = GatedValidRegNext(s0_valid)
-  val s1_index = RegEnable(s0_index, s0_valid)
-  val s1_pc_hash = RegEnable(s0_pc_hash, s0_valid)
-  val s1_vaddr = RegEnable(s0_vaddr, s0_valid)
-  val s1_hit = RegEnable(s0_hit, s0_valid)
+  val s1_index = utils.HackedAPI.HackedRegEnable(s0_index, s0_valid)
+  val s1_pc_hash = utils.HackedAPI.HackedRegEnable(s0_pc_hash, s0_valid)
+  val s1_vaddr = utils.HackedAPI.HackedRegEnable(s0_vaddr, s0_valid)
+  val s1_hit = utils.HackedAPI.HackedRegEnable(s0_hit, s0_valid)
   val s1_alloc = s1_valid && !s1_hit
   val s1_update = s1_valid && s1_hit
   val s1_stride = array(s1_index).stride
@@ -151,8 +151,8 @@ class StrideMetaArray(implicit p: Parameters) extends XSModule with HasStridePre
   val l2_stride_ratio = l2_stride_ratio_const(3, 0)
   // s2: calculate L1 & L2 pf addr
   val s2_valid = GatedValidRegNext(s1_valid && s1_can_send_pf)
-  val s2_vaddr = RegEnable(s1_vaddr, s1_valid && s1_can_send_pf)
-  val s2_stride = RegEnable(s1_stride, s1_valid && s1_can_send_pf)
+  val s2_vaddr = utils.HackedAPI.HackedRegEnable(s1_vaddr, s1_valid && s1_can_send_pf)
+  val s2_stride = utils.HackedAPI.HackedRegEnable(s1_stride, s1_valid && s1_can_send_pf)
   val s2_l1_depth = s2_stride << l1_stride_ratio
   val s2_l1_pf_vaddr = (s2_vaddr + s2_l1_depth)(VAddrBits - 1, 0)
   val s2_l2_depth = s2_stride << l2_stride_ratio
@@ -182,12 +182,12 @@ class StrideMetaArray(implicit p: Parameters) extends XSModule with HasStridePre
 
   // s3: send l1 pf out
   val s3_valid = if (LOOK_UP_STREAM) GatedValidRegNext(s2_valid) && !io.stream_lookup_resp else GatedValidRegNext(s2_valid)
-  val s3_l1_pf_req_bits = RegEnable(s2_l1_pf_req_bits, s2_valid)
-  val s3_l2_pf_req_bits = RegEnable(s2_l2_pf_req_bits, s2_valid)
+  val s3_l1_pf_req_bits = utils.HackedAPI.HackedRegEnable(s2_l1_pf_req_bits, s2_valid)
+  val s3_l2_pf_req_bits = utils.HackedAPI.HackedRegEnable(s2_l2_pf_req_bits, s2_valid)
 
   // s4: send l2 pf out
   val s4_valid = GatedValidRegNext(s3_valid)
-  val s4_l2_pf_req_bits = RegEnable(s3_l2_pf_req_bits, s3_valid)
+  val s4_l2_pf_req_bits = utils.HackedAPI.HackedRegEnable(s3_l2_pf_req_bits, s3_valid)
 
   io.l1_prefetch_req.valid := s3_valid
   io.l1_prefetch_req.bits := s3_l1_pf_req_bits

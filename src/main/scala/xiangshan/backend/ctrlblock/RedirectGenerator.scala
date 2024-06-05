@@ -71,10 +71,10 @@ class RedirectGenerator(implicit p: Parameters) extends XSModule
   io.redirectPcRead.ptr := oldestRedirect.bits.ftqIdx
   io.redirectPcRead.offset := oldestRedirect.bits.ftqOffset
 
-  val s1_jumpTarget = RegEnable(jumpOut.bits.cfiUpdate.target, jumpOut.valid)
-  val s1_brhTarget = RegEnable(oldestExuRedirect.bits.cfiUpdate.target, oldestExuRedirect.valid)
+  val s1_jumpTarget = utils.HackedAPI.HackedRegEnable(jumpOut.bits.cfiUpdate.target, jumpOut.valid)
+  val s1_brhTarget = utils.HackedAPI.HackedRegEnable(oldestExuRedirect.bits.cfiUpdate.target, oldestExuRedirect.valid)
   val s1_pd = RegNext(oldestExuPredecode)
-  val s1_redirect_bits_reg = RegEnable(oldestRedirect.bits, oldestValid)
+  val s1_redirect_bits_reg = utils.HackedAPI.HackedRegEnable(oldestRedirect.bits, oldestValid)
   val s1_redirect_valid_reg = GatedValidRegNext(oldestValid)
   val s1_redirect_onehot = VecInit(oldestOneHot.map(x => GatedValidRegNext(x)))
 
@@ -105,9 +105,9 @@ class RedirectGenerator(implicit p: Parameters) extends XSModule
   // stage2CfiUpdate.taken := s1_redirect_bits_reg.cfiUpdate.taken
   // stage2CfiUpdate.isMisPred := s1_redirect_bits_reg.cfiUpdate.isMisPred
 
-  val s2_target = RegEnable(target, s1_redirect_valid_reg)
-  val s2_pc = RegEnable(real_pc, s1_redirect_valid_reg)
-  val s2_redirect_bits_reg = RegEnable(s1_redirect_bits_reg, s1_redirect_valid_reg)
+  val s2_target = utils.HackedAPI.HackedRegEnable(target, s1_redirect_valid_reg)
+  val s2_pc = utils.HackedAPI.HackedRegEnable(real_pc, s1_redirect_valid_reg)
+  val s2_redirect_bits_reg = utils.HackedAPI.HackedRegEnable(s1_redirect_bits_reg, s1_redirect_valid_reg)
   val s2_redirect_valid_reg = GatedValidRegNext(s1_redirect_valid_reg && !robFlush, init = false.B)
 
   io.stage3Redirect.valid := s2_redirect_valid_reg
@@ -121,10 +121,10 @@ class RedirectGenerator(implicit p: Parameters) extends XSModule
   // update load violation predictor if load violation redirect triggered
   io.memPredUpdate.valid := GatedValidRegNext(s1_isReplay && s1_redirect_valid_reg && s2_redirect_bits_reg.flushItself(), init = false.B)
   // update wait table
-  io.memPredUpdate.waddr := RegEnable(XORFold(real_pc(VAddrBits - 1, 1), MemPredPCWidth), s1_isReplay && s1_redirect_valid_reg)
+  io.memPredUpdate.waddr := utils.HackedAPI.HackedRegEnable(XORFold(real_pc(VAddrBits - 1, 1), MemPredPCWidth), s1_isReplay && s1_redirect_valid_reg)
   io.memPredUpdate.wdata := true.B
   // update store set
-  io.memPredUpdate.ldpc := RegEnable(XORFold(real_pc(VAddrBits - 1, 1), MemPredPCWidth), s1_isReplay && s1_redirect_valid_reg)
+  io.memPredUpdate.ldpc := utils.HackedAPI.HackedRegEnable(XORFold(real_pc(VAddrBits - 1, 1), MemPredPCWidth), s1_isReplay && s1_redirect_valid_reg)
   // store pc is ready 1 cycle after s1_isReplay is judged
   io.memPredUpdate.stpc := XORFold(store_pc(VAddrBits - 1, 1), MemPredPCWidth)
 

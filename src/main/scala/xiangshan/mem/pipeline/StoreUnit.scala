@@ -205,12 +205,12 @@ class StoreUnit(implicit p: Parameters) extends XSModule
   // --------------------------------------------------------------------------------
   // TLB resp (send paddr to dcache)
   val s1_valid  = RegInit(false.B)
-  val s1_in     = RegEnable(s0_out, s0_fire)
+  val s1_in     = utils.HackedAPI.HackedRegEnable(s0_out, s0_fire)
   val s1_out    = Wire(new LsPipelineBundle)
   val s1_kill   = Wire(Bool())
   val s1_can_go = s2_ready
   val s1_fire   = s1_valid && !s1_kill && s1_can_go
-  val s1_vecActive    = RegEnable(s0_out.vecActive, true.B, s0_fire)
+  val s1_vecActive    = utils.HackedAPI.HackedRegEnable(s0_out.vecActive, true.B, s0_fire)
 
   // mmio cbo decoder
   val s1_mmio_cbo  = s1_in.uop.fuOpType === LSUOpType.cbo_clean ||
@@ -221,8 +221,8 @@ class StoreUnit(implicit p: Parameters) extends XSModule
   val s1_tlb_miss  = io.tlb.resp.bits.miss
   val s1_mmio      = s1_mmio_cbo
   val s1_exception = ExceptionNO.selectByFu(s1_out.uop.exceptionVec, StaCfg).asUInt.orR
-  val s1_isvec     = RegEnable(s0_out.isvec, false.B, s0_fire)
-  // val s1_isLastElem = RegEnable(s0_isLastElem, false.B, s0_fire)
+  val s1_isvec     = utils.HackedAPI.HackedRegEnable(s0_out.isvec, false.B, s0_fire)
+  // val s1_isLastElem = utils.HackedAPI.HackedRegEnable(s0_isLastElem, false.B, s0_fire)
   s1_kill := s1_in.uop.robIdx.needFlush(io.redirect) || (s1_tlb_miss && !s1_isvec)
 
   s1_ready := !s1_valid || s1_kill || s2_ready
@@ -240,7 +240,7 @@ class StoreUnit(implicit p: Parameters) extends XSModule
 
   // issue
   io.issue.valid := s1_valid && !s1_tlb_miss && !s1_in.isHWPrefetch && !s1_isvec
-  io.issue.bits  := RegEnable(s0_stin, s0_valid)
+  io.issue.bits  := utils.HackedAPI.HackedRegEnable(s0_stin, s0_valid)
 
 
   // Send TLB feedback to store issue queue
@@ -296,12 +296,12 @@ class StoreUnit(implicit p: Parameters) extends XSModule
   // --------------------------------------------------------------------------------
   // mmio check
   val s2_valid  = RegInit(false.B)
-  val s2_in     = RegEnable(s1_out, s1_fire)
+  val s2_in     = utils.HackedAPI.HackedRegEnable(s1_out, s1_fire)
   val s2_out    = Wire(new LsPipelineBundle)
   val s2_kill   = Wire(Bool())
   val s2_can_go = s3_ready
   val s2_fire   = s2_valid && !s2_kill && s2_can_go
-  val s2_vecActive    = RegEnable(s1_out.vecActive, true.B, s1_fire)
+  val s2_vecActive    = utils.HackedAPI.HackedRegEnable(s1_out.vecActive, true.B, s1_fire)
 
   s2_ready := !s2_valid || s2_kill || s3_ready
   when (s1_fire) { s2_valid := true.B }
@@ -362,12 +362,12 @@ class StoreUnit(implicit p: Parameters) extends XSModule
   // --------------------------------------------------------------------------------
   // store write back
   val s3_valid  = RegInit(false.B)
-  val s3_in     = RegEnable(s2_out, s2_fire)
+  val s3_in     = utils.HackedAPI.HackedRegEnable(s2_out, s2_fire)
   val s3_out    = Wire(new MemExuOutput(isVector = true))
   val s3_kill   = s3_in.uop.robIdx.needFlush(io.redirect)
   val s3_can_go = s3_ready
   val s3_fire   = s3_valid && !s3_kill && s3_can_go
-  val s3_vecFeedback = RegEnable(s2_vecFeedback, s2_fire)
+  val s3_vecFeedback = utils.HackedAPI.HackedRegEnable(s2_vecFeedback, s2_fire)
 
   when (s2_fire) { s3_valid := (!s2_mmio || s2_exception) && !s2_out.isHWPrefetch  }
   .elsewhen (s3_fire) { s3_valid := false.B }
@@ -419,8 +419,8 @@ class StoreUnit(implicit p: Parameters) extends XSModule
 
       sx_ready(i) := !sx_valid(i) || cur_kill || (if (i == TotalDelayCycles) io.stout.ready else sx_ready(i+1))
       val sx_valid_can_go = prev_fire || cur_fire || cur_kill
-      sx_valid(i) := RegEnable(Mux(prev_fire, true.B, false.B), false.B, sx_valid_can_go)
-      sx_in(i) := RegEnable(sx_in(i-1), prev_fire)
+      sx_valid(i) := utils.HackedAPI.HackedRegEnable(Mux(prev_fire, true.B, false.B), false.B, sx_valid_can_go)
+      sx_in(i) := utils.HackedAPI.HackedRegEnable(sx_in(i-1), prev_fire)
     }
   }
   val sx_last_valid = sx_valid.takeRight(1).head

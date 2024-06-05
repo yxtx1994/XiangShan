@@ -234,9 +234,9 @@ class ICacheMainPipe(implicit p: Parameters) extends ICacheModule
   /** s1 control */
   val s1_valid = generatePipeControl(lastFire = s0_fire, thisFire = s1_fire, thisFlush = false.B, lastFlush = false.B)
 
-  val s1_req_vaddr   = RegEnable(s0_final_vaddr, s0_fire)
-  val s1_req_vsetIdx = RegEnable(s0_final_vsetIdx, s0_fire)
-  val s1_double_line = RegEnable(s0_final_double_line, s0_fire)
+  val s1_req_vaddr   = utils.HackedAPI.HackedRegEnable(s0_final_vaddr, s0_fire)
+  val s1_req_vsetIdx = utils.HackedAPI.HackedRegEnable(s0_final_vsetIdx, s0_fire)
+  val s1_double_line = utils.HackedAPI.HackedRegEnable(s0_final_double_line, s0_fire)
 
   /** tlb request and response */
   fromITLB.foreach(_.ready := true.B)
@@ -428,18 +428,18 @@ class ICacheMainPipe(implicit p: Parameters) extends ICacheModule
 
   /** s2 data */
   // val mmio = fromPMP.map(port => port.mmio) // TODO: handle it
-  val (s2_req_paddr , s2_req_vaddr) = (RegEnable(s1_req_paddr, s1_fire), RegEnable(s1_req_vaddr, s1_fire))
-  val s2_req_gpaddr           = RegEnable(s1_req_gpaddr,        s1_fire)
-  val s2_req_vsetIdx          = RegEnable(s1_req_vsetIdx, 0.U.asTypeOf(s1_req_vsetIdx), s1_fire)
-  val s2_req_ptags            = RegEnable(s1_req_ptags,         s1_fire)
-  val s2_double_line          = RegEnable(s1_double_line,       s1_fire)
-  val s2_port_hit             = RegEnable(s1_port_hit,          s1_fire)
-  val s2_waymask              = RegEnable(s1_victim_oh,         s1_fire)
-  val s2_tag_match_vec        = RegEnable(s1_tag_match_vec,     s1_fire)
+  val (s2_req_paddr , s2_req_vaddr) = (utils.HackedAPI.HackedRegEnable(s1_req_paddr, s1_fire), utils.HackedAPI.HackedRegEnable(s1_req_vaddr, s1_fire))
+  val s2_req_gpaddr           = utils.HackedAPI.HackedRegEnable(s1_req_gpaddr,        s1_fire)
+  val s2_req_vsetIdx          = utils.HackedAPI.HackedRegEnable(s1_req_vsetIdx, 0.U.asTypeOf(s1_req_vsetIdx), s1_fire)
+  val s2_req_ptags            = utils.HackedAPI.HackedRegEnable(s1_req_ptags,         s1_fire)
+  val s2_double_line          = utils.HackedAPI.HackedRegEnable(s1_double_line,       s1_fire)
+  val s2_port_hit             = utils.HackedAPI.HackedRegEnable(s1_port_hit,          s1_fire)
+  val s2_waymask              = utils.HackedAPI.HackedRegEnable(s1_victim_oh,         s1_fire)
+  val s2_tag_match_vec        = utils.HackedAPI.HackedRegEnable(s1_tag_match_vec,     s1_fire)
 
-  val s2_meta_errors          = RegEnable(s1_meta_errors,    s1_fire)
-  val s2_data_errorBits       = RegEnable(s1_data_errorBits, s1_fire)
-  val s2_data_cacheline       = RegEnable(s1_data_cacheline, s1_fire)
+  val s2_meta_errors          = utils.HackedAPI.HackedRegEnable(s1_meta_errors,    s1_fire)
+  val s2_data_errorBits       = utils.HackedAPI.HackedRegEnable(s1_data_errorBits, s1_fire)
+  val s2_data_cacheline       = utils.HackedAPI.HackedRegEnable(s1_data_cacheline, s1_fire)
 
   /** send req info of s1 and s2 to IPrefetchPipe for filter request */
   toIPrefetch.s1Info(0).paddr  := s1_req_paddr(0)
@@ -459,9 +459,9 @@ class ICacheMainPipe(implicit p: Parameters) extends ICacheModule
     ******************************************************************************
     */
   // short delay exception signal
-  val s2_except_tlb_pf  = RegEnable(tlbExcpPF, s1_fire)
-  val s2_except_tlb_gpf = RegEnable(tlbExcpGPF, s1_fire)
-  val s2_except_tlb_af  = RegEnable(tlbExcpAF, s1_fire)
+  val s2_except_tlb_pf  = utils.HackedAPI.HackedRegEnable(tlbExcpPF, s1_fire)
+  val s2_except_tlb_gpf = utils.HackedAPI.HackedRegEnable(tlbExcpGPF, s1_fire)
+  val s2_except_tlb_af  = utils.HackedAPI.HackedRegEnable(tlbExcpAF, s1_fire)
   val s2_except_tlb     = VecInit(Seq(s2_except_tlb_pf(0) || s2_except_tlb_af(0) || s2_except_tlb_gpf(0), s2_double_line && (s2_except_tlb_pf(1) || s2_except_tlb_af(1) || s2_except_tlb_gpf(1))))
   val s2_has_except_tlb = s2_valid && s2_except_tlb.reduce(_||_)
   // long delay exception signal
@@ -506,7 +506,7 @@ class ICacheMainPipe(implicit p: Parameters) extends ICacheModule
   // s2_hit_slot(0)(1): port 0 hit slot 1
   // Use the signal of S1 to make a judgment for timing, the value of missSlot has benn set when s1 fire
   val s1_hit_slot_vec = VecInit((0 until PortNumber).map(port => VecInit((0 until PortNumber).map(getMissSituat(port, _)))))
-  val s2_hit_slot_vec = RegEnable(s1_hit_slot_vec, s1_fire)
+  val s2_hit_slot_vec = utils.HackedAPI.HackedRegEnable(s1_hit_slot_vec, s1_fire)
 
   // select one from two missSlots to handle miss for every port
   // slot(0) hit  && slot(1) hit : don't case
@@ -516,7 +516,7 @@ class ICacheMainPipe(implicit p: Parameters) extends ICacheModule
   val s1_curr_slot_id = Wire(Vec(2, Bool()))
   s1_curr_slot_id(0) := s1_hit_slot_vec(0)(0) || s1_hit_slot_vec(1)(0)
   s1_curr_slot_id(1) := !(s1_hit_slot_vec(0)(1) || s1_hit_slot_vec(1)(1))
-  val s2_curr_slot_id = RegEnable(s1_curr_slot_id, s1_fire)
+  val s2_curr_slot_id = utils.HackedAPI.HackedRegEnable(s1_curr_slot_id, s1_fire)
 
   /**
     ******************************************************************************
@@ -660,11 +660,11 @@ class ICacheMainPipe(implicit p: Parameters) extends ICacheModule
     // register for timing
     if(i == 0){
       (0 until nWays).map{ w =>
-        s2_data_errors(i)(w) := s1_fire_delay2 && RegEnable(data_error_wayBits(w),s1_fire_delay1).reduce(_||_)
+        s2_data_errors(i)(w) := s1_fire_delay2 && utils.HackedAPI.HackedRegEnable(data_error_wayBits(w),s1_fire_delay1).reduce(_||_)
       }
     } else {
       (0 until nWays).map{ w =>
-        s2_data_errors(i)(w) := s1_fire_delay2 && s1_double_line_delay2 && RegEnable(data_error_wayBits(w),s1_fire_delay1).reduce(_||_)
+        s2_data_errors(i)(w) := s1_fire_delay2 && s1_double_line_delay2 && utils.HackedAPI.HackedRegEnable(data_error_wayBits(w),s1_fire_delay1).reduce(_||_)
       }
     }
   }
@@ -677,10 +677,10 @@ class ICacheMainPipe(implicit p: Parameters) extends ICacheModule
     val valid                      = s2_parity_error(i) && s1_fire_delay2
     io.errors(i).valid            := RegNext(valid)
     io.errors(i).report_to_beu    := RegNext(valid)
-    io.errors(i).paddr            := RegEnable(RegEnable(s2_req_paddr(i), s1_fire_delay1), valid)
+    io.errors(i).paddr            := utils.HackedAPI.HackedRegEnable(utils.HackedAPI.HackedRegEnable(s2_req_paddr(i), s1_fire_delay1), valid)
     io.errors(i).source           := DontCare
-    io.errors(i).source.tag       := RegEnable(RegEnable(s2_parity_meta_error(i), s1_fire_delay1), valid)
-    io.errors(i).source.data      := RegEnable(s2_parity_data_error(i), valid)
+    io.errors(i).source.tag       := utils.HackedAPI.HackedRegEnable(utils.HackedAPI.HackedRegEnable(s2_parity_meta_error(i), s1_fire_delay1), valid)
+    io.errors(i).source.data      := utils.HackedAPI.HackedRegEnable(s2_parity_data_error(i), valid)
     io.errors(i).source.l2        := false.B
     io.errors(i).opType           := DontCare
     io.errors(i).opType.fetch     := true.B
@@ -691,7 +691,7 @@ class ICacheMainPipe(implicit p: Parameters) extends ICacheModule
     when(RegNext(s2_fire && s2_corrupt(i))){
       io.errors(i).valid            := true.B
       io.errors(i).report_to_beu    := false.B // l2 should have report that to bus error unit, no need to do it again
-      io.errors(i).paddr            := RegEnable(s2_req_paddr(i),s1_fire_delay1)
+      io.errors(i).paddr            := utils.HackedAPI.HackedRegEnable(s2_req_paddr(i),s1_fire_delay1)
       io.errors(i).source.tag       := false.B
       io.errors(i).source.data      := false.B
       io.errors(i).source.l2        := true.B

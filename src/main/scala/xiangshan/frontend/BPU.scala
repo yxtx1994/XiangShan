@@ -184,9 +184,9 @@ abstract class BasePredictor(implicit p: Parameters) extends XSModule
   val reset_vector = DelayN(io.reset_vector, 5)
 
   val s0_pc_dup   = WireInit(io.in.bits.s0_pc) // fetchIdx(io.f0_pc)
-  val s1_pc_dup   = s0_pc_dup.zip(io.s0_fire).map {case (s0_pc, s0_fire) => RegEnable(s0_pc, s0_fire)}
-  val s2_pc_dup   = s1_pc_dup.zip(io.s1_fire).map {case (s1_pc, s1_fire) => RegEnable(s1_pc, s1_fire)}
-  val s3_pc_dup   = s2_pc_dup.zip(io.s2_fire).map {case (s2_pc, s2_fire) => RegEnable(s2_pc, s2_fire)}
+  val s1_pc_dup   = s0_pc_dup.zip(io.s0_fire).map {case (s0_pc, s0_fire) => utils.HackedAPI.HackedRegEnable(s0_pc, s0_fire)}
+  val s2_pc_dup   = s1_pc_dup.zip(io.s1_fire).map {case (s1_pc, s1_fire) => utils.HackedAPI.HackedRegEnable(s1_pc, s1_fire)}
+  val s3_pc_dup   = s2_pc_dup.zip(io.s2_fire).map {case (s2_pc, s2_fire) => utils.HackedAPI.HackedRegEnable(s2_pc, s2_fire)}
 
   when (RegNext(RegNext(reset.asBool) && !reset.asBool)) {
     s1_pc_dup.map{case s1_pc => s1_pc := reset_vector}
@@ -278,27 +278,27 @@ class Predictor(implicit p: Parameters) extends XSModule with HasBPUConst with H
   when (RegNext(RegNext(reset.asBool) && !reset.asBool)) {
     s0_pc_reg_dup.map{case s0_pc => s0_pc := reset_vector}
   }
-  val s1_pc = RegEnable(s0_pc_dup(0), s0_fire_dup(0))
-  val s2_pc = RegEnable(s1_pc, s1_fire_dup(0))
-  val s3_pc = RegEnable(s2_pc, s2_fire_dup(0))
+  val s1_pc = utils.HackedAPI.HackedRegEnable(s0_pc_dup(0), s0_fire_dup(0))
+  val s2_pc = utils.HackedAPI.HackedRegEnable(s1_pc, s1_fire_dup(0))
+  val s3_pc = utils.HackedAPI.HackedRegEnable(s2_pc, s2_fire_dup(0))
 
   val s0_folded_gh_dup = dup_wire(new AllFoldedHistories(foldedGHistInfos))
   val s0_folded_gh_reg_dup = s0_folded_gh_dup.map(x => RegNext(x, init=0.U.asTypeOf(s0_folded_gh_dup(0))))
-  val s1_folded_gh_dup = RegEnable(s0_folded_gh_dup, 0.U.asTypeOf(s0_folded_gh_dup), s0_fire_dup(1))
-  val s2_folded_gh_dup = RegEnable(s1_folded_gh_dup, 0.U.asTypeOf(s0_folded_gh_dup), s1_fire_dup(1))
-  val s3_folded_gh_dup = RegEnable(s2_folded_gh_dup, 0.U.asTypeOf(s0_folded_gh_dup), s2_fire_dup(1))
+  val s1_folded_gh_dup = utils.HackedAPI.HackedRegEnable(s0_folded_gh_dup, 0.U.asTypeOf(s0_folded_gh_dup), s0_fire_dup(1))
+  val s2_folded_gh_dup = utils.HackedAPI.HackedRegEnable(s1_folded_gh_dup, 0.U.asTypeOf(s0_folded_gh_dup), s1_fire_dup(1))
+  val s3_folded_gh_dup = utils.HackedAPI.HackedRegEnable(s2_folded_gh_dup, 0.U.asTypeOf(s0_folded_gh_dup), s2_fire_dup(1))
 
   val s0_last_br_num_oh_dup = dup_wire(UInt((numBr+1).W))
   val s0_last_br_num_oh_reg_dup = s0_last_br_num_oh_dup.map(x => RegNext(x, init=0.U))
-  val s1_last_br_num_oh_dup = RegEnable(s0_last_br_num_oh_dup, 0.U.asTypeOf(s0_last_br_num_oh_dup), s0_fire_dup(1))
-  val s2_last_br_num_oh_dup = RegEnable(s1_last_br_num_oh_dup, 0.U.asTypeOf(s0_last_br_num_oh_dup), s1_fire_dup(1))
-  val s3_last_br_num_oh_dup = RegEnable(s2_last_br_num_oh_dup, 0.U.asTypeOf(s0_last_br_num_oh_dup), s2_fire_dup(1))
+  val s1_last_br_num_oh_dup = utils.HackedAPI.HackedRegEnable(s0_last_br_num_oh_dup, 0.U.asTypeOf(s0_last_br_num_oh_dup), s0_fire_dup(1))
+  val s2_last_br_num_oh_dup = utils.HackedAPI.HackedRegEnable(s1_last_br_num_oh_dup, 0.U.asTypeOf(s0_last_br_num_oh_dup), s1_fire_dup(1))
+  val s3_last_br_num_oh_dup = utils.HackedAPI.HackedRegEnable(s2_last_br_num_oh_dup, 0.U.asTypeOf(s0_last_br_num_oh_dup), s2_fire_dup(1))
 
   val s0_ahead_fh_oldest_bits_dup = dup_wire(new AllAheadFoldedHistoryOldestBits(foldedGHistInfos))
   val s0_ahead_fh_oldest_bits_reg_dup = s0_ahead_fh_oldest_bits_dup.map(x => RegNext(x, init=0.U.asTypeOf(s0_ahead_fh_oldest_bits_dup(0))))
-  val s1_ahead_fh_oldest_bits_dup = RegEnable(s0_ahead_fh_oldest_bits_dup, 0.U.asTypeOf(s0_ahead_fh_oldest_bits_dup), s0_fire_dup(1))
-  val s2_ahead_fh_oldest_bits_dup = RegEnable(s1_ahead_fh_oldest_bits_dup, 0.U.asTypeOf(s0_ahead_fh_oldest_bits_dup), s1_fire_dup(1))
-  val s3_ahead_fh_oldest_bits_dup = RegEnable(s2_ahead_fh_oldest_bits_dup, 0.U.asTypeOf(s0_ahead_fh_oldest_bits_dup), s2_fire_dup(1))
+  val s1_ahead_fh_oldest_bits_dup = utils.HackedAPI.HackedRegEnable(s0_ahead_fh_oldest_bits_dup, 0.U.asTypeOf(s0_ahead_fh_oldest_bits_dup), s0_fire_dup(1))
+  val s2_ahead_fh_oldest_bits_dup = utils.HackedAPI.HackedRegEnable(s1_ahead_fh_oldest_bits_dup, 0.U.asTypeOf(s0_ahead_fh_oldest_bits_dup), s1_fire_dup(1))
+  val s3_ahead_fh_oldest_bits_dup = utils.HackedAPI.HackedRegEnable(s2_ahead_fh_oldest_bits_dup, 0.U.asTypeOf(s0_ahead_fh_oldest_bits_dup), s2_fire_dup(1))
 
   val npcGen_dup         = Seq.tabulate(numDup)(n => new PhyPriorityMuxGenerator[UInt])
   val foldedGhGen_dup    = Seq.tabulate(numDup)(n => new PhyPriorityMuxGenerator[AllFoldedHistories])
@@ -321,9 +321,9 @@ class Predictor(implicit p: Parameters) extends XSModule with HasBPUConst with H
 
   val s0_ghist_ptr_dup = dup_wire(new CGHPtr)
   val s0_ghist_ptr_reg_dup = s0_ghist_ptr_dup.map(x => RegNext(x, init=0.U.asTypeOf(new CGHPtr)))
-  val s1_ghist_ptr_dup = RegEnable(s0_ghist_ptr_dup, 0.U.asTypeOf(s0_ghist_ptr_dup), s0_fire_dup(1))
-  val s2_ghist_ptr_dup = RegEnable(s1_ghist_ptr_dup, 0.U.asTypeOf(s0_ghist_ptr_dup), s1_fire_dup(1))
-  val s3_ghist_ptr_dup = RegEnable(s2_ghist_ptr_dup, 0.U.asTypeOf(s0_ghist_ptr_dup), s2_fire_dup(1))
+  val s1_ghist_ptr_dup = utils.HackedAPI.HackedRegEnable(s0_ghist_ptr_dup, 0.U.asTypeOf(s0_ghist_ptr_dup), s0_fire_dup(1))
+  val s2_ghist_ptr_dup = utils.HackedAPI.HackedRegEnable(s1_ghist_ptr_dup, 0.U.asTypeOf(s0_ghist_ptr_dup), s1_fire_dup(1))
+  val s3_ghist_ptr_dup = utils.HackedAPI.HackedRegEnable(s2_ghist_ptr_dup, 0.U.asTypeOf(s0_ghist_ptr_dup), s2_fire_dup(1))
 
   def getHist(ptr: CGHPtr): UInt = (Cat(ghv_wire.asUInt, ghv_wire.asUInt) >> (ptr.value+1.U))(HistoryLength-1, 0)
   s0_ghist := getHist(s0_ghist_ptr_dup(0))
@@ -595,7 +595,7 @@ class Predictor(implicit p: Parameters) extends XSModule with HasBPUConst with H
   s1_pred_info.takenMask := resp.s1.full_pred.map(_.taken_mask_on_slot)
   s1_pred_info.cfiIndex := resp.s1.cfiIndex.map { case x => x.bits }
 
-  val previous_s1_pred_info = RegEnable(s1_pred_info, 0.U.asTypeOf(new PreviousPredInfo), s1_fire_dup(0))
+  val previous_s1_pred_info = utils.HackedAPI.HackedRegEnable(s1_pred_info, 0.U.asTypeOf(new PreviousPredInfo), s1_fire_dup(0))
 
   val s2_redirect_s1_last_pred_vec_dup = preds_needs_redirect_vec_dup(previous_s1_pred_info, resp.s2)
 
@@ -668,7 +668,7 @@ class Predictor(implicit p: Parameters) extends XSModule with HasBPUConst with H
     )
   )
 
-  val previous_s2_pred = RegEnable(resp.s2, 0.U.asTypeOf(resp.s2), s2_fire_dup(0))
+  val previous_s2_pred = utils.HackedAPI.HackedRegEnable(resp.s2, 0.U.asTypeOf(resp.s2), s2_fire_dup(0))
 
   val s3_redirect_on_br_taken_dup = resp.s3.full_pred.zip(previous_s2_pred.full_pred).map {case (fp1, fp2) => fp1.real_br_taken_mask().asUInt =/= fp2.real_br_taken_mask().asUInt}
   val s3_both_first_taken_dup = resp.s3.full_pred.zip(previous_s2_pred.full_pred).map {case (fp1, fp2) => fp1.real_br_taken_mask()(0) && fp2.real_br_taken_mask()(0)}
@@ -703,8 +703,8 @@ class Predictor(implicit p: Parameters) extends XSModule with HasBPUConst with H
   }
 
   // Send signal tell Ftq override
-  val s2_ftq_idx = RegEnable(io.ftq_to_bpu.enq_ptr, s1_fire_dup(0))
-  val s3_ftq_idx = RegEnable(s2_ftq_idx, s2_fire_dup(0))
+  val s2_ftq_idx = utils.HackedAPI.HackedRegEnable(io.ftq_to_bpu.enq_ptr, s1_fire_dup(0))
+  val s3_ftq_idx = utils.HackedAPI.HackedRegEnable(s2_ftq_idx, s2_fire_dup(0))
 
   for (((to_ftq_s1_valid, s1_fire), s1_flush) <- io.bpu_to_ftq.resp.bits.s1.valid zip s1_fire_dup zip s1_flush_dup) {
     to_ftq_s1_valid := s1_fire && !s1_flush
@@ -723,8 +723,8 @@ class Predictor(implicit p: Parameters) extends XSModule with HasBPUConst with H
   io.bpu_to_ftq.resp.bits.s3.ftq_idx := s3_ftq_idx
 
   predictors.io.update.valid := RegNext(io.ftq_to_bpu.update.valid, init = false.B)
-  predictors.io.update.bits := RegEnable(io.ftq_to_bpu.update.bits, io.ftq_to_bpu.update.valid)
-  predictors.io.update.bits.ghist := RegEnable(
+  predictors.io.update.bits := utils.HackedAPI.HackedRegEnable(io.ftq_to_bpu.update.bits, io.ftq_to_bpu.update.valid)
+  predictors.io.update.bits.ghist := utils.HackedAPI.HackedRegEnable(
     getHist(io.ftq_to_bpu.update.bits.spec_info.histPtr), io.ftq_to_bpu.update.valid)
 
   val redirect_dup = do_redirect_dup.map(_.bits)

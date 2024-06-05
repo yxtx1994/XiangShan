@@ -446,7 +446,7 @@ object AddPipelineReg {
     when (io.isFlush) { valid := false.B }
 
     io.in.ready := !valid || io.out.ready
-    io.out.bits := RegEnable(io.in.bits, io.in.fire)
+    io.out.bits := utils.HackedAPI.HackedRegEnable(io.in.bits, io.in.fire)
     io.out.valid := valid //&& !isFlush
   }
 

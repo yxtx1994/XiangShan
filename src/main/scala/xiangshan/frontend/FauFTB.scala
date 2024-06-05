@@ -119,13 +119,13 @@ class FauFTB(implicit p: Parameters) extends BasePredictor with FauFTBParams {
 
   // assign metas
   io.out.last_stage_meta := resp_meta.asUInt
-  resp_meta.hit := RegEnable(RegEnable(s1_hit, io.s1_fire(0)), io.s2_fire(0))
-  if(resp_meta.pred_way.isDefined) {resp_meta.pred_way.get := RegEnable(RegEnable(s1_hit_way, io.s1_fire(0)), io.s2_fire(0))}
+  resp_meta.hit := utils.HackedAPI.HackedRegEnable(utils.HackedAPI.HackedRegEnable(s1_hit, io.s1_fire(0)), io.s2_fire(0))
+  if(resp_meta.pred_way.isDefined) {resp_meta.pred_way.get := utils.HackedAPI.HackedRegEnable(utils.HackedAPI.HackedRegEnable(s1_hit_way, io.s1_fire(0)), io.s2_fire(0))}
 
   // pred update replacer state
   val s1_fire = io.s1_fire(0)
   replacer_touch_ways(0).valid := RegNext(s1_fire(0) && s1_hit)
-  replacer_touch_ways(0).bits  := RegEnable(s1_hit_way, s1_fire(0) && s1_hit)
+  replacer_touch_ways(0).bits  := utils.HackedAPI.HackedRegEnable(s1_hit_way, s1_fire(0) && s1_hit)
 
   /********************** update ***********************/
   // s0: update_valid, read and tag comparison
@@ -145,12 +145,12 @@ class FauFTB(implicit p: Parameters) extends BasePredictor with FauFTBParams {
 
   // s1
   val u_s1_valid = RegNext(u.valid)
-  val u_s1_tag       = RegEnable(u_s0_tag, u.valid)
-  val u_s1_hit_oh    = RegEnable(u_s0_hit_oh, u.valid)
-  val u_s1_hit       = RegEnable(u_s0_hit, u.valid)
+  val u_s1_tag       = utils.HackedAPI.HackedRegEnable(u_s0_tag, u.valid)
+  val u_s1_hit_oh    = utils.HackedAPI.HackedRegEnable(u_s0_hit_oh, u.valid)
+  val u_s1_hit       = utils.HackedAPI.HackedRegEnable(u_s0_hit, u.valid)
   val u_s1_alloc_way = replacer.way
   val u_s1_write_way_oh = Mux(u_s1_hit, u_s1_hit_oh, UIntToOH(u_s1_alloc_way))
-  val u_s1_ftb_entry = RegEnable(u.bits.ftb_entry, u.valid)
+  val u_s1_ftb_entry = utils.HackedAPI.HackedRegEnable(u.bits.ftb_entry, u.valid)
   val u_s1_ways_write_valid = VecInit((0 until numWays).map(w => u_s1_write_way_oh(w).asBool && u_s1_valid))
   for (w <- 0 until numWays) {
     ways(w).io.write_valid := u_s1_ways_write_valid(w)
@@ -159,8 +159,8 @@ class FauFTB(implicit p: Parameters) extends BasePredictor with FauFTBParams {
   }
 
   // update saturating counters
-  val u_s1_br_update_valids = RegEnable(u_s0_br_update_valids, u.valid)
-  val u_s1_br_takens        = RegEnable(u.bits.br_taken_mask,  u.valid)
+  val u_s1_br_update_valids = utils.HackedAPI.HackedRegEnable(u_s0_br_update_valids, u.valid)
+  val u_s1_br_takens        = utils.HackedAPI.HackedRegEnable(u.bits.br_taken_mask,  u.valid)
   for (w <- 0 until numWays) {
     when (u_s1_ways_write_valid(w)) {
       for (br <- 0 until numBr) {

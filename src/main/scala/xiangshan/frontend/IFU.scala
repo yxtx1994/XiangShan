@@ -287,10 +287,10 @@ class NewIFU(implicit p: Parameters) extends XSModule
     */
 
   val f1_valid      = RegInit(false.B)
-  val f1_ftq_req    = RegEnable(f0_ftq_req,    f0_fire)
-  // val f1_situation  = RegEnable(f0_situation,  f0_fire)
-  val f1_doubleLine = RegEnable(f0_doubleLine, f0_fire)
-  val f1_vSetIdx    = RegEnable(f0_vSetIdx,    f0_fire)
+  val f1_ftq_req    = utils.HackedAPI.HackedRegEnable(f0_ftq_req,    f0_fire)
+  // val f1_situation  = utils.HackedAPI.HackedRegEnable(f0_situation,  f0_fire)
+  val f1_doubleLine = utils.HackedAPI.HackedRegEnable(f0_doubleLine, f0_fire)
+  val f1_vSetIdx    = utils.HackedAPI.HackedRegEnable(f0_vSetIdx,    f0_fire)
   val f1_fire       = f1_valid && f2_ready
 
   f1_ready := f1_fire || !f1_valid
@@ -339,10 +339,10 @@ class NewIFU(implicit p: Parameters) extends XSModule
   val icacheRespAllValid = WireInit(false.B)
 
   val f2_valid      = RegInit(false.B)
-  val f2_ftq_req    = RegEnable(f1_ftq_req,    f1_fire)
-  // val f2_situation  = RegEnable(f1_situation,  f1_fire)
-  val f2_doubleLine = RegEnable(f1_doubleLine, f1_fire)
-  val f2_vSetIdx    = RegEnable(f1_vSetIdx,    f1_fire)
+  val f2_ftq_req    = utils.HackedAPI.HackedRegEnable(f1_ftq_req,    f1_fire)
+  // val f2_situation  = utils.HackedAPI.HackedRegEnable(f1_situation,  f1_fire)
+  val f2_doubleLine = utils.HackedAPI.HackedRegEnable(f1_doubleLine, f1_fire)
+  val f2_vSetIdx    = utils.HackedAPI.HackedRegEnable(f1_vSetIdx,    f1_fire)
   val f2_fire       = f2_valid && f3_ready && icacheRespAllValid
 
   f2_ready := f2_fire || !f2_valid
@@ -378,11 +378,11 @@ class NewIFU(implicit p: Parameters) extends XSModule
     !fromICache(0).bits.tlbExcp.pageFault   &&
     !fromICache(0).bits.tlbExcp.guestPageFault
 
-  val f2_pc               = RegEnable(f1_pc,  f1_fire)
-  val f2_half_snpc        = RegEnable(f1_half_snpc,  f1_fire)
-  val f2_cut_ptr          = RegEnable(f1_cut_ptr,  f1_fire)
+  val f2_pc               = utils.HackedAPI.HackedRegEnable(f1_pc,  f1_fire)
+  val f2_half_snpc        = utils.HackedAPI.HackedRegEnable(f1_half_snpc,  f1_fire)
+  val f2_cut_ptr          = utils.HackedAPI.HackedRegEnable(f1_cut_ptr,  f1_fire)
 
-  val f2_resend_vaddr     = RegEnable(f1_ftq_req.startAddr + 2.U,  f1_fire)
+  val f2_resend_vaddr     = utils.HackedAPI.HackedRegEnable(f1_ftq_req.startAddr + 2.U,  f1_fire)
 
   def isNextLine(pc: UInt, startAddr: UInt) = {
     startAddr(blockOffBits) ^ pc(blockOffBits)
@@ -463,46 +463,46 @@ class NewIFU(implicit p: Parameters) extends XSModule
     */
 
   val f3_valid          = RegInit(false.B)
-  val f3_ftq_req        = RegEnable(f2_ftq_req,    f2_fire)
-  // val f3_situation      = RegEnable(f2_situation,  f2_fire)
-  val f3_doubleLine     = RegEnable(f2_doubleLine, f2_fire)
+  val f3_ftq_req        = utils.HackedAPI.HackedRegEnable(f2_ftq_req,    f2_fire)
+  // val f3_situation      = utils.HackedAPI.HackedRegEnable(f2_situation,  f2_fire)
+  val f3_doubleLine     = utils.HackedAPI.HackedRegEnable(f2_doubleLine, f2_fire)
   val f3_fire           = io.toIbuffer.fire
 
   f3_ready := f3_fire || !f3_valid
 
-  val f3_cut_data       = RegEnable(f2_cut_data, f2_fire)
+  val f3_cut_data       = utils.HackedAPI.HackedRegEnable(f2_cut_data, f2_fire)
 
-  val f3_except_pf      = RegEnable(f2_except_pf,  f2_fire)
-  val f3_except_af      = RegEnable(f2_except_af,  f2_fire)
-  val f3_except_gpf     = RegEnable(f2_except_gpf,  f2_fire)
-  val f3_mmio           = RegEnable(f2_mmio   ,  f2_fire)
+  val f3_except_pf      = utils.HackedAPI.HackedRegEnable(f2_except_pf,  f2_fire)
+  val f3_except_af      = utils.HackedAPI.HackedRegEnable(f2_except_af,  f2_fire)
+  val f3_except_gpf     = utils.HackedAPI.HackedRegEnable(f2_except_gpf,  f2_fire)
+  val f3_mmio           = utils.HackedAPI.HackedRegEnable(f2_mmio   ,  f2_fire)
 
-  //val f3_expd_instr     = RegEnable(f2_expd_instr,  f2_fire)
-  val f3_instr          = RegEnable(f2_instr, f2_fire)
+  //val f3_expd_instr     = utils.HackedAPI.HackedRegEnable(f2_expd_instr,  f2_fire)
+  val f3_instr          = utils.HackedAPI.HackedRegEnable(f2_instr, f2_fire)
   val f3_expd_instr     = VecInit((0 until PredictWidth).map{ i =>
     val expander       = Module(new RVCExpander)
     expander.io.in := f3_instr(i)
     expander.io.out.bits
   })
 
-  val f3_pd_wire        = RegEnable(f2_pd,          f2_fire)
+  val f3_pd_wire        = utils.HackedAPI.HackedRegEnable(f2_pd,          f2_fire)
   val f3_pd             = WireInit(f3_pd_wire)
-  val f3_jump_offset    = RegEnable(f2_jump_offset, f2_fire)
-  val f3_af_vec         = RegEnable(f2_af_vec,      f2_fire)
-  val f3_pf_vec         = RegEnable(f2_pf_vec ,     f2_fire)
-  val f3_gpf_vec        = RegEnable(f2_gpf_vec,     f2_fire)
-  val f3_pc             = RegEnable(f2_pc,          f2_fire)
-  val f3_half_snpc      = RegEnable(f2_half_snpc,   f2_fire)
-  val f3_instr_range    = RegEnable(f2_instr_range, f2_fire)
-  val f3_foldpc         = RegEnable(f2_foldpc,      f2_fire)
-  val f3_crossPageFault = RegEnable(f2_crossPageFault,           f2_fire)
-  val f3_crossGuestPageFault = RegEnable(f2_crossGuestPageFault, f2_fire)
-  val f3_hasHalfValid   = RegEnable(f2_hasHalfValid,             f2_fire)
+  val f3_jump_offset    = utils.HackedAPI.HackedRegEnable(f2_jump_offset, f2_fire)
+  val f3_af_vec         = utils.HackedAPI.HackedRegEnable(f2_af_vec,      f2_fire)
+  val f3_pf_vec         = utils.HackedAPI.HackedRegEnable(f2_pf_vec ,     f2_fire)
+  val f3_gpf_vec        = utils.HackedAPI.HackedRegEnable(f2_gpf_vec,     f2_fire)
+  val f3_pc             = utils.HackedAPI.HackedRegEnable(f2_pc,          f2_fire)
+  val f3_half_snpc      = utils.HackedAPI.HackedRegEnable(f2_half_snpc,   f2_fire)
+  val f3_instr_range    = utils.HackedAPI.HackedRegEnable(f2_instr_range, f2_fire)
+  val f3_foldpc         = utils.HackedAPI.HackedRegEnable(f2_foldpc,      f2_fire)
+  val f3_crossPageFault = utils.HackedAPI.HackedRegEnable(f2_crossPageFault,           f2_fire)
+  val f3_crossGuestPageFault = utils.HackedAPI.HackedRegEnable(f2_crossGuestPageFault, f2_fire)
+  val f3_hasHalfValid   = utils.HackedAPI.HackedRegEnable(f2_hasHalfValid,             f2_fire)
   val f3_except         = VecInit((0 until 2).map{i => f3_except_pf(i) || f3_except_af(i) || f3_except_gpf(i)})
   val f3_has_except     = f3_valid && (f3_except_af.reduce(_||_) || f3_except_pf.reduce(_||_) || f3_except_gpf.reduce(_||_))
-  val f3_paddrs         = RegEnable(f2_paddrs,  f2_fire)
-  val f3_gpaddrs        = RegEnable(f2_gpaddrs,  f2_fire)
-  val f3_resend_vaddr   = RegEnable(f2_resend_vaddr,             f2_fire)
+  val f3_paddrs         = utils.HackedAPI.HackedRegEnable(f2_paddrs,  f2_fire)
+  val f3_gpaddrs        = utils.HackedAPI.HackedRegEnable(f2_gpaddrs,  f2_fire)
+  val f3_resend_vaddr   = utils.HackedAPI.HackedRegEnable(f2_resend_vaddr,             f2_fire)
 
   // Expand 1 bit to prevent overflow when assert
   val f3_ftq_req_startAddr      = Cat(0.U(1.W), f3_ftq_req.startAddr)
@@ -549,7 +549,7 @@ class NewIFU(implicit p: Parameters) extends XSModule
   val f3_mmio_can_go      = f3_mmio_to_commit && !f3_mmio_to_commit_next
 
   val fromFtqRedirectReg = Wire(fromFtq.redirect.cloneType)
-  fromFtqRedirectReg.bits := RegEnable(fromFtq.redirect.bits, 0.U.asTypeOf(fromFtq.redirect.bits), fromFtq.redirect.valid)
+  fromFtqRedirectReg.bits := utils.HackedAPI.HackedRegEnable(fromFtq.redirect.bits, 0.U.asTypeOf(fromFtq.redirect.bits), fromFtq.redirect.valid)
   fromFtqRedirectReg.valid := RegNext(fromFtq.redirect.valid, init = false.B)
   val mmioF3Flush           = RegNext(f3_flush,init = false.B)
   val f3_ftq_flush_self     = fromFtqRedirectReg.valid && RedirectLevel.flushItself(fromFtqRedirectReg.bits.level)
@@ -842,19 +842,19 @@ class NewIFU(implicit p: Parameters) extends XSModule
     */
   val wb_enable         = RegNext(f2_fire && !f2_flush) && !f3_req_is_mmio && !f3_flush
   val wb_valid          = RegNext(wb_enable, init = false.B)
-  val wb_ftq_req        = RegEnable(f3_ftq_req, wb_enable)
+  val wb_ftq_req        = utils.HackedAPI.HackedRegEnable(f3_ftq_req, wb_enable)
 
-  val wb_check_result_stage1   = RegEnable(checkerOutStage1, wb_enable)
+  val wb_check_result_stage1   = utils.HackedAPI.HackedRegEnable(checkerOutStage1, wb_enable)
   val wb_check_result_stage2   = checkerOutStage2
-  val wb_instr_range    = RegEnable(io.toIbuffer.bits.enqEnable, wb_enable)
-  val wb_pc             = RegEnable(f3_pc, wb_enable)
-  val wb_pd             = RegEnable(f3_pd, wb_enable)
-  val wb_instr_valid    = RegEnable(f3_instr_valid, wb_enable)
+  val wb_instr_range    = utils.HackedAPI.HackedRegEnable(io.toIbuffer.bits.enqEnable, wb_enable)
+  val wb_pc             = utils.HackedAPI.HackedRegEnable(f3_pc, wb_enable)
+  val wb_pd             = utils.HackedAPI.HackedRegEnable(f3_pd, wb_enable)
+  val wb_instr_valid    = utils.HackedAPI.HackedRegEnable(f3_instr_valid, wb_enable)
 
   /* false hit lastHalf */
-  val wb_lastIdx        = RegEnable(f3_last_validIdx, wb_enable)
-  val wb_false_lastHalf = RegEnable(f3_false_lastHalf, wb_enable) && wb_lastIdx =/= (PredictWidth - 1).U
-  val wb_false_target   = RegEnable(f3_false_snpc, wb_enable)
+  val wb_lastIdx        = utils.HackedAPI.HackedRegEnable(f3_last_validIdx, wb_enable)
+  val wb_false_lastHalf = utils.HackedAPI.HackedRegEnable(f3_false_lastHalf, wb_enable) && wb_lastIdx =/= (PredictWidth - 1).U
+  val wb_false_target   = utils.HackedAPI.HackedRegEnable(f3_false_snpc, wb_enable)
 
   val wb_half_flush = wb_false_lastHalf
   val wb_half_target = wb_false_target
@@ -926,7 +926,7 @@ class NewIFU(implicit p: Parameters) extends XSModule
 
 
   /** performance counter */
-  val f3_perf_info     = RegEnable(f2_perf_info,  f2_fire)
+  val f3_perf_info     = utils.HackedAPI.HackedRegEnable(f2_perf_info,  f2_fire)
   val f3_req_0    = io.toIbuffer.fire
   val f3_req_1    = io.toIbuffer.fire && f3_doubleLine
   val f3_hit_0    = io.toIbuffer.fire && f3_perf_info.bank_hit(0)

@@ -362,18 +362,18 @@ class PredChecker(implicit p: Parameters) extends XSModule with HasPdConst {
 
   //Stage 2: detect target fault
   /** target calculation: in the next stage  */
-  val fixedRangeNext = RegEnable(fixedRange, io.in.fire_in)
-  val instrValidNext = RegEnable(instrValid, io.in.fire_in)
-  val takenIdxNext   = RegEnable(takenIdx, io.in.fire_in)
-  val predTakenNext  = RegEnable(predTaken, io.in.fire_in)
-  val predTargetNext = RegEnable(predTarget, io.in.fire_in)
-  val jumpTargetsNext = RegEnable(jumpTargets, io.in.fire_in)
-  val seqTargetsNext = RegEnable(seqTargets, io.in.fire_in)
-  val pdsNext = RegEnable(pds, io.in.fire_in)
-  val jalFaultVecNext = RegEnable(jalFaultVec, io.in.fire_in)
-  val retFaultVecNext = RegEnable(retFaultVec, io.in.fire_in)
-  val notCFITakenNext = RegEnable(notCFITaken, io.in.fire_in)
-  val invalidTakenNext = RegEnable(invalidTaken, io.in.fire_in)
+  val fixedRangeNext = utils.HackedAPI.HackedRegEnable(fixedRange, io.in.fire_in)
+  val instrValidNext = utils.HackedAPI.HackedRegEnable(instrValid, io.in.fire_in)
+  val takenIdxNext   = utils.HackedAPI.HackedRegEnable(takenIdx, io.in.fire_in)
+  val predTakenNext  = utils.HackedAPI.HackedRegEnable(predTaken, io.in.fire_in)
+  val predTargetNext = utils.HackedAPI.HackedRegEnable(predTarget, io.in.fire_in)
+  val jumpTargetsNext = utils.HackedAPI.HackedRegEnable(jumpTargets, io.in.fire_in)
+  val seqTargetsNext = utils.HackedAPI.HackedRegEnable(seqTargets, io.in.fire_in)
+  val pdsNext = utils.HackedAPI.HackedRegEnable(pds, io.in.fire_in)
+  val jalFaultVecNext = utils.HackedAPI.HackedRegEnable(jalFaultVec, io.in.fire_in)
+  val retFaultVecNext = utils.HackedAPI.HackedRegEnable(retFaultVec, io.in.fire_in)
+  val notCFITakenNext = utils.HackedAPI.HackedRegEnable(notCFITaken, io.in.fire_in)
+  val invalidTakenNext = utils.HackedAPI.HackedRegEnable(invalidTaken, io.in.fire_in)
 
   targetFault      := VecInit(pdsNext.zipWithIndex.map{case(pd,i) => fixedRangeNext(i) && instrValidNext(i) && (pd.isJal || pd.isBr) && takenIdxNext === i.U && predTakenNext  && (predTargetNext =/= jumpTargetsNext(i))})
 

@@ -105,11 +105,11 @@ class CtrlBlockImp(
   private val s0_robFlushRedirect = rob.io.flushOut
   private val s1_robFlushRedirect = Wire(Valid(new Redirect))
   s1_robFlushRedirect.valid := GatedValidRegNext(s0_robFlushRedirect.valid, false.B)
-  s1_robFlushRedirect.bits := RegEnable(s0_robFlushRedirect.bits, s0_robFlushRedirect.valid)
+  s1_robFlushRedirect.bits := utils.HackedAPI.HackedRegEnable(s0_robFlushRedirect.bits, s0_robFlushRedirect.valid)
 
   pcMem.io.ren.get(pcMemRdIndexes("robFlush").head) := s0_robFlushRedirect.valid
   pcMem.io.raddr(pcMemRdIndexes("robFlush").head) := s0_robFlushRedirect.bits.ftqIdx.value
-  private val s1_robFlushPc = pcMem.io.rdata(pcMemRdIndexes("robFlush").head).getPc(RegEnable(s0_robFlushRedirect.bits.ftqOffset, s0_robFlushRedirect.valid))
+  private val s1_robFlushPc = pcMem.io.rdata(pcMemRdIndexes("robFlush").head).getPc(utils.HackedAPI.HackedRegEnable(s0_robFlushRedirect.bits.ftqOffset, s0_robFlushRedirect.valid))
   private val s3_redirectGen = redirectGen.io.stage2Redirect
   private val s1_s3_redirect = Mux(s1_robFlushRedirect.valid, s1_robFlushRedirect, s3_redirectGen)
   private val s2_s4_pendingRedirectValid = RegInit(false.B)
@@ -128,7 +128,7 @@ class CtrlBlockImp(
     val killedByOlder = x.bits.robIdx.needFlush(Seq(s1_s3_redirect, s2_s4_redirect, s3_s5_redirect))
     val delayed = Wire(Valid(new ExuOutput(x.bits.params)))
     delayed.valid := GatedValidRegNext(valid && !killedByOlder)
-    delayed.bits := RegEnable(x.bits, x.valid)
+    delayed.bits := utils.HackedAPI.HackedRegEnable(x.bits, x.valid)
     delayed.bits.debugInfo.writebackTime := GTimer()
     delayed
   }).toSeq
@@ -163,7 +163,7 @@ class CtrlBlockImp(
       val killedByOlderThat = wb.bits.robIdx.needFlush(Seq(s1_s3_redirect, s2_s4_redirect, s3_s5_redirect))
       (wb.bits.robIdx === x.bits.robIdx) && wb.valid && x.valid && !killedByOlderThat && !killedByOlder
     }).toSeq)
-    delayed.bits := RegEnable(PopCount(sameRobidxBools), x.valid)
+    delayed.bits := utils.HackedAPI.HackedRegEnable(PopCount(sameRobidxBools), x.valid)
     delayed
   }).toSeq
 
@@ -185,36 +185,36 @@ class CtrlBlockImp(
   loadReplay.valid := GatedValidRegNext(memViolation.valid &&
     !memViolation.bits.robIdx.needFlush(Seq(s1_s3_redirect, s2_s4_redirect))
   )
-  loadReplay.bits := RegEnable(memViolation.bits, memViolation.valid)
+  loadReplay.bits := utils.HackedAPI.HackedRegEnable(memViolation.bits, memViolation.valid)
   loadReplay.bits.debugIsCtrl := false.B
   loadReplay.bits.debugIsMemVio := true.B
 
   pcMem.io.ren.get(pcMemRdIndexes("redirect").head) := redirectGen.io.redirectPcRead.vld
   pcMem.io.raddr(pcMemRdIndexes("redirect").head) := redirectGen.io.redirectPcRead.ptr.value
-  redirectGen.io.redirectPcRead.data := pcMem.io.rdata(pcMemRdIndexes("redirect").head).getPc(RegEnable(redirectGen.io.redirectPcRead.offset, redirectGen.io.redirectPcRead.vld))
+  redirectGen.io.redirectPcRead.data := pcMem.io.rdata(pcMemRdIndexes("redirect").head).getPc(utils.HackedAPI.HackedRegEnable(redirectGen.io.redirectPcRead.offset, redirectGen.io.redirectPcRead.vld))
   pcMem.io.ren.get(pcMemRdIndexes("memPred").head) := redirectGen.io.memPredPcRead.vld
   pcMem.io.raddr(pcMemRdIndexes("memPred").head) := redirectGen.io.memPredPcRead.ptr.value
-  redirectGen.io.memPredPcRead.data := pcMem.io.rdata(pcMemRdIndexes("memPred").head).getPc(RegEnable(redirectGen.io.memPredPcRead.offset, redirectGen.io.memPredPcRead.vld))
+  redirectGen.io.memPredPcRead.data := pcMem.io.rdata(pcMemRdIndexes("memPred").head).getPc(utils.HackedAPI.HackedRegEnable(redirectGen.io.memPredPcRead.offset, redirectGen.io.memPredPcRead.vld))
 
   for ((pcMemIdx, i) <- pcMemRdIndexes("load").zipWithIndex) {
     // load read pcMem (s0) -> get rdata (s1) -> reg next in Memblock (s2) -> reg next in Memblock (s3) -> consumed by pf (s3)
     pcMem.io.ren.get(pcMemIdx) := io.memLdPcRead(i).vld
     pcMem.io.raddr(pcMemIdx) := io.memLdPcRead(i).ptr.value
-    io.memLdPcRead(i).data := pcMem.io.rdata(pcMemIdx).getPc(RegEnable(io.memLdPcRead(i).offset, io.memLdPcRead(i).vld))
+    io.memLdPcRead(i).data := pcMem.io.rdata(pcMemIdx).getPc(utils.HackedAPI.HackedRegEnable(io.memLdPcRead(i).offset, io.memLdPcRead(i).vld))
   }
 
   for ((pcMemIdx, i) <- pcMemRdIndexes("hybrid").zipWithIndex) {
     // load read pcMem (s0) -> get rdata (s1) -> reg next in Memblock (s2) -> reg next in Memblock (s3) -> consumed by pf (s3)
     pcMem.io.ren.get(pcMemIdx) := io.memHyPcRead(i).vld
     pcMem.io.raddr(pcMemIdx) := io.memHyPcRead(i).ptr.value
-    io.memHyPcRead(i).data := pcMem.io.rdata(pcMemIdx).getPc(RegEnable(io.memHyPcRead(i).offset, io.memHyPcRead(i).vld))
+    io.memHyPcRead(i).data := pcMem.io.rdata(pcMemIdx).getPc(utils.HackedAPI.HackedRegEnable(io.memHyPcRead(i).offset, io.memHyPcRead(i).vld))
   }
 
   if (EnableStorePrefetchSMS) {
     for ((pcMemIdx, i) <- pcMemRdIndexes("store").zipWithIndex) {
       pcMem.io.ren.get(pcMemIdx) := io.memStPcRead(i).vld
       pcMem.io.raddr(pcMemIdx) := io.memStPcRead(i).ptr.value
-      io.memStPcRead(i).data := pcMem.io.rdata(pcMemIdx).getPc(RegEnable(io.memStPcRead(i).offset, io.memStPcRead(i).vld))
+      io.memStPcRead(i).data := pcMem.io.rdata(pcMemIdx).getPc(utils.HackedAPI.HackedRegEnable(io.memStPcRead(i).offset, io.memStPcRead(i).vld))
     }
   } else {
     io.memStPcRead.foreach(_.data := 0.U)
@@ -229,7 +229,7 @@ class CtrlBlockImp(
 
   val s5_flushFromRobValidAhead = DelayN(s1_robFlushRedirect.valid, 4)
   val s6_flushFromRobValid = GatedValidRegNext(s5_flushFromRobValidAhead)
-  val frontendFlushBits = RegEnable(s1_robFlushRedirect.bits, s1_robFlushRedirect.valid) // ??
+  val frontendFlushBits = utils.HackedAPI.HackedRegEnable(s1_robFlushRedirect.bits, s1_robFlushRedirect.valid) // ??
   // When ROB commits an instruction with a flush, we notify the frontend of the flush without the commit.
   // Flushes to frontend may be delayed by some cycles and commit before flush causes errors.
   // Thus, we make all flush reasons to behave the same as exceptions for frontend.
@@ -238,7 +238,7 @@ class CtrlBlockImp(
     // If we commit them to frontend, it will cause flush after commit, which is not acceptable by frontend.
     val s1_isCommit = rob.io.commits.commitValid(i) && rob.io.commits.isCommit && !s0_robFlushRedirect.valid
     io.frontend.toFtq.rob_commits(i).valid := GatedValidRegNext(s1_isCommit)
-    io.frontend.toFtq.rob_commits(i).bits := RegEnable(rob.io.commits.info(i), s1_isCommit)
+    io.frontend.toFtq.rob_commits(i).bits := utils.HackedAPI.HackedRegEnable(rob.io.commits.info(i), s1_isCommit)
   }
   io.frontend.toFtq.redirect.valid := s6_flushFromRobValid || s3_redirectGen.valid
   io.frontend.toFtq.redirect.bits := Mux(s6_flushFromRobValid, frontendFlushBits, s3_redirectGen.bits)
@@ -267,7 +267,7 @@ class CtrlBlockImp(
   // T4: csr.trapTarget
   // T5: ctrlBlock.trapTarget
   // T6: io.frontend.toFtq.stage2Redirect.valid
-  val s2_robFlushPc = RegEnable(Mux(s1_robFlushRedirect.bits.flushItself(),
+  val s2_robFlushPc = utils.HackedAPI.HackedRegEnable(Mux(s1_robFlushRedirect.bits.flushItself(),
     s1_robFlushPc, // replay inst
     s1_robFlushPc + Mux(s1_robFlushRedirect.bits.isRVC, 2.U, 4.U) // flush pipe
   ), s1_robFlushRedirect.valid)
@@ -277,7 +277,7 @@ class CtrlBlockImp(
   val flushTarget = Mux(s5_csrIsTrap, s5_trapTargetFromCsr, s2_robFlushPc)
   when (s6_flushFromRobValid) {
     io.frontend.toFtq.redirect.bits.level := RedirectLevel.flush
-    io.frontend.toFtq.redirect.bits.cfiUpdate.target := RegEnable(flushTarget, s5_flushFromRobValidAhead)
+    io.frontend.toFtq.redirect.bits.cfiUpdate.target := utils.HackedAPI.HackedRegEnable(flushTarget, s5_flushFromRobValidAhead)
   }
 
   for (i <- 0 until DecodeWidth) {
@@ -433,7 +433,7 @@ class CtrlBlockImp(
   rename.io.redirect := s1_s3_redirect
   rename.io.rabCommits := rob.io.rabCommits
   rename.io.waittable := (memCtrl.io.waitTable2Rename zip decode.io.out).map{ case(waittable2rename, decodeOut) =>
-    RegEnable(waittable2rename, decodeOut.fire)
+    utils.HackedAPI.HackedRegEnable(waittable2rename, decodeOut.fire)
   }
   rename.io.ssit := memCtrl.io.ssit2Rename
   rename.io.intReadPorts := VecInit(rat.io.intReadPorts.map(x => VecInit(x.map(_.data))))
@@ -508,8 +508,8 @@ class CtrlBlockImp(
   io.toIssueBlock.flush   <> s2_s4_redirect
 
   pcMem.io.wen.head   := GatedValidRegNext(io.frontend.fromFtq.pc_mem_wen)
-  pcMem.io.waddr.head := RegEnable(io.frontend.fromFtq.pc_mem_waddr, io.frontend.fromFtq.pc_mem_wen)
-  pcMem.io.wdata.head := RegEnable(io.frontend.fromFtq.pc_mem_wdata, io.frontend.fromFtq.pc_mem_wen)
+  pcMem.io.waddr.head := utils.HackedAPI.HackedRegEnable(io.frontend.fromFtq.pc_mem_waddr, io.frontend.fromFtq.pc_mem_wen)
+  pcMem.io.wdata.head := utils.HackedAPI.HackedRegEnable(io.frontend.fromFtq.pc_mem_wdata, io.frontend.fromFtq.pc_mem_wen)
 
   io.toDataPath.flush := s2_s4_redirect
   io.toExuBlock.flush := s2_s4_redirect

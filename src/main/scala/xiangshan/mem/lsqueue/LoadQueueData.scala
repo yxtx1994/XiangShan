@@ -59,7 +59,7 @@ abstract class LqRawDataModule[T <: Data] (gen: T, numEntries: Int, numRead: Int
   val data = Reg(Vec(numEntries, gen))
   // read ports
   for (i <- 0 until numRead) {
-    io.rdata(i) := RegEnable(data(io.raddr(i)), io.ren(i))
+    io.rdata(i) := utils.HackedAPI.HackedRegEnable(data(io.raddr(i)), io.ren(i))
   }
 
   // write ports
