@@ -308,7 +308,7 @@ class RobImp(override val wrapper: Rob)(implicit p: Parameters, params: BackendP
   val hasWFI = RegInit(false.B)
   io.cpu_halt := hasWFI
   // WFI Timeout: 2^20 = 1M cycles
-  val wfi_cycles = RegInit(0.U(20.W))
+  val wfi_cycles = RegInit(0.U(10.W))
   when(hasWFI) {
     wfi_cycles := wfi_cycles + 1.U
   }.elsewhen(!hasWFI && RegNext(hasWFI)) {
