@@ -27,6 +27,7 @@ import xiangshan.backend.fu.{CSRFileIO, FenceIO, FuncUnitInput}
 import xiangshan.backend.Bundles.{ExuInput, ExuOutput, MemExuInput, MemExuOutput}
 import xiangshan.{FPUCtrlSignals, HasXSParameter, Redirect, XSBundle, XSModule}
 import xiangshan.backend.datapath.WbConfig.{PregWB, _}
+import xiangshan.backend.datapath.NewPipelineConnect
 import xiangshan.backend.fu.FuType
 import xiangshan.backend.fu.vector.Bundles.{VType, Vxrm}
 import xiangshan.backend.fu.fpu.Bundles.Frm
@@ -376,16 +377,25 @@ class MemExeUnitIO (implicit p: Parameters) extends XSBundle {
 class MemExeUnit(exuParams: ExeUnitParams)(implicit p: Parameters) extends XSModule {
   val io = IO(new MemExeUnitIO)
   val fu = exuParams.fuConfigs.head.fuGen(p, exuParams.fuConfigs.head)
+  private val pipelineOut  = Wire(Flipped(DecoupledIO(new MemExuInput())))
   fu.io.flush             := io.flush
-  fu.io.in.valid          := io.in.valid
-  io.in.ready             := fu.io.in.ready
+  pipelineOut.ready       := fu.io.in.ready
+  fu.io.in.valid          := pipelineOut.valid
 
-  fu.io.in.bits.ctrl.robIdx    := io.in.bits.uop.robIdx
-  fu.io.in.bits.ctrl.pdest     := io.in.bits.uop.pdest
-  fu.io.in.bits.ctrl.fuOpType  := io.in.bits.uop.fuOpType
-  fu.io.in.bits.data.imm       := io.in.bits.uop.imm
-  fu.io.in.bits.data.src.zip(io.in.bits.src).foreach(x => x._1 := x._2)
-  fu.io.in.bits.perfDebugInfo := io.in.bits.uop.debugInfo
+  NewPipelineConnect(
+    io.in, pipelineOut, pipelineOut.fire,
+    Mux(io.in.fire,
+        io.in.bits.uop.robIdx.needFlush(io.flush),
+        pipelineOut.bits.uop.robIdx.needFlush(io.flush)),
+    Option("MemExeUnitPipelineConnect")
+  )
+
+  fu.io.in.bits.ctrl.robIdx    := pipelineOut.bits.uop.robIdx
+  fu.io.in.bits.ctrl.pdest     := pipelineOut.bits.uop.pdest
+  fu.io.in.bits.ctrl.fuOpType  := pipelineOut.bits.uop.fuOpType
+  fu.io.in.bits.data.imm       := pipelineOut.bits.uop.imm
+  fu.io.in.bits.data.src.zip(pipelineOut.bits.src).foreach(x => x._1 := x._2)
+  fu.io.in.bits.perfDebugInfo  := pipelineOut.bits.uop.debugInfo
 
   io.out.valid            := fu.io.out.valid
   fu.io.out.ready         := io.out.ready
