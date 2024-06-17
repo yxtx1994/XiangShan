@@ -560,7 +560,8 @@ trait HasXSParameter {
   def VmidLength = coreParams.VmidLength
   def ReSelectLen = coreParams.ReSelectLen
   def AddrBytes = AddrBits / 8 // unused
-  def DataBits = XLEN
+  // def DataBits = XLEN
+  def DataBits = 128
   def DataBytes = DataBits / 8
   def VDataBytes = VLEN / 8
   def HasFPU = coreParams.HasFPU

@@ -300,15 +300,23 @@ class AtomicsUnit(implicit p: Parameters) extends XSModule
 
   when (state === s_cache_resp_latch) {
     is_lrsc_valid :=  dcache_resp_id
-    val rdataSel = LookupTree(paddr(2, 0), List(
-      "b000".U -> dcache_resp_data(63, 0),
-      "b001".U -> dcache_resp_data(63, 8),
-      "b010".U -> dcache_resp_data(63, 16),
-      "b011".U -> dcache_resp_data(63, 24),
-      "b100".U -> dcache_resp_data(63, 32),
-      "b101".U -> dcache_resp_data(63, 40),
-      "b110".U -> dcache_resp_data(63, 48),
-      "b111".U -> dcache_resp_data(63, 56)
+    val rdataSel = LookupTree(paddr(wordOffBits - 1, 0), List(
+      "b0000".U -> dcache_resp_data(63,    0),
+      "b0001".U -> dcache_resp_data(63,    8),
+      "b0010".U -> dcache_resp_data(63,   16),
+      "b0011".U -> dcache_resp_data(63,   24),
+      "b0100".U -> dcache_resp_data(63,   32),
+      "b0101".U -> dcache_resp_data(63,   40),
+      "b0110".U -> dcache_resp_data(63,   48),
+      "b0111".U -> dcache_resp_data(63,   56),
+      "b1000".U -> dcache_resp_data(127,  64),
+      "b1001".U -> dcache_resp_data(127,  72),
+      "b1010".U -> dcache_resp_data(127,  80),
+      "b1011".U -> dcache_resp_data(127,  88),
+      "b1100".U -> dcache_resp_data(127,  96),
+      "b1101".U -> dcache_resp_data(127, 104),
+      "b1110".U -> dcache_resp_data(127, 112),
+      "b1111".U -> dcache_resp_data(127, 120)
     ))
 
     resp_data_wire := LookupTree(in.uop.fuOpType, List(

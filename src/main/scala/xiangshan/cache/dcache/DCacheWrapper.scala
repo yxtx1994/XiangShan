@@ -655,13 +655,16 @@ class DcacheToLduForwardIO(implicit p: Parameters) extends DCacheBundle {
     val forward_D = RegInit(false.B)
     val forwardData = RegInit(VecInit(List.fill(VLEN/8)(0.U(8.W))))
 
-    val block_idx = req_paddr(log2Up(refillBytes) - 1, 3)
-    val block_data = Wire(Vec(l1BusDataWidth / 64, UInt(64.W)))
-    (0 until l1BusDataWidth / 64).map(i => {
-      block_data(i) := data(64 * i + 63, 64 * i)
+    val block_idx = req_paddr(log2Up(refillBytes) - 1, log2Up(rowBytes))
+    // val block_data = Wire(Vec(l1BusDataWidth / 64, UInt(64.W)))
+    val block_data = Wire(Vec(l1BusDataWidth / rowBits, UInt(rowBits.W)))
+    (0 until l1BusDataWidth / rowBits).map(i => {
+      block_data(i) := data( rowBits * (i + 1) - 1, rowBits * i)
     })
-    val selected_data = Wire(UInt(128.W))
-    selected_data := Mux(req_paddr(3), Fill(2, block_data(block_idx)), Cat(block_data(block_idx + 1.U), block_data(block_idx)))
+    // val selected_data = Wire(UInt(128.W))
+    val selected_data = Wire(UInt(rowBits.W))
+    // selected_data := Mux(req_paddr(3), Fill(2, block_data(block_idx)), Cat(block_data(block_idx + 1.U), block_data(block_idx)))
+    selected_data := block_data(block_idx)
 
     forward_D := all_match
     for (i <- 0 until VLEN/8) {
