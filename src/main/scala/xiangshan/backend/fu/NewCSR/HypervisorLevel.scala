@@ -134,19 +134,19 @@ trait HypervisorLevel { self: NewCSR =>
     // Ref: 13.2.10. Hypervisor Guest Address Translation and Protection Register (hgatp)
     // A write to hgatp with an unsupported MODE value is not ignored as it is for satp. Instead, the fields of
     // hgatp are WARL in the normal way, when so indicated.
-    //
-    // But we treat hgatp as the same of satp and vsatp.
-    // If hgatp is written with an unsupported MODE,
-    // the entire write has no effect; no fields in hgatp are modified.
-    when(wen && wdata.MODE.isLegal) {
-      when (wdata.MODE === HgatpMode.Bare) {
-        reg := 0.U
-      }.otherwise {
-        reg := wdata
-      }
-    }.elsewhen (wen && !wdata.MODE.isLegal) {
-      reg.PPN := wdata.PPN
+
+    // The length of ppn is 44 bits.
+    // make PPN[1:0] read-only zero.
+    val ppnMask = (Fill(PPNLength - 2, 1.U(1.W)) ## 0.U(2.W)).take(PAddrBits - PageOffsetWidth)
+
+    when (wen) {
       reg.VMID := wdata.VMID
+      reg.PPN  := wdata.PPN & ppnMask
+      when (wdata.MODE.isLegal) {
+        reg.MODE := wdata.MODE
+      }.otherwise {
+        reg := reg
+      }
     }.otherwise {
       reg := reg
     }

@@ -6,17 +6,11 @@ import chisel3.util._
 import freechips.rocketchip.rocket.CSRs
 import utility.SignExt
 import xiangshan.backend.fu.NewCSR.CSRBundles._
-import xiangshan.backend.fu.NewCSR.CSRDefines.{
-  CSRRWField => RW,
-  CSRROField => RO,
-  CSRWLRLField => WLRL,
-  CSRWARLField => WARL,
-  VirtMode,
-  _
-}
+import xiangshan.backend.fu.NewCSR.CSRDefines.{VirtMode, CSRROField => RO, CSRRWField => RW, CSRWARLField => WARL, CSRWLRLField => WLRL, _}
 import xiangshan.backend.fu.NewCSR.CSREvents.{SretEventSinkBundle, TrapEntryVSEventSinkBundle}
 import xiangshan.backend.fu.NewCSR.CSREnumTypeImplicitCast._
 import xiangshan.backend.fu.NewCSR.CSRBundleImplicitCast._
+import xiangshan.backend.fu.NewCSR.CSRConfig.PPNLength
 import xiangshan.backend.fu.NewCSR.ChiselRecordForField._
 
 import scala.collection.immutable.SeqMap
@@ -187,6 +181,16 @@ trait VirtualSupervisorLevel { self: NewCSR with SupervisorLevel with Hypervisor
     .setAddr(CSRs.vstimecmp)
 
   val vsatp = Module(new CSRModule("VSatp", new SatpBundle) with VirtualSupervisorBundle {
+    val ppnMask = Fill(PPNLength, 1.U(1.W))
+    val ppnMaskHgatpIsBare   = ppnMask.take(PAddrBits - PageOffsetWidth)
+    val ppnMaskHgatpIsSv39x4 = ppnMask.take(39 + 2 - PageOffsetWidth)
+    val ppnMaskHgatpIsSv48x4 = ppnMask.take(48 + 2 - PageOffsetWidth)
+
+    val effectivePPNMask = Mux1H(Seq(
+      (hgatp.MODE === HgatpMode.Bare)   -> ppnMaskHgatpIsBare,
+      (hgatp.MODE === HgatpMode.Sv39x4) -> ppnMaskHgatpIsSv39x4,
+      (hgatp.MODE === HgatpMode.Sv48x4) -> ppnMaskHgatpIsSv48x4,
+    ))
     // Ref: 13.2.18. Virtual Supervisor Address Translation and Protection Register (vsatp)
     // When V=0, a write to vsatp with an unsupported MODE value is either ignored as it is for satp, or the
     // fields of vsatp are treated as WARL in the normal way.
@@ -197,8 +201,9 @@ trait VirtualSupervisorLevel { self: NewCSR with SupervisorLevel with Hypervisor
     // the entire write has no effect; no fields in satp are modified.
     when(wen && wdata.MODE.isLegal) {
       reg := wdata
+      reg.PPN := wdata.PPN & effectivePPNMask
     }.elsewhen(wen && !v && !wdata.MODE.isLegal) {
-      reg.PPN := wdata.PPN
+      reg.PPN := wdata.PPN & effectivePPNMask
       reg.ASID := wdata.ASID
     }.otherwise {
       reg := reg
@@ -292,4 +297,5 @@ class VSipToHip extends Bundle {
 
 trait VirtualSupervisorBundle { self: CSRModule[_] =>
   val v = IO(Input(Bool()))
+  val hgatp = IO(Input(new HgatpBundle))
 }
