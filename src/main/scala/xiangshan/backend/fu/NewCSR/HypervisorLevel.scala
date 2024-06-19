@@ -146,7 +146,7 @@ trait HypervisorLevel { self: NewCSR =>
       when (wdata.MODE.isLegal) {
         reg.MODE := wdata.MODE
       }.otherwise {
-        reg := reg
+        reg.MODE := reg.MODE
       }
     }.otherwise {
       reg := reg
