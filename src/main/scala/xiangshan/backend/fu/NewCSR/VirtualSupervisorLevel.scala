@@ -4,7 +4,7 @@ import chisel3._
 import chisel3.util.BitPat.bitPatToUInt
 import chisel3.util._
 import freechips.rocketchip.rocket.CSRs
-import utility.SignExt
+import utility.{SignExt, ZeroExt}
 import xiangshan.backend.fu.NewCSR.CSRBundles._
 import xiangshan.backend.fu.NewCSR.CSRDefines.{VirtMode, CSRROField => RO, CSRRWField => RW, CSRWARLField => WARL, CSRWLRLField => WLRL, _}
 import xiangshan.backend.fu.NewCSR.CSREvents.{SretEventSinkBundle, TrapEntryVSEventSinkBundle}
@@ -182,9 +182,9 @@ trait VirtualSupervisorLevel { self: NewCSR with SupervisorLevel with Hypervisor
 
   val vsatp = Module(new CSRModule("VSatp", new SatpBundle) with VirtualSupervisorBundle {
     val ppnMask = Fill(PPNLength, 1.U(1.W))
-    val ppnMaskHgatpIsBare   = ppnMask.take(PAddrBits - PageOffsetWidth)
-    val ppnMaskHgatpIsSv39x4 = ppnMask.take(39 + 2 - PageOffsetWidth)
-    val ppnMaskHgatpIsSv48x4 = ppnMask.take(48 + 2 - PageOffsetWidth)
+    val ppnMaskHgatpIsBare   = ZeroExt(ppnMask.take(PAddrBits - PageOffsetWidth), PPNLength)
+    val ppnMaskHgatpIsSv39x4 = ZeroExt(ppnMask.take(39 + 2    - PageOffsetWidth), PPNLength)
+    val ppnMaskHgatpIsSv48x4 = ZeroExt(ppnMask.take(48 + 2    - PageOffsetWidth), PPNLength)
 
     val effectivePPNMask = Mux1H(Seq(
       (hgatp.MODE === HgatpMode.Bare)   -> ppnMaskHgatpIsBare,

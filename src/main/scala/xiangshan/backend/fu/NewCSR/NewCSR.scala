@@ -406,6 +406,7 @@ class NewCSR(implicit val p: Parameters) extends Module
     mod match {
       case m: VirtualSupervisorBundle =>
         m.v := V.asUInt.asBool
+        m.hgatp := hgatp.regOut
       case _ =>
     }
     mod match {

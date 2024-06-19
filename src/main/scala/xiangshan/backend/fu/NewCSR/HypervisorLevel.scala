@@ -4,6 +4,7 @@ import chisel3._
 import chisel3.util._
 import freechips.rocketchip.rocket.CSRs
 import org.chipsalliance.cde.config.Parameters
+import utility.ZeroExt
 import xiangshan.backend.fu.NewCSR.CSRBundles._
 import xiangshan.backend.fu.NewCSR.CSRConfig._
 import xiangshan.backend.fu.NewCSR.CSRDefines.{CSRROField => RO, CSRRWField => RW, _}
@@ -137,7 +138,7 @@ trait HypervisorLevel { self: NewCSR =>
 
     // The length of ppn is 44 bits.
     // make PPN[1:0] read-only zero.
-    val ppnMask = (Fill(PPNLength - 2, 1.U(1.W)) ## 0.U(2.W)).take(PAddrBits - PageOffsetWidth)
+    val ppnMask = ZeroExt((Fill(PPNLength - 2, 1.U(1.W)) ## 0.U(2.W)).take(PAddrBits - PageOffsetWidth), PPNLength)
 
     when (wen) {
       reg.VMID := wdata.VMID
@@ -318,12 +319,11 @@ class Hviprio2Bundle extends CSRBundle {
 }
 
 class HgatpBundle extends CSRBundle {
-  final val PPN_msb = PAddrWidth - AddrWidthInPage - 1
   val MODE = HgatpMode(63, 60, wNoFilter).withReset(HgatpMode.Bare)
   // WARL in privileged spec.
   // RW, since we support max width of VMID
   val VMID = RW(44 - 1 + VMIDLEN, 44)
-  val PPN = RW(PAddrWidth, 0)
+  val PPN = RW(43, 0)
 }
 
 class HEnvCfg extends EnvCfg {
