@@ -22,6 +22,6 @@
 [submodule "coupledL2"]
 	path = coupledL2
 	url = https://github.com/OpenXiangShan/coupledL2
-[submodule "aia"]
-	path = aia
+[submodule "src/main/resources/aia"]
+	path = src/main/resources/aia
 	url = git@github.com:OpenXiangShan/OpenAIA
