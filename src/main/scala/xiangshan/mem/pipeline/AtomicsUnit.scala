@@ -245,6 +245,7 @@ class AtomicsUnit(implicit p: Parameters) extends XSModule
       LSUOpType.amominu_d -> M_XA_MINU,
       LSUOpType.amomaxu_d -> M_XA_MAXU
     ))
+    val originMask = genWmask(paddr, in.uop.fuOpType(1,0))
     pipe_req.miss := false.B
     pipe_req.probe := false.B
     pipe_req.probe_need_data := false.B
@@ -253,7 +254,7 @@ class AtomicsUnit(implicit p: Parameters) extends XSModule
     pipe_req.vaddr  := get_block_addr(in.src(0)) // vaddr
     pipe_req.word_idx  := get_word(paddr)
     pipe_req.amo_data  := genWdata(in.src(1), in.uop.fuOpType(1,0))
-    pipe_req.amo_mask  := genWmask(paddr, in.uop.fuOpType(1,0))
+    pipe_req.amo_mask  := Mux(paddr(3), (originMask << 8), originMask)
 
     io.dcache.req.valid := Mux(
       io.dcache.req.bits.cmd === M_XLR,
@@ -265,7 +266,8 @@ class AtomicsUnit(implicit p: Parameters) extends XSModule
       state := s_cache_resp
       paddr_reg := paddr
       data_reg := io.dcache.req.bits.amo_data
-      mask_reg := io.dcache.req.bits.amo_mask
+      // mask_reg := io.dcache.req.bits.amo_mask
+      mask_reg := originMask
       fuop_reg := in.uop.fuOpType
     }
   }
