@@ -22,9 +22,7 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
   val setFsDirty = csrIn.fpu.dirty_fs
   val setFflags = csrIn.fpu.fflags
   val setVsDirty = csrIn.vpu.dirty_vs
-  val setVxsat = csrIn.vpu.vxsat
   val setVstart = csrIn.vpu.set_vstart
-  val setVl = csrIn.vpu.set_vl
   val setVtype = 0.U.asTypeOf(csrIn.vpu.set_vtype)
 
   val flushPipe = Wire(Bool())
@@ -226,17 +224,7 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
   csrOut.isPerfCnt  := csrMod.io.out.bits.isPerfCnt && csrModOutValid && func =/= CSROpType.jmp
   csrOut.fpu.frm    := csrMod.io.state.fpState.frm.asUInt
   csrOut.vpu.vstart := csrMod.io.state.vecState.vstart.asUInt
-  csrOut.vpu.vxsat  := csrMod.io.state.vecState.vxsat.asUInt
   csrOut.vpu.vxrm   := csrMod.io.state.vecState.vxrm.asUInt
-  csrOut.vpu.vcsr   := csrMod.io.state.vecState.vcsr.asUInt
-  csrOut.vpu.vl     := csrMod.io.state.vecState.vl.asUInt
-  csrOut.vpu.vtype  := csrMod.io.state.vecState.vtype.asUInt
-  csrOut.vpu.vlenb  := csrMod.io.state.vecState.vlenb.asUInt
-  csrOut.vpu.vill   := csrMod.io.state.vecState.vtype.asTypeOf(new CSRVTypeBundle).VILL.asUInt
-  csrOut.vpu.vma    := csrMod.io.state.vecState.vtype.asTypeOf(new CSRVTypeBundle).VMA.asUInt
-  csrOut.vpu.vta    := csrMod.io.state.vecState.vtype.asTypeOf(new CSRVTypeBundle).VTA.asUInt
-  csrOut.vpu.vsew   := csrMod.io.state.vecState.vtype.asTypeOf(new CSRVTypeBundle).VSEW.asUInt
-  csrOut.vpu.vlmul  := csrMod.io.state.vecState.vtype.asTypeOf(new CSRVTypeBundle).VLMUL.asUInt
 
   csrOut.isXRet := isXRetFlag
 
