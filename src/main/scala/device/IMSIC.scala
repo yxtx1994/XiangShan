@@ -92,7 +92,7 @@ class imsic_csr_top(
   "XLEN"           -> XLEN,
   "NR_SRC"         -> NumIRSrc,
   "EID_VLD_DLY_NUM"-> EidVldDlyNum,
-)) with HasBlackBoxResource {
+)) with HasBlackBoxResource with HasBlackBoxPath {
   private val NR_SRC_WIDTH = log2Up(NumIRSrc)
   private val NR_HARTS_WIDTH = log2Up(NumHart)
   private val INTP_FILE_WIDTH = log2Up(NumIRFiles)
@@ -132,10 +132,11 @@ class imsic_csr_top(
     })
   })
 
-  addResource("/vsrc/imsic/imsic_csr_top.v")
-  addResource("/vsrc/imsic/imsic_csr_gate.v")
-  addResource("/vsrc/imsic/imsic_csr_reg.v")
-  addResource("/vsrc/cmip_dff_sync.sv")
+  val imsicPath = "../../aia/src/rtl/imsic"
+  addResource(imsicPath + "/vsrc/imsic/imsic_csr_top.v")
+  addResource(imsicPath + "/vsrc/imsic/imsic_csr_gate.v")
+  addResource(imsicPath + "/vsrc/imsic/imsic_csr_reg.v")
+  addResource(imsicPath + "/vsrc/cmip_dff_sync.sv")
 }
 
 class MsiInfoBundle(
