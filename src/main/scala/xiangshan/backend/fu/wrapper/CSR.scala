@@ -54,7 +54,7 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
 
   val csrMod = Module(new NewCSR)
 
-  private val privState = csrMod.io.state.privState
+  private val privState = csrMod.io.status.privState
   // The real reg value in CSR, with no read mask
   private val regOut = csrMod.io.out.bits.regOut
   private val src = Mux(CSROpType.needImm(func), csri, src1)
@@ -225,79 +225,74 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
 
   // Todo: summerize all difftest skip condition
   csrOut.isPerfCnt  := csrMod.io.out.bits.isPerfCnt && csrModOutValid && func =/= CSROpType.jmp
-  csrOut.fpu.frm    := csrMod.io.state.fpState.frm.asUInt
-  csrOut.vpu.vstart := csrMod.io.state.vecState.vstart.asUInt
-  csrOut.vpu.vxrm   := csrMod.io.state.vecState.vxrm.asUInt
+  csrOut.fpu.frm    := csrMod.io.status.fpState.frm.asUInt
+  csrOut.vpu.vstart := csrMod.io.status.vecState.vstart.asUInt
+  csrOut.vpu.vxrm   := csrMod.io.status.vecState.vxrm.asUInt
 
   csrOut.isXRet := isXRetFlag
 
-  csrOut.trapTarget := csrMod.io.out.targetPc
-  csrOut.interrupt := csrMod.io.out.interrupt
-  csrOut.wfi_event := csrMod.io.out.wfiEvent
+  csrOut.trapTarget := csrMod.io.out.bits.targetPc
+  csrOut.interrupt := csrMod.io.status.interrupt
+  csrOut.wfi_event := csrMod.io.status.wfiEvent
 
   csrOut.tlb := tlb
 
-  csrOut.debugMode := csrMod.io.out.debugMode
+  csrOut.debugMode := csrMod.io.status.debugMode
 
-  // Todo: this bundle should be used in decode.
-  // Todo: check permission in decode stage, pass tvm and vtvm only
-  csrOut.disableSfence := Mux(
-    csrMod.io.out.tvm,
-    csrMod.io.out.privState < PrivState.ModeM,
-    csrMod.io.out.privState.PRVM < PrivMode.S
-  )
-  csrOut.disableHfencev := DontCare // Todo
-  csrOut.disableHfenceg := DontCare // Todo
+  // Todo: remove disableXXfence bundle, since all fence checks have been done in decode
+  csrOut.disableSfence  := false.B
+  csrOut.disableHfencev := false.B
+  csrOut.disableHfenceg := false.B
 
   csrOut.customCtrl match {
     case custom =>
-      custom.l1I_pf_enable            := csrModOut.custom.l1I_pf_enable
-      custom.l2_pf_enable             := csrModOut.custom.l2_pf_enable
-      custom.l1D_pf_enable            := csrModOut.custom.l1D_pf_enable
-      custom.l1D_pf_train_on_hit      := csrModOut.custom.l1D_pf_train_on_hit
-      custom.l1D_pf_enable_agt        := csrModOut.custom.l1D_pf_enable_agt
-      custom.l1D_pf_enable_pht        := csrModOut.custom.l1D_pf_enable_pht
-      custom.l1D_pf_active_threshold  := csrModOut.custom.l1D_pf_active_threshold
-      custom.l1D_pf_active_stride     := csrModOut.custom.l1D_pf_active_stride
-      custom.l1D_pf_enable_stride     := csrModOut.custom.l1D_pf_enable_stride
-      custom.l2_pf_store_only         := csrModOut.custom.l2_pf_store_only
+      custom.l1I_pf_enable            := csrMod.io.status.custom.l1I_pf_enable
+      custom.l2_pf_enable             := csrMod.io.status.custom.l2_pf_enable
+      custom.l1D_pf_enable            := csrMod.io.status.custom.l1D_pf_enable
+      custom.l1D_pf_train_on_hit      := csrMod.io.status.custom.l1D_pf_train_on_hit
+      custom.l1D_pf_enable_agt        := csrMod.io.status.custom.l1D_pf_enable_agt
+      custom.l1D_pf_enable_pht        := csrMod.io.status.custom.l1D_pf_enable_pht
+      custom.l1D_pf_active_threshold  := csrMod.io.status.custom.l1D_pf_active_threshold
+      custom.l1D_pf_active_stride     := csrMod.io.status.custom.l1D_pf_active_stride
+      custom.l1D_pf_enable_stride     := csrMod.io.status.custom.l1D_pf_enable_stride
+      custom.l2_pf_store_only         := csrMod.io.status.custom.l2_pf_store_only
       // ICache
-      custom.icache_parity_enable     := csrModOut.custom.icache_parity_enable
+      custom.icache_parity_enable     := csrMod.io.status.custom.icache_parity_enable
       // Load violation predictor
-      custom.lvpred_disable           := csrModOut.custom.lvpred_disable
-      custom.no_spec_load             := csrModOut.custom.no_spec_load
-      custom.storeset_wait_store      := csrModOut.custom.storeset_wait_store
-      custom.storeset_no_fast_wakeup  := csrModOut.custom.storeset_no_fast_wakeup
-      custom.lvpred_timeout           := csrModOut.custom.lvpred_timeout
+      custom.lvpred_disable           := csrMod.io.status.custom.lvpred_disable
+      custom.no_spec_load             := csrMod.io.status.custom.no_spec_load
+      custom.storeset_wait_store      := csrMod.io.status.custom.storeset_wait_store
+      custom.storeset_no_fast_wakeup  := csrMod.io.status.custom.storeset_no_fast_wakeup
+      custom.lvpred_timeout           := csrMod.io.status.custom.lvpred_timeout
       // Branch predictor
-      custom.bp_ctrl                  := csrModOut.custom.bp_ctrl
+      custom.bp_ctrl                  := csrMod.io.status.custom.bp_ctrl
       // Memory Block
-      custom.sbuffer_threshold                := csrModOut.custom.sbuffer_threshold
-      custom.ldld_vio_check_enable            := csrModOut.custom.ldld_vio_check_enable
-      custom.soft_prefetch_enable             := csrModOut.custom.soft_prefetch_enable
-      custom.cache_error_enable               := csrModOut.custom.cache_error_enable
-      custom.uncache_write_outstanding_enable := csrModOut.custom.uncache_write_outstanding_enable
+      custom.sbuffer_threshold                := csrMod.io.status.custom.sbuffer_threshold
+      custom.ldld_vio_check_enable            := csrMod.io.status.custom.ldld_vio_check_enable
+      custom.soft_prefetch_enable             := csrMod.io.status.custom.soft_prefetch_enable
+      custom.cache_error_enable               := csrMod.io.status.custom.cache_error_enable
+      custom.uncache_write_outstanding_enable := csrMod.io.status.custom.uncache_write_outstanding_enable
       // Rename
-      custom.fusion_enable            := csrModOut.custom.fusion_enable
-      custom.wfi_enable               := csrModOut.custom.wfi_enable
+      custom.fusion_enable            := csrMod.io.status.custom.fusion_enable
+      custom.wfi_enable               := csrMod.io.status.custom.wfi_enable
       // distribute csr write signal
       // write to frontend and memory
       custom.distribute_csr.w.valid := csrWen
       custom.distribute_csr.w.bits.addr := addr
       custom.distribute_csr.w.bits.data := wdata
       // rename single step
-      custom.singlestep := csrMod.io.out.singleStepFlag
+      custom.singlestep := csrMod.io.status.singleStepFlag
       // trigger
-      custom.frontend_trigger.tUpdate.valid       := csrModOut.frontendTrigger.tUpdate.valid
-      custom.frontend_trigger.tUpdate.bits.addr   := csrModOut.frontendTrigger.tUpdate.bits.addr
-      custom.frontend_trigger.tUpdate.bits.tdata  := csrModOut.frontendTrigger.tUpdate.bits.tdata
-      custom.frontend_trigger.tEnableVec          := csrModOut.frontendTrigger.tEnableVec
-      custom.mem_trigger.tUpdate.valid            := csrModOut.memTrigger.tUpdate.valid
-      custom.mem_trigger.tUpdate.bits.addr        := csrModOut.memTrigger.tUpdate.bits.addr
-      custom.mem_trigger.tUpdate.bits.tdata       := csrModOut.memTrigger.tUpdate.bits.tdata
-      custom.mem_trigger.tEnableVec               := csrModOut.memTrigger.tEnableVec
+      custom.frontend_trigger.tUpdate.valid       := csrMod.io.status.frontendTrigger.tUpdate.valid
+      custom.frontend_trigger.tUpdate.bits.addr   := csrMod.io.status.frontendTrigger.tUpdate.bits.addr
+      custom.frontend_trigger.tUpdate.bits.tdata  := csrMod.io.status.frontendTrigger.tUpdate.bits.tdata
+      custom.frontend_trigger.tEnableVec          := csrMod.io.status.frontendTrigger.tEnableVec
+      custom.mem_trigger.tUpdate.valid            := csrMod.io.status.memTrigger.tUpdate.valid
+      custom.mem_trigger.tUpdate.bits.addr        := csrMod.io.status.memTrigger.tUpdate.bits.addr
+      custom.mem_trigger.tUpdate.bits.tdata       := csrMod.io.status.memTrigger.tUpdate.bits.tdata
+      custom.mem_trigger.tEnableVec               := csrMod.io.status.memTrigger.tEnableVec
       // virtual mode
-      custom.virtMode := csrMod.io.out.privState.V.asBool
+      custom.virtMode := csrMod.io.status.privState.V.asBool
   }
 
   csrToDecode := csrMod.io.toDecode

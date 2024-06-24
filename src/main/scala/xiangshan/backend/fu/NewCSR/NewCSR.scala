@@ -130,7 +130,7 @@ class NewCSR(implicit val p: Parameters) extends Module
       // perf
       val isPerfCnt = Bool()
     }))
-    val state = Output(new Bundle {
+    val status = Output(new Bundle {
       val privState = new PrivState
       val interrupt = Bool()
       val wfiEvent = Bool()
@@ -760,23 +760,23 @@ class NewCSR(implicit val p: Parameters) extends Module
   needTargetUpdate)
   io.out.bits.isPerfCnt := addrInPerfCnt
 
-  io.state.privState := privState
-  io.state.fpState.frm := fcsr.frm
-  io.state.fpState.off := mstatus.regOut.FS === ContextStatus.Off
-  io.state.vecState.vstart := vstart.rdata.asUInt
-  io.state.vecState.vxsat := vcsr.vxsat
-  io.state.vecState.vxrm := vcsr.vxrm
-  io.state.vecState.vcsr := vcsr.rdata.asUInt
-  io.state.vecState.vl := vl.rdata.asUInt
-  io.state.vecState.vtype := vtype.rdata.asUInt // Todo: check correct
-  io.state.vecState.vlenb := vlenb.rdata.asUInt
-  io.state.vecState.off := mstatus.regOut.VS === ContextStatus.Off
-  io.state.interrupt := intrMod.io.out.interruptVec.valid
-  io.state.wfiEvent := debugIntr || (mie.rdata.asUInt & mip.rdata.asUInt).orR
-  io.state.debugMode := debugMode
-  io.state.singleStepFlag := !debugMode && dcsr.regOut.STEP
-  io.state.tvm := tvm
-  io.state.vtvm := vtvm
+  io.status.privState := privState
+  io.status.fpState.frm := fcsr.frm
+  io.status.fpState.off := mstatus.regOut.FS === ContextStatus.Off
+  io.status.vecState.vstart := vstart.rdata.asUInt
+  io.status.vecState.vxsat := vcsr.vxsat
+  io.status.vecState.vxrm := vcsr.vxrm
+  io.status.vecState.vcsr := vcsr.rdata.asUInt
+  io.status.vecState.vl := vl.rdata.asUInt
+  io.status.vecState.vtype := vtype.rdata.asUInt // Todo: check correct
+  io.status.vecState.vlenb := vlenb.rdata.asUInt
+  io.status.vecState.off := mstatus.regOut.VS === ContextStatus.Off
+  io.status.interrupt := intrMod.io.out.interruptVec.valid
+  io.status.wfiEvent := debugIntr || (mie.rdata.asUInt & mip.rdata.asUInt).orR
+  io.status.debugMode := debugMode
+  io.status.singleStepFlag := !debugMode && dcsr.regOut.STEP
+  io.status.tvm := tvm
+  io.status.vtvm := vtvm
 
   /**
    * debug_begin
@@ -919,14 +919,14 @@ class NewCSR(implicit val p: Parameters) extends Module
 
   triggerFrontendChange := frontendTriggerUpdate
 
-  io.state.frontendTrigger.tUpdate.valid       := RegNext(RegNext(frontendTriggerUpdate))
-  io.state.frontendTrigger.tUpdate.bits.addr   := tselect.rdata.asUInt
-  io.state.frontendTrigger.tUpdate.bits.tdata.GenTdataDistribute(tdata1Selected, tdata2Selected)
-  io.state.frontendTrigger.tEnableVec          := fetchTriggerEnableVec
-  io.state.memTrigger.tUpdate.valid            := RegNext(RegNext(memTriggerUpdate))
-  io.state.memTrigger.tUpdate.bits.addr        := tselect.rdata.asUInt
-  io.state.memTrigger.tUpdate.bits.tdata.GenTdataDistribute(tdata1Selected, tdata2Selected)
-  io.state.memTrigger.tEnableVec               := memAccTriggerEnableVec
+  io.status.frontendTrigger.tUpdate.valid       := RegNext(RegNext(frontendTriggerUpdate))
+  io.status.frontendTrigger.tUpdate.bits.addr   := tselect.rdata.asUInt
+  io.status.frontendTrigger.tUpdate.bits.tdata.GenTdataDistribute(tdata1Selected, tdata2Selected)
+  io.status.frontendTrigger.tEnableVec          := fetchTriggerEnableVec
+  io.status.memTrigger.tUpdate.valid            := RegNext(RegNext(memTriggerUpdate))
+  io.status.memTrigger.tUpdate.bits.addr        := tselect.rdata.asUInt
+  io.status.memTrigger.tUpdate.bits.tdata.GenTdataDistribute(tdata1Selected, tdata2Selected)
+  io.status.memTrigger.tEnableVec               := memAccTriggerEnableVec
   /**
    * debug_end
    */
@@ -985,43 +985,43 @@ class NewCSR(implicit val p: Parameters) extends Module
    */
 
   /**
-   * [[io.state.custom]] connection
+   * [[io.status.custom]] connection
    */
-  io.state.custom.l1I_pf_enable           := spfctl.regOut.L1I_PF_ENABLE.asBool
-  io.state.custom.l2_pf_enable            := spfctl.regOut.L2_PF_ENABLE.asBool
-  io.state.custom.l1D_pf_enable           := spfctl.regOut.L1D_PF_ENABLE.asBool
-  io.state.custom.l1D_pf_train_on_hit     := spfctl.regOut.L1D_PF_TRAIN_ON_HIT.asBool
-  io.state.custom.l1D_pf_enable_agt       := spfctl.regOut.L1D_PF_ENABLE_AGT.asBool
-  io.state.custom.l1D_pf_enable_pht       := spfctl.regOut.L1D_PF_ENABLE_PHT.asBool
-  io.state.custom.l1D_pf_active_threshold := spfctl.regOut.L1D_PF_ACTIVE_THRESHOLD.asUInt
-  io.state.custom.l1D_pf_active_stride    := spfctl.regOut.L1D_PF_ACTIVE_STRIDE.asUInt
-  io.state.custom.l1D_pf_enable_stride    := spfctl.regOut.L1D_PF_ENABLE_STRIDE.asBool
-  io.state.custom.l2_pf_store_only        := spfctl.regOut.L2_PF_STORE_ONLY.asBool
+  io.status.custom.l1I_pf_enable           := spfctl.regOut.L1I_PF_ENABLE.asBool
+  io.status.custom.l2_pf_enable            := spfctl.regOut.L2_PF_ENABLE.asBool
+  io.status.custom.l1D_pf_enable           := spfctl.regOut.L1D_PF_ENABLE.asBool
+  io.status.custom.l1D_pf_train_on_hit     := spfctl.regOut.L1D_PF_TRAIN_ON_HIT.asBool
+  io.status.custom.l1D_pf_enable_agt       := spfctl.regOut.L1D_PF_ENABLE_AGT.asBool
+  io.status.custom.l1D_pf_enable_pht       := spfctl.regOut.L1D_PF_ENABLE_PHT.asBool
+  io.status.custom.l1D_pf_active_threshold := spfctl.regOut.L1D_PF_ACTIVE_THRESHOLD.asUInt
+  io.status.custom.l1D_pf_active_stride    := spfctl.regOut.L1D_PF_ACTIVE_STRIDE.asUInt
+  io.status.custom.l1D_pf_enable_stride    := spfctl.regOut.L1D_PF_ENABLE_STRIDE.asBool
+  io.status.custom.l2_pf_store_only        := spfctl.regOut.L2_PF_STORE_ONLY.asBool
 
-  io.state.custom.icache_parity_enable    := sfetchctl.regOut.ICACHE_PARITY_ENABLE.asBool
+  io.status.custom.icache_parity_enable    := sfetchctl.regOut.ICACHE_PARITY_ENABLE.asBool
 
-  io.state.custom.lvpred_disable          := slvpredctl.regOut.LVPRED_DISABLE.asBool
-  io.state.custom.no_spec_load            := slvpredctl.regOut.NO_SPEC_LOAD.asBool
-  io.state.custom.storeset_wait_store     := slvpredctl.regOut.STORESET_WAIT_STORE.asBool
-  io.state.custom.storeset_no_fast_wakeup := slvpredctl.regOut.STORESET_NO_FAST_WAKEUP.asBool
-  io.state.custom.lvpred_timeout          := slvpredctl.regOut.LVPRED_TIMEOUT.asUInt
+  io.status.custom.lvpred_disable          := slvpredctl.regOut.LVPRED_DISABLE.asBool
+  io.status.custom.no_spec_load            := slvpredctl.regOut.NO_SPEC_LOAD.asBool
+  io.status.custom.storeset_wait_store     := slvpredctl.regOut.STORESET_WAIT_STORE.asBool
+  io.status.custom.storeset_no_fast_wakeup := slvpredctl.regOut.STORESET_NO_FAST_WAKEUP.asBool
+  io.status.custom.lvpred_timeout          := slvpredctl.regOut.LVPRED_TIMEOUT.asUInt
 
-  io.state.custom.bp_ctrl.ubtb_enable     := sbpctl.regOut.UBTB_ENABLE .asBool
-  io.state.custom.bp_ctrl.btb_enable      := sbpctl.regOut.BTB_ENABLE  .asBool
-  io.state.custom.bp_ctrl.bim_enable      := sbpctl.regOut.BIM_ENABLE  .asBool
-  io.state.custom.bp_ctrl.tage_enable     := sbpctl.regOut.TAGE_ENABLE .asBool
-  io.state.custom.bp_ctrl.sc_enable       := sbpctl.regOut.SC_ENABLE   .asBool
-  io.state.custom.bp_ctrl.ras_enable      := sbpctl.regOut.RAS_ENABLE  .asBool
-  io.state.custom.bp_ctrl.loop_enable     := sbpctl.regOut.LOOP_ENABLE .asBool
+  io.status.custom.bp_ctrl.ubtb_enable     := sbpctl.regOut.UBTB_ENABLE .asBool
+  io.status.custom.bp_ctrl.btb_enable      := sbpctl.regOut.BTB_ENABLE  .asBool
+  io.status.custom.bp_ctrl.bim_enable      := sbpctl.regOut.BIM_ENABLE  .asBool
+  io.status.custom.bp_ctrl.tage_enable     := sbpctl.regOut.TAGE_ENABLE .asBool
+  io.status.custom.bp_ctrl.sc_enable       := sbpctl.regOut.SC_ENABLE   .asBool
+  io.status.custom.bp_ctrl.ras_enable      := sbpctl.regOut.RAS_ENABLE  .asBool
+  io.status.custom.bp_ctrl.loop_enable     := sbpctl.regOut.LOOP_ENABLE .asBool
 
-  io.state.custom.sbuffer_threshold                := smblockctl.regOut.SBUFFER_THRESHOLD.asUInt
-  io.state.custom.ldld_vio_check_enable            := smblockctl.regOut.LDLD_VIO_CHECK_ENABLE.asBool
-  io.state.custom.soft_prefetch_enable             := smblockctl.regOut.SOFT_PREFETCH_ENABLE.asBool
-  io.state.custom.cache_error_enable               := smblockctl.regOut.CACHE_ERROR_ENABLE.asBool
-  io.state.custom.uncache_write_outstanding_enable := smblockctl.regOut.UNCACHE_WRITE_OUTSTANDING_ENABLE.asBool
+  io.status.custom.sbuffer_threshold                := smblockctl.regOut.SBUFFER_THRESHOLD.asUInt
+  io.status.custom.ldld_vio_check_enable            := smblockctl.regOut.LDLD_VIO_CHECK_ENABLE.asBool
+  io.status.custom.soft_prefetch_enable             := smblockctl.regOut.SOFT_PREFETCH_ENABLE.asBool
+  io.status.custom.cache_error_enable               := smblockctl.regOut.CACHE_ERROR_ENABLE.asBool
+  io.status.custom.uncache_write_outstanding_enable := smblockctl.regOut.UNCACHE_WRITE_OUTSTANDING_ENABLE.asBool
 
-  io.state.custom.fusion_enable           := srnctl.regOut.FUSION_ENABLE.asBool
-  io.state.custom.wfi_enable              := srnctl.regOut.WFI_ENABLE.asBool
+  io.status.custom.fusion_enable           := srnctl.regOut.FUSION_ENABLE.asBool
+  io.status.custom.wfi_enable              := srnctl.regOut.WFI_ENABLE.asBool
 
   private val s_idle :: s_waitIMSIC :: Nil = Enum(2)
 
