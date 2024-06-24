@@ -75,6 +75,7 @@ class TrapEntryMEventModule(implicit val p: Parameters) extends Module with CSRE
   private val isBpExcp       = isException && ExceptionNO.EX_BP.U === highPrioTrapNO
   private val isHlsExcp      = isException && in.isHls
   private val fetchCrossPage = in.isCrossPageIPF
+  private val isIllegalInst  = isException && ExceptionNO.EX_II.U === highPrioTrapNO
 
   private val isGuestExcp    = isException && ExceptionNO.getGuestPageFault.map(_.U === highPrioTrapNO).reduce(_ || _)
   // Software breakpoint exceptions are permitted to write either 0 or the pc to xtval
@@ -87,6 +88,7 @@ class TrapEntryMEventModule(implicit val p: Parameters) extends Module with CSRE
     isGuestExcp ||
     (isFetchExcp || isBpExcp) && fetchIsVirt ||
     isMemExcp && memIsVirt
+  private val tvalFillInst     = isIllegalInst
 
   private val tval = Mux1H(Seq(
     (tvalFillPc                     ) -> trapPC,
@@ -94,6 +96,7 @@ class TrapEntryMEventModule(implicit val p: Parameters) extends Module with CSRE
     (tvalFillMemVaddr && !memIsVirt ) -> trapMemVA,
     (tvalFillMemVaddr &&  memIsVirt ) -> trapMemVA,
     (isGuestExcp                    ) -> trapMemVA,
+    (tvalFillInst                   ) -> in.trapInst,
   ))
 
   private val tval2 = Mux(isGuestExcp, trapMemGPA, 0.U)

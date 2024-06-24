@@ -100,6 +100,7 @@ trait CSREventBase {
 class TrapEntryEventInput(implicit val p: Parameters) extends Bundle with HasXSParameter {
   val causeNO = Input(new CauseBundle)
   val trapPc = Input(UInt(VaddrMaxWidth.W))
+  val trapInst = Input(UInt(InstWidth.W))
   val isCrossPageIPF = Input(Bool())
   val isHls = Input(Bool())
 

@@ -208,12 +208,12 @@ object XDecode extends DecodeConstants {
     // System, the immediate12 holds the CSR register.
 
     // CSR RO should be ahead of CSRRS and CSRRC, since decoder don't handle the inclusive relation-ship among the patterns.
-    CSRRS_RO -> XSDecode(SrcType.reg, SrcType.imm, SrcType.X, FuType.csr, CSROpType.ro, SelImm.IMM_I, xWen = T, noSpec = T, blockBack = T),
-    CSRRC_RO -> XSDecode(SrcType.reg, SrcType.imm, SrcType.X, FuType.csr, CSROpType.ro, SelImm.IMM_I, xWen = T, noSpec = T, blockBack = T),
+    CSRRS_RO -> XSDecode(SrcType.reg, SrcType.imm, SrcType.X, FuType.csr, CSROpType.roset, SelImm.IMM_Z, xWen = T, noSpec = T, blockBack = T),
+    CSRRC_RO -> XSDecode(SrcType.reg, SrcType.imm, SrcType.X, FuType.csr, CSROpType.roclr, SelImm.IMM_Z, xWen = T, noSpec = T, blockBack = T),
 
-    CSRRW   -> XSDecode(SrcType.reg, SrcType.imm, SrcType.X, FuType.csr, CSROpType.wrt , SelImm.IMM_I, xWen = T, noSpec = T, blockBack = T),
-    CSRRS   -> XSDecode(SrcType.reg, SrcType.imm, SrcType.X, FuType.csr, CSROpType.set , SelImm.IMM_I, xWen = T, noSpec = T, blockBack = T),
-    CSRRC   -> XSDecode(SrcType.reg, SrcType.imm, SrcType.X, FuType.csr, CSROpType.clr , SelImm.IMM_I, xWen = T, noSpec = T, blockBack = T),
+    CSRRW   -> XSDecode(SrcType.reg, SrcType.imm, SrcType.X, FuType.csr, CSROpType.wrt , SelImm.IMM_Z, xWen = T, noSpec = T, blockBack = T),
+    CSRRS   -> XSDecode(SrcType.reg, SrcType.imm, SrcType.X, FuType.csr, CSROpType.set , SelImm.IMM_Z, xWen = T, noSpec = T, blockBack = T),
+    CSRRC   -> XSDecode(SrcType.reg, SrcType.imm, SrcType.X, FuType.csr, CSROpType.clr , SelImm.IMM_Z, xWen = T, noSpec = T, blockBack = T),
 
     CSRRWI  -> XSDecode(SrcType.reg, SrcType.imm, SrcType.X, FuType.csr, CSROpType.wrti, SelImm.IMM_Z, xWen = T, noSpec = T, blockBack = T),
     CSRRSI  -> XSDecode(SrcType.reg, SrcType.imm, SrcType.X, FuType.csr, CSROpType.seti, SelImm.IMM_Z, xWen = T, noSpec = T, blockBack = T),
@@ -550,11 +550,11 @@ case class Imm_J() extends Imm(20){
   }
 }
 
-case class Imm_Z() extends Imm(12 + 5){
+case class Imm_Z() extends Imm(12 + 5 + 5){
   override def do_toImm32(minBits: UInt): UInt = minBits
 
   override def minBitsFromInstr(instr: UInt): UInt = {
-    Cat(instr(19, 15), instr(31, 20))
+    Cat(instr(11, 7), instr(19, 15), instr(31, 20))
   }
 }
 
