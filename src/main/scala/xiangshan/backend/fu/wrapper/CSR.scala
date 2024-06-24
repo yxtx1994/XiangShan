@@ -21,9 +21,12 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
 
   val setFsDirty = csrIn.fpu.dirty_fs
   val setFflags = csrIn.fpu.fflags
+
   val setVsDirty = csrIn.vpu.dirty_vs
   val setVstart = csrIn.vpu.set_vstart
-  val setVtype = 0.U.asTypeOf(csrIn.vpu.set_vtype)
+  val setVtype = csrIn.vpu.set_vtype
+  val setVxsat = csrIn.vpu.set_vxsat
+  val vlFromPreg = csrIn.vpu.vl
 
   val flushPipe = Wire(Bool())
   val flush = io.flush.valid
@@ -101,7 +104,7 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
   csrMod.io.fromRob.commit.vxsat.bits := setVxsat
   csrMod.io.fromRob.commit.vsDirty := setVsDirty
   csrMod.io.fromRob.commit.vstart := setVstart
-  csrMod.io.fromRob.commit.vl := setVl
+  csrMod.io.fromRob.commit.vl := vlFromPreg
   // Todo: correct vtype
   csrMod.io.fromRob.commit.vtype.valid := setVtype.valid
   csrMod.io.fromRob.commit.vtype.bits.VILL := setVtype.bits(XLEN - 1)
