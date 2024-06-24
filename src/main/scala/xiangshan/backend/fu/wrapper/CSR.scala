@@ -100,8 +100,8 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
 
   csrMod.io.fromRob.commit.fflags := setFflags
   csrMod.io.fromRob.commit.fsDirty := setFsDirty
-  csrMod.io.fromRob.commit.vxsat.valid := setVxsat
-  csrMod.io.fromRob.commit.vxsat.bits := setVxsat
+  csrMod.io.fromRob.commit.vxsat.valid := setVxsat.valid
+  csrMod.io.fromRob.commit.vxsat.bits := setVxsat.bits
   csrMod.io.fromRob.commit.vsDirty := setVsDirty
   csrMod.io.fromRob.commit.vstart := setVstart
   csrMod.io.fromRob.commit.vl := vlFromPreg
