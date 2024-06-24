@@ -736,6 +736,31 @@ class NewCSR(implicit val p: Parameters) extends Module
 
   private val noCSRIllegal = (ren || wen) && Cat(csrRwMap.keys.toSeq.sorted.map(csrAddr => !(addr === csrAddr.U))).andR
 
+  private val s_idle :: s_waitIMSIC :: Nil = Enum(2)
+
+  private val state = RegInit(s_idle)
+  private val stateNext = WireInit(state)
+  state := stateNext
+
+  private val asyncRead = ren && (
+    mireg.addr.U === addr && miselect.inIMSICRange ||
+      sireg.addr.U === addr && siselect.inIMSICRange ||
+      vsireg.addr.U === addr && vsiselect.inIMSICRange
+    )
+
+  switch(state) {
+    is(s_idle) {
+      when(asyncRead) {
+        stateNext := s_waitIMSIC
+      }
+    }
+    is(s_waitIMSIC) {
+      when(fromAIA.rdata.valid) {
+        stateNext := s_idle
+      }
+    }
+  }
+
   io.out.valid :=
     io.in.valid && stateNext === s_idle ||
     state === s_waitIMSIC && stateNext === s_idle
@@ -1022,31 +1047,6 @@ class NewCSR(implicit val p: Parameters) extends Module
 
   io.status.custom.fusion_enable           := srnctl.regOut.FUSION_ENABLE.asBool
   io.status.custom.wfi_enable              := srnctl.regOut.WFI_ENABLE.asBool
-
-  private val s_idle :: s_waitIMSIC :: Nil = Enum(2)
-
-  private val state = RegInit(s_idle)
-  private val stateNext = WireInit(state)
-  state := stateNext
-
-  private val asyncRead = ren && (
-    mireg.addr.U === addr && miselect.inIMSICRange ||
-    sireg.addr.U === addr && siselect.inIMSICRange ||
-    vsireg.addr.U === addr && vsiselect.inIMSICRange
-  )
-
-  switch(state) {
-    is(s_idle) {
-      when (asyncRead) {
-        stateNext := s_waitIMSIC
-      }
-    }
-    is(s_waitIMSIC) {
-      when (fromAIA.rdata.valid) {
-        stateNext := s_idle
-      }
-    }
-  }
 
   // Todo: check IMSIC EX_II and EX_VI
   private val imsicIllegal = fromAIA.rdata.valid && fromAIA.rdata.bits.illegal
