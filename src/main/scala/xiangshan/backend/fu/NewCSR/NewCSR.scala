@@ -761,6 +761,11 @@ class NewCSR(implicit val p: Parameters) extends Module
     }
   }
 
+  // Todo: check IMSIC EX_II and EX_VI
+  private val imsicIllegal = fromAIA.rdata.valid && fromAIA.rdata.bits.illegal
+  private val imsic_EX_II = imsicIllegal && !V.asUInt.asBool
+  private val imsic_EX_VI = imsicIllegal && V.asUInt.asBool
+
   io.out.valid :=
     io.in.valid && stateNext === s_idle ||
     state === s_waitIMSIC && stateNext === s_idle
@@ -1047,11 +1052,6 @@ class NewCSR(implicit val p: Parameters) extends Module
 
   io.status.custom.fusion_enable           := srnctl.regOut.FUSION_ENABLE.asBool
   io.status.custom.wfi_enable              := srnctl.regOut.WFI_ENABLE.asBool
-
-  // Todo: check IMSIC EX_II and EX_VI
-  private val imsicIllegal = fromAIA.rdata.valid && fromAIA.rdata.bits.illegal
-  private val imsic_EX_II = imsicIllegal && !V.asUInt.asBool
-  private val imsic_EX_VI = imsicIllegal && V.asUInt.asBool
 
   private val csrAccess = wen || ren
 
