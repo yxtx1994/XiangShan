@@ -55,7 +55,7 @@ class IMSIC(
   ))
 
   imsicTop.io.csr_clk         := clock
-  imsicTop.io.csr_rstn        := reset
+  imsicTop.io.csr_rst         := reset
   imsicTop.io.hart_id         := i.hartId
   imsicTop.io.i.msi_info_vld  := i.msiInfo.valid
   imsicTop.io.i.msi_info      := i.msiInfo.bits.info
@@ -100,7 +100,7 @@ class imsic_csr_top(
 
   val io = IO(new Bundle {
     val csr_clk = Input(Clock())
-    val csr_rstn = Input(Reset())
+    val csr_rst = Input(Reset())
     val hart_id = Input(UInt(NR_HARTS_WIDTH.W))
 
     val i = Input(new Bundle {
