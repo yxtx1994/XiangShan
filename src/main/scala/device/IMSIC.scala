@@ -131,10 +131,10 @@ class imsic_csr_top(
       val vstopei = UInt(32.W)
     })
   })
-  addResource("/aia/src/rtl/vsrc/imsic/imsic_csr_top.v")
-  addResource("/aia/src/rtl/vsrc/imsic/imsic_csr_gate.v")
-  addResource("/aia/src/rtl/vsrc/imsic/imsic_csr_reg.v")
-  addResource("/aia/src/rtl/vsrc/cmip_dff_sync.sv")
+  addResource("/aia/src/rtl/imsic/imsic_csr_top.v")
+  addResource("/aia/src/rtl/imsic/imsic_csr_gate.v")
+  addResource("/aia/src/rtl/imsic/imsic_csr_reg.v")
+  addResource("/aia/src/rtl/cmip_dff_sync.sv")
 }
 
 class MsiInfoBundle(
