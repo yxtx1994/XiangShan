@@ -132,7 +132,7 @@ class imsic_csr_top(
     })
   })
 
-  val imsicPath = "../../aia/src/rtl/imsic"
+  val imsicPath = "../../../aia/src/rtl/imsic"
   addResource(imsicPath + "/vsrc/imsic/imsic_csr_top.v")
   addResource(imsicPath + "/vsrc/imsic/imsic_csr_gate.v")
   addResource(imsicPath + "/vsrc/imsic/imsic_csr_reg.v")
