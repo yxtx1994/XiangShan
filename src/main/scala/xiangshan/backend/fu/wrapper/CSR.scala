@@ -144,6 +144,7 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
   imsic.i.csr.sClaim := csrMod.toAIA.sClaim
   imsic.i.csr.vsClaim := csrMod.toAIA.vsClaim
   imsic.i.csr.wdata.valid := csrMod.toAIA.wdata.valid
+  imsic.i.csr.wdata.bits.op := csrMod.toAIA.wdata.bits.op
   imsic.i.csr.wdata.bits.data := csrMod.toAIA.wdata.bits.data
 
   csrMod.fromAIA.rdata.valid := imsic.o.csr.rdata.valid
