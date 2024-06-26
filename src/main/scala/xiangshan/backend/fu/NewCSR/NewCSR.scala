@@ -6,7 +6,7 @@ import difftest._
 import freechips.rocketchip.rocket.CSRs
 import org.chipsalliance.cde.config.Parameters
 import top.{ArgParser, Generator}
-import utility.{DataHoldBypass, GatedValidRegNext, RegNextWithEnable, SignExt, ZeroExt}
+import utility.{DataHoldBypass, DelayN, GatedValidRegNext, RegNextWithEnable, SignExt, ZeroExt}
 import utils.{HPerfMonitor, OptionWrapper, PerfEvent}
 import xiangshan.backend.fu.NewCSR.CSRBundles.{CSRCustomState, PrivState, RobCommitCSR}
 import xiangshan.backend.fu.NewCSR.CSRDefines.{ContextStatus, PrivMode, SatpMode, VirtMode}
@@ -440,7 +440,7 @@ class NewCSR(implicit val p: Parameters) extends Module
         m.robCommit.vsDirty := GatedValidRegNext(io.fromRob.commit.vsDirty) || writeVecLegal
         m.robCommit.vxsat   := RegNextWithEnable(io.fromRob.commit.vxsat)
         m.robCommit.vtype   := RegNextWithEnable(io.fromRob.commit.vtype)
-        m.robCommit.vl      := RegNext          (io.fromRob.commit.vl)
+        m.robCommit.vl      := DelayN           (io.fromRob.commit.vl, 2)
         m.robCommit.vstart  := RegNextWithEnable(io.fromRob.commit.vstart)
         m.isVirtMode        := V.asUInt.asBool
       case _ =>
