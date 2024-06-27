@@ -44,7 +44,7 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
   // split imm/src1/rd from IMM_Z: src1/rd for tval
   val rd   = src2(21, 17)
   val addr = src2(11,  0)
-  val src  = src2(16, 12)
+  val rs1  = src2(16, 12)
   val csri = ZeroExt(src2(16, 12), XLEN)
 
   import CSRConst._
@@ -76,7 +76,7 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
   private val csrWen = valid && CSROpType.notReadOnly(func)
   //trap inst
   private val hasWrittenReg = RegInit(false.B)
-  private val isCSRIllegalInst = csrMod.io.out.EX_II
+  private val isCSRIllegalInst = csrMod.io.out.bits.EX_II
   // restore CSR inst
   private val func3 = LookupTree(func, Seq(
     CSROpType.wrt   -> "b001".U,
@@ -88,7 +88,7 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
     CSROpType.roset -> "b010".U,
     CSROpType.roclr -> "b011".U,
   ))
-  val CSRTrapInstr = Cat(addr, src, func3, rd, "b1110011".U)
+  val CSRTrapInstr = Cat(addr, rs1, func3, rd, "b1110011".U)
   val CSRTrapInst = Wire(new TrapInst)
   CSRTrapInst.instr := CSRTrapInstr
   CSRTrapInst.ftqIdx := io.in.bits.ctrl.ftqIdx.get
@@ -101,7 +101,7 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
     hasWrittenReg := true.B
   }
   val trapInstReg = RegEnable(trapInstWdata, 0.U.asTypeOf(new TrapInst), trapInstWen)
-  val trapInstRen   = csrMod.io.out.trapInstRen
+  val trapInstRen   = csrMod.io.out.bits.trapInstRen
   val trapInstRdata = WireInit(0.U(32.W))
   val needFlush = trapInstReg.needFlush(io.flush.bits.ftqIdx, io.flush.bits.ftqOffset) && io.flush.valid
   dontTouch(needFlush)

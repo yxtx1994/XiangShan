@@ -582,7 +582,7 @@ class NewCSR(implicit val p: Parameters) extends Module
       case in: TrapEntryEventInput =>
         in.causeNO := trapHandleMod.io.out.causeNO
         in.trapPc := trapPC
-        in.trapInst := io.in.trapInstRdata
+        in.trapInst := io.trapInstRdata
         in.isCrossPageIPF := trapIsCrossPageIPF
         in.isHls := trapIsHls
 
@@ -782,9 +782,9 @@ class NewCSR(implicit val p: Parameters) extends Module
     state === s_waitIMSIC && stateNext === s_idle
   io.out.bits.EX_II := permitMod.io.out.EX_II || imsic_EX_II || noCSRIllegal
   io.out.bits.EX_VI := permitMod.io.out.EX_VI || imsic_EX_VI
-  io.out.trapInstRen := trapHandleMod.io.out.causeNO.ExceptionCode.asUInt === EX_II.U && !trapHandleMod.io.out.causeNO.Interrupt.asBool
+  io.out.bits.trapInstRen := trapHandleMod.io.out.causeNO.ExceptionCode.asUInt === EX_II.U && !trapHandleMod.io.out.causeNO.Interrupt.asBool
 
-  io.out.flushPipe := flushPipe
+  io.out.bits.flushPipe := flushPipe
 
   io.out.bits.flushPipe := flushPipe
 
