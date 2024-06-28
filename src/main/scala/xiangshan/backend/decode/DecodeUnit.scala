@@ -19,6 +19,7 @@ package xiangshan.backend.decode
 import org.chipsalliance.cde.config.Parameters
 import chisel3._
 import chisel3.util._
+import freechips.rocketchip.rocket.CSRs
 import freechips.rocketchip.rocket.Instructions._
 import freechips.rocketchip.util.uintToBitPat
 import utility._
@@ -28,7 +29,7 @@ import xiangshan._
 import xiangshan.backend.fu.FuType
 import xiangshan.backend.Bundles.{DecodedInst, DynInst, StaticInst}
 import xiangshan.backend.decode.isa.PseudoInstructions
-import xiangshan.backend.decode.isa.bitfield.{InstVType, XSInstBitFields}
+import xiangshan.backend.decode.isa.bitfield.{InstVType, OPCODE5Bit, XSInstBitFields}
 import xiangshan.backend.fu.vector.Bundles.{VType, Vl}
 import xiangshan.backend.fu.wrapper.CSRToDecode
 
@@ -932,32 +933,46 @@ class DecodeUnit(implicit p: Parameters) extends XSModule with DecodeUnitConstan
   io.deq.uopInfo.numOfWB := uopInfoGen.io.out.uopInfo.numOfWB
   io.deq.uopInfo.lmul := uopInfoGen.io.out.uopInfo.lmul
 
+  val isCSR = inst.OPCODE5Bit === OPCODE5Bit.SYSTEM && inst.FUNCT3(1, 0) =/= 0.U
+  val isCSRR = isCSR && inst.FUNCT3 === BitPat("b?1?") && inst.RS1 === 0.U
+  val isCSRW = isCSR && inst.FUNCT3 === BitPat("b?10") && inst.RD  === 0.U
+  dontTouch(isCSRR)
+  dontTouch(isCSRW)
+
   // for csrr vl instruction, convert to vsetvl
-  val Vl = 0xC20.U
-  val isCsrrVl = FuType.FuTypeOrR(decodedInst.fuType, FuType.csr) && decodedInst.fuOpType === CSROpType.set && inst.CSRIDX === Vl
+  val isCsrrVl    = isCSRR && inst.CSRIDX === CSRs.vl.U
   when (isCsrrVl) {
     decodedInst.srcType(0) := SrcType.no
     decodedInst.srcType(1) := SrcType.no
     decodedInst.srcType(2) := SrcType.no
     decodedInst.srcType(3) := SrcType.no
     decodedInst.srcType(4) := SrcType.vp
-    decodedInst.lsrc(4) := Vl_IDX.U
+    decodedInst.lsrc(4)    := Vl_IDX.U
     decodedInst.blockBackward := false.B
+    decodedInst.waitForward   := false.B
   }
 
   io.deq.decodedInst := decodedInst
   io.deq.decodedInst.rfWen := (decodedInst.ldest =/= 0.U) && decodedInst.rfWen
-  // change vlsu to vseglsu when NF =/= 0.U
   io.deq.decodedInst.fuType := Mux1H(Seq(
-    ( isCsrrVl) -> FuType.vsetfwf.U,
+    // keep condition
     (!FuType.FuTypeOrR(decodedInst.fuType, FuType.vldu, FuType.vstu) && !isCsrrVl      ) -> decodedInst.fuType,
+
+    ( isCsrrVl) -> FuType.vsetfwf.U,
     ( FuType.FuTypeOrR(decodedInst.fuType, FuType.vldu, FuType.vstu) && inst.NF === 0.U || (inst.NF =/= 0.U && (inst.MOP === "b00".U && inst.SUMOP === "b01000".U))) -> decodedInst.fuType,
+    // change vlsu to vseglsu when NF =/= 0.U
     // MOP === b00 && SUMOP === b01000: unit-stride whole register store
     // MOP =/= b00                    : strided and indexed store
     ( FuType.FuTypeOrR(decodedInst.fuType, FuType.vstu)              && inst.NF =/= 0.U && ((inst.MOP === "b00".U && inst.SUMOP =/= "b01000".U) || inst.MOP =/= "b00".U)) -> FuType.vsegstu.U,
     // MOP === b00 && LUMOP === b01000: unit-stride whole register load
     // MOP =/= b00                    : strided and indexed load
     ( FuType.FuTypeOrR(decodedInst.fuType, FuType.vldu)              && inst.NF =/= 0.U && ((inst.MOP === "b00".U && inst.LUMOP =/= "b01000".U) || inst.MOP =/= "b00".U)) -> FuType.vsegldu.U,
+  ))
+
+  io.deq.decodedInst.fuOpType := Mux1H(Seq(
+    // keep condition
+    !isCsrrVl -> decodedInst.fuOpType,
+    isCsrrVl  -> VSETOpType.csrrvl,
   ))
   //-------------------------------------------------------------
   // Debug Info
