@@ -31,17 +31,17 @@ class Entries(implicit p: Parameters, params: IssueBlockParams) extends XSModule
   val memEtyResps: Seq[ValidIO[EntryDeqRespBundle]] = {
     val resps =
       if (params.isLdAddrIQ && !params.isStAddrIQ)                                                    //LDU
-        Seq(io.og0Resp, io.og1Resp, io.fromLoad.get.finalIssueResp, io.fromLoad.get.memAddrIssueResp)
+        Seq(io.fromLoad.get.finalIssueResp, io.fromLoad.get.memAddrIssueResp)
       else if (params.isLdAddrIQ && params.isStAddrIQ || params.isHyAddrIQ)                           //HYU
-        Seq(io.og0Resp, io.og1Resp, io.fromLoad.get.finalIssueResp, io.fromLoad.get.memAddrIssueResp, io.fromMem.get.fastResp, io.fromMem.get.slowResp)
+        Seq(io.fromLoad.get.finalIssueResp, io.fromLoad.get.memAddrIssueResp, io.fromMem.get.fastResp, io.fromMem.get.slowResp)
       else if (params.isStAddrIQ)                                                                     //STU
-        Seq(io.og0Resp, io.og1Resp, io.fromMem.get.slowResp)
+        Seq(io.fromMem.get.slowResp)
       else if (params.isVecLduIQ && params.isVecStuIQ) // Vector store IQ need no vecLdIn.resp, but for now vector store share the vector load IQ
-        Seq(io.og0Resp, io.og1Resp, io.vecLdIn.get.resp, io.fromMem.get.slowResp)
+        Seq(io.vecLdIn.get.resp, io.fromMem.get.slowResp)
       else if (params.isVecLduIQ)
-        Seq(io.og0Resp, io.og1Resp, io.vecLdIn.get.resp)
+        Seq(io.vecLdIn.get.resp)
       else if (params.isVecStuIQ)
-        Seq(io.og0Resp, io.og1Resp, io.fromMem.get.slowResp)
+        Seq(io.fromMem.get.slowResp)
       else Seq()
     if (params.isMemAddrIQ) {
       println(s"[${this.desiredName}] resp: {" +
@@ -138,11 +138,13 @@ class Entries(implicit p: Parameters, params: IssueBlockParams) extends XSModule
     EntriesConnect(enqEntry.io.commonIn, enqEntry.io.commonOut, entryIdx)
     enqEntry.io.enqDelayIn1.wakeUpFromWB      := RegEnable(io.wakeUpFromWB, io.enq(entryIdx).valid)
     enqEntry.io.enqDelayIn1.wakeUpFromIQ      := RegEnable(io.wakeUpFromIQ, io.enq(entryIdx).valid)
+    enqEntry.io.enqDelayIn1.srcLoadDependency := RegEnable(VecInit(io.enq(entryIdx).bits.payload.srcLoadDependency.take(params.numRegSrc)), io.enq(entryIdx).valid)
     enqEntry.io.enqDelayIn1.og0Cancel         := RegNext(io.og0Cancel.asUInt)
     enqEntry.io.enqDelayIn1.ldCancel          := RegNext(io.ldCancel)
     // note: these signals with 2 cycle delay should not be enabled by io.enq.valid
     enqEntry.io.enqDelayIn2.wakeUpFromWB      := DelayN(io.wakeUpFromWB, 2)
     enqEntry.io.enqDelayIn2.wakeUpFromIQ      := DelayN(io.wakeUpFromIQ, 2)
+    enqEntry.io.enqDelayIn2.srcLoadDependency := DelayN(VecInit(io.enq(entryIdx).bits.payload.srcLoadDependency.take(params.numRegSrc)), 2)
     enqEntry.io.enqDelayIn2.og0Cancel         := DelayN(io.og0Cancel.asUInt, 2)
     enqEntry.io.enqDelayIn2.ldCancel          := DelayN(io.ldCancel, 2)
     enqEntryTransVec(entryIdx)                := enqEntry.io.commonOut.transEntry
@@ -268,23 +270,31 @@ class Entries(implicit p: Parameters, params: IssueBlockParams) extends XSModule
   //issueRespVec
   if (params.isVecMemIQ) {
     // vector memory IQ
-    issueRespVec.zip(robIdxVec).zip(uopIdxVec.get).foreach { case ((issueResp, robIdx), uopIdx) =>
+    issueRespVec.lazyZip(robIdxVec.lazyZip(uopIdxVec.get)).lazyZip(issueTimerVec.lazyZip(deqPortIdxReadVec)).foreach { case (issueResp, (robIdx, uopIdx), (issueTimer, deqPortIdx)) =>
+      val respInDatapath = resps(issueTimer(0))(deqPortIdx)
+      val respAfterDatapath = Wire(chiselTypeOf(respInDatapath))
       val hitRespsVec = VecInit(memEtyResps.map(x =>
         x.valid && x.bits.robIdx === robIdx && x.bits.uopIdx.get === uopIdx
       ).toSeq)
-      issueResp.valid := hitRespsVec.reduce(_ | _)
-      issueResp.bits := Mux1H(hitRespsVec, memEtyResps.map(_.bits).toSeq)
+      respAfterDatapath.valid := hitRespsVec.reduce(_ | _)
+      respAfterDatapath.bits  := (if (memEtyResps.size == 1) memEtyResps.head.bits
+                                  else Mux1H(hitRespsVec, memEtyResps.map(_.bits).toSeq))
+      issueResp := Mux(issueTimer(1), respAfterDatapath, respInDatapath)
     }
   } else if (params.isMemAddrIQ) {
     // scalar memory IQ
-    issueRespVec.zip(robIdxVec).foreach { case (issueResp, robIdx) =>
+    issueRespVec.lazyZip(robIdxVec).lazyZip(issueTimerVec.lazyZip(deqPortIdxReadVec)).foreach { case (issueResp, robIdx, (issueTimer, deqPortIdx)) =>
+      val respInDatapath = resps(issueTimer(0))(deqPortIdx)
+      val respAfterDatapath = Wire(chiselTypeOf(respInDatapath))
       val hitRespsVec = VecInit(memEtyResps.map(x => x.valid && (x.bits.robIdx === robIdx)).toSeq)
-      issueResp.valid := hitRespsVec.reduce(_ | _)
-      issueResp.bits := Mux1H(hitRespsVec, memEtyResps.map(_.bits).toSeq)
+      respAfterDatapath.valid := hitRespsVec.reduce(_ | _)
+      respAfterDatapath.bits  := (if (memEtyResps.size == 1) memEtyResps.head.bits
+                                  else Mux1H(hitRespsVec, memEtyResps.map(_.bits).toSeq))
+      issueResp := Mux(issueTimer(1), respAfterDatapath, respInDatapath)
     }
   }
   else {
-    issueRespVec.zip(issueTimerVec).zip(deqPortIdxReadVec).foreach { case ((issueResp, issueTimer), deqPortIdx) =>
+    issueRespVec.lazyZip(issueTimerVec.lazyZip(deqPortIdxReadVec)).foreach { case (issueResp, (issueTimer, deqPortIdx)) =>
       val Resp = resps(issueTimer)(deqPortIdx)
       issueResp := Resp
     }
@@ -387,7 +397,7 @@ class Entries(implicit p: Parameters, params: IssueBlockParams) extends XSModule
   io.canIssue                       := canIssueVec.asUInt
   io.fuType                         := fuTypeVec
   io.dataSources                    := dataSourceVec
-  io.srcWakeUpL1ExuOH.foreach(_     := srcWakeUpL1ExuOHVec.get.map(x => VecInit(x.map(_.asUInt))))
+  io.srcWakeUpL1ExuOH.foreach(_     := srcWakeUpL1ExuOHVec.get)
   io.loadDependency                 := loadDependencyVec
   io.isFirstIssue.zipWithIndex.foreach{ case (isFirstIssue, deqIdx) =>
     isFirstIssue                    := io.deqSelOH(deqIdx).valid && Mux1H(io.deqSelOH(deqIdx).bits, isFirstIssueVec)
@@ -541,7 +551,7 @@ class EntriesIO(implicit p: Parameters, params: IssueBlockParams) extends XSBund
   val fuType              = Vec(params.numEntries, Output(FuType()))
   val dataSources         = Vec(params.numEntries, Vec(params.numRegSrc, Output(DataSource())))
   val loadDependency      = Vec(params.numEntries, Vec(LoadPipelineWidth, UInt(LoadDependencyWidth.W)))
-  val srcWakeUpL1ExuOH    = OptionWrapper(params.hasIQWakeUp, Vec(params.numEntries, Vec(params.numRegSrc, Output(ExuOH()))))
+  val srcWakeUpL1ExuOH    = OptionWrapper(params.hasIQWakeUp, Vec(params.numEntries, Vec(params.numRegSrc, Output(ExuVec()))))
   //deq status
   val isFirstIssue        = Vec(params.numDeq, Output(Bool()))
   val deqEntry            = Vec(params.numDeq, ValidIO(new EntryBundle))

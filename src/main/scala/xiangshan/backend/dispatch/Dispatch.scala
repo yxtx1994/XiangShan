@@ -68,7 +68,8 @@ class Dispatch(implicit p: Parameters) extends XSModule with HasPerfEvents {
       val needAlloc = Vec(RenameWidth, Output(Bool()))
       val req = Vec(RenameWidth, ValidIO(new DynInst))
     }
-    val IQValidNumVec = Input(MixedVec(backendParams.genIQValidNumBundle))
+    val intIQValidNumVec = Input(MixedVec(backendParams.genIntIQValidNumBundle))
+    val fpIQValidNumVec = Input(MixedVec(backendParams.genFpIQValidNumBundle))
     val fromIntDQ = new Bundle {
       val intDQ0ValidDeq0Num = Input(UInt(dpParams.IntDqSize.U.getWidth.W))
       val intDQ0ValidDeq1Num = Input(UInt(dpParams.IntDqSize.U.getWidth.W))
@@ -124,14 +125,14 @@ class Dispatch(implicit p: Parameters) extends XSModule with HasPerfEvents {
   val isOnlyDq0 = VecInit(isIntDq0.zip(isIntDq1).map { case (dq0, dq1) => dq0 && !dq1 })
   val isOnlyDq1 = VecInit(isIntDq0.zip(isIntDq1).map { case (dq0, dq1) => dq1 && !dq0 })
   val isBothDq01 = VecInit(isIntDq0.zip(isIntDq1).map { case (dq0, dq1) => dq0 || dq1 }) // alu,brh
-  val IQ0Deq0Num = io.IQValidNumVec(0)(0)
-  val IQ0Deq1Num = io.IQValidNumVec(0)(1)
-  val IQ1Deq0Num = io.IQValidNumVec(1)(0)
-  val IQ1Deq1Num = io.IQValidNumVec(1)(1)
-  val IQ2Deq0Num = io.IQValidNumVec(2)(0)
-  val IQ2Deq1Num = io.IQValidNumVec(2)(1)
-  val IQ3Deq0Num = io.IQValidNumVec(3)(0)
-  val IQ3Deq1Num = io.IQValidNumVec(3)(1)
+  val IQ0Deq0Num = io.intIQValidNumVec(0)(0)
+  val IQ0Deq1Num = io.intIQValidNumVec(0)(1)
+  val IQ1Deq0Num = io.intIQValidNumVec(1)(0)
+  val IQ1Deq1Num = io.intIQValidNumVec(1)(1)
+  val IQ2Deq0Num = io.intIQValidNumVec(2)(0)
+  val IQ2Deq1Num = io.intIQValidNumVec(2)(1)
+  val IQ3Deq0Num = io.intIQValidNumVec(3)(0)
+  val IQ3Deq1Num = io.intIQValidNumVec(3)(1)
   val DQ0Deq0 = io.fromIntDQ.intDQ0ValidDeq0Num
   val DQ0Deq1 = io.fromIntDQ.intDQ0ValidDeq1Num
   val DQ1Deq0 = io.fromIntDQ.intDQ1ValidDeq0Num
@@ -171,8 +172,6 @@ class Dispatch(implicit p: Parameters) extends XSModule with HasPerfEvents {
   }
   val toIntDq0Valid = Wire(Vec(RenameWidth, Bool()))
   val toIntDq1Valid = Wire(Vec(RenameWidth, Bool()))
-  dontTouch(toIntDq0Valid)
-  dontTouch(toIntDq1Valid)
   toIntDq0Valid.indices.map { case i =>
     toIntDq0Valid(i) := Mux(!io.toIntDq0.canAccept, false.B, Mux(!io.toIntDq1.canAccept, isOnlyDq0(i) || isBothDq01(i), isOnlyDq0(i) || aluSelectDq0(i) || brhSelectDq0(i)))
   }
@@ -281,7 +280,7 @@ class Dispatch(implicit p: Parameters) extends XSModule with HasPerfEvents {
   // notBlockedByPrevious: previous instructions can enqueue
   val hasException = VecInit(io.fromRename.zip(updatedUop).map {
     case (fromRename: DecoupledIO[DynInst], uop: DynInst) =>
-      selectFrontend(fromRename.bits.exceptionVec).asUInt.orR || uop.singleStep || fromRename.bits.trigger.getFrontendCanFire
+      fromRename.bits.hasException || uop.singleStep
   })
 
   private val blockedByWaitForward = Wire(Vec(RenameWidth, Bool()))
@@ -289,7 +288,11 @@ class Dispatch(implicit p: Parameters) extends XSModule with HasPerfEvents {
   for (i <- 1 until RenameWidth) {
     blockedByWaitForward(i) := blockedByWaitForward(i - 1) || (!io.enqRob.isEmpty || Cat(io.fromRename.take(i).map(_.valid)).orR) && isWaitForward(i)
   }
-  dontTouch(blockedByWaitForward)
+  if(backendParams.debugEn){
+    dontTouch(toIntDq0Valid)
+    dontTouch(toIntDq1Valid)
+    dontTouch(blockedByWaitForward)
+  }
 
   // Only the uop with block backward flag will block the next uop
   val nextCanOut = VecInit((0 until RenameWidth).map(i =>
@@ -398,6 +401,8 @@ class Dispatch(implicit p: Parameters) extends XSModule with HasPerfEvents {
     io.allocPregs(i).isInt := io.fromRename(i).valid && io.fromRename(i).bits.rfWen && (io.fromRename(i).bits.ldest =/= 0.U) && !io.fromRename(i).bits.eliminatedMove
     io.allocPregs(i).isFp := io.fromRename(i).valid && io.fromRename(i).bits.fpWen
     io.allocPregs(i).isVec := io.fromRename(i).valid && io.fromRename(i).bits.vecWen
+    io.allocPregs(i).isV0 := io.fromRename(i).valid && io.fromRename(i).bits.v0Wen
+    io.allocPregs(i).isVl := io.fromRename(i).valid && io.fromRename(i).bits.vlWen
     io.allocPregs(i).preg  := io.fromRename(i).bits.pdest
   }
   val renameFireCnt = PopCount(io.fromRename.map(_.fire))

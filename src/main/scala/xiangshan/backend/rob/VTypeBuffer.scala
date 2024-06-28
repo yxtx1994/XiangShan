@@ -53,6 +53,11 @@ class VTypeBufferIO(size: Int)(implicit p: Parameters) extends XSBundle {
     }
   })
 
+  val fromDecode = new Bundle {
+    val lastSpecVType = Flipped(Valid(new VType))
+    val specVtype = Input(new VType)
+  }
+
   val status = Output(new Bundle {
     val walkEnd = Bool()
   })
@@ -103,7 +108,15 @@ class VTypeBuffer(size: Int)(implicit p: Parameters) extends XSModule with HasCi
   private val walkPtrNext = Wire(new VTypeBufferPtr)
   private val walkPtrVecNext = VecInit((0 until CommitWidth).map(x => walkPtrNext + x.U))
 
+  private val enqVType = WireInit(0.U.asTypeOf(new (VType)))
+  when(io.fromDecode.lastSpecVType.valid) {
+    enqVType := io.fromDecode.lastSpecVType.bits
+  }.otherwise {
+    enqVType := io.fromDecode.specVtype
+  }
+
   private val walkPtrSnapshots = SnapshotGenerator(enqPtr, io.snpt.snptEnq, io.snpt.snptDeq, io.redirect.valid, io.snpt.flushVec)
+  private val walkVtypeSnapshots = SnapshotGenerator(enqVType, io.snpt.snptEnq, io.snpt.snptDeq, io.redirect.valid, io.snpt.flushVec)
 
   private val robWalkEndReg = RegInit(false.B)
   private val robWalkEnd = io.fromRob.walkEnd || robWalkEndReg
@@ -141,7 +154,7 @@ class VTypeBuffer(size: Int)(implicit p: Parameters) extends XSModule with HasCi
 
   commitSize := Mux(io.redirect.valid && !io.snpt.useSnpt, 0.U, commitSizeNext)
   spclWalkSize := spclWalkSizeNext
-  walkSize := Mux(io.redirect.valid && !io.snpt.useSnpt, 0.U, walkSizeNext)
+  walkSize := Mux(io.redirect.valid, 0.U, walkSizeNext)
 
   walkPtrNext := MuxCase(walkPtr, Seq(
     (state === s_idle && stateNext === s_walk) -> walkPtrSnapshots(snptSelect),
@@ -151,6 +164,8 @@ class VTypeBuffer(size: Int)(implicit p: Parameters) extends XSModule with HasCi
   ))
 
   walkPtr := walkPtrNext
+
+  private val useSnapshot = (state === s_idle && stateNext === s_walk) || (state === s_walk && io.snpt.useSnpt && io.redirect.valid)
 
   // update enq ptr
   private val enqPtrNext = Mux(
@@ -204,9 +219,6 @@ class VTypeBuffer(size: Int)(implicit p: Parameters) extends XSModule with HasCi
   private val infoVec = Wire(Vec(CommitWidth, VType()))
   private val hasVsetvlVec = Wire(Vec(CommitWidth, Bool()))
 
-  private val isCommit = state === s_idle || state === s_spcl_walk
-  private val isWalk = state === s_walk || state === s_spcl_walk
-
   for (i <- 0 until CommitWidth) {
     commitValidVec(i) := state === s_idle && i.U < commitSize || state === s_spcl_walk && i.U < spclWalkSize
     walkValidVec(i) := state === s_walk && i.U < walkSize || state === s_spcl_walk && i.U < spclWalkSize
@@ -254,7 +266,7 @@ class VTypeBuffer(size: Int)(implicit p: Parameters) extends XSModule with HasCi
     true.B
   )
 
-  private val decodeResumeVType = Reg(ValidIO(VType()))
+  private val decodeResumeVType = WireInit(0.U.asTypeOf(new ValidIO(VType())))
   private val newestVType = PriorityMux(walkValidVec.zip(infoVec).map { case(walkValid, info) => walkValid -> info }.reverse)
   private val newestArchVType = PriorityMux(commitValidVec.zip(infoVec).map { case(commitValid, info) => commitValid -> info }.reverse)
   private val commitVTypeValid = commitValidVec.asUInt.orR
@@ -265,6 +277,10 @@ class VTypeBuffer(size: Int)(implicit p: Parameters) extends XSModule with HasCi
     // special walk use commit vtype
     decodeResumeVType.valid := commitVTypeValid
     decodeResumeVType.bits := newestArchVType
+  }.elsewhen (useSnapshot) {
+    // use snapshot vtype
+    decodeResumeVType.valid := true.B
+    decodeResumeVType.bits := walkVtypeSnapshots(snptSelect)
   }.elsewhen (state === s_walk && walkCount =/= 0.U) {
     decodeResumeVType.valid := true.B
     decodeResumeVType.bits := newestVType
@@ -277,10 +293,10 @@ class VTypeBuffer(size: Int)(implicit p: Parameters) extends XSModule with HasCi
   // update vtype in decode when VTypeBuffer resumes from walk state
   // note that VTypeBuffer can still send resuming request in the first cycle of s_idle
   io.toDecode.isResumeVType := state =/= s_idle || decodeResumeVType.valid
-  io.toDecode.walkVType.valid := isWalk && decodeResumeVType.valid
+  io.toDecode.walkVType.valid := decodeResumeVType.valid
   io.toDecode.walkVType.bits := Mux(io.toDecode.walkVType.valid, decodeResumeVType.bits, 0.U.asTypeOf(VType()))
 
-  io.toDecode.commitVType.vtype.valid := isCommit && commitVTypeValid
+  io.toDecode.commitVType.vtype.valid := commitVTypeValid
   io.toDecode.commitVType.vtype.bits := newestArchVType
 
   // because vsetvl flush pipe, there is only one vset instruction when vsetvl is committed

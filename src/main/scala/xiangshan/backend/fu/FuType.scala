@@ -123,21 +123,15 @@ object FuType extends OHEnumeration {
     val fuTypes = FuConfig.allConfigs.filter(_.latency == CertainLatency(0)).map(_.fuType)
     FuTypeOrR(fuType, fuTypes)
   }
-  val fpArithAll = Seq(falu, fcvt, fmac, fDivSqrt)
+  val fpArithAll = Seq(falu, fcvt, fmac, fDivSqrt, f2v)
   val scalaMemAll = Seq(ldu, stu, mou)
   val vecOPI = Seq(vipu, vialuF, vppu, vimac, vidiv)
-  val vecOPF = Seq(vfpu, vfalu, vfma, vfdiv, vfcvt, f2v)
+  val vecOPF = Seq(vfpu, vfalu, vfma, vfdiv, vfcvt)
   val vecVSET = Seq(vsetiwi, vsetiwf, vsetfwf)
   val vecArith = vecOPI ++ vecOPF
   val vecMem = Seq(vldu, vstu, vsegldu, vsegstu)
   val vecArithOrMem = vecArith ++ vecMem
   val vecAll = vecVSET ++ vecMem
-
-  val lat0 = Seq(jmp, brh)
-  val lat1 = Seq(vialuF, vppu, vipu)
-  val lat2 = Seq(i2f, mul, bku, vimac, vfcvt)
-  val lat3 = Seq(vfma)
-  val uncerLat = Seq(fmac, fDivSqrt, vidiv) ++ scalaMemAll ++ vecMem
 
   def X = BitPat.N(num) // Todo: Don't Care
 
@@ -206,12 +200,6 @@ object FuType extends OHEnumeration {
   def isDivSqrt(fuType: UInt): Bool = FuTypeOrR(fuType, div, fDivSqrt)
 
   def storeIsAMO(fuType: UInt): Bool = FuTypeOrR(fuType, mou)
-
-  def isLat0(fuType: UInt): Bool = FuTypeOrR(fuType, lat0)
-
-  def isLatN(fuType: UInt): Bool = FuTypeOrR(fuType, lat1) || FuTypeOrR(fuType, lat2) || FuTypeOrR(fuType, lat3)
-
-  def isUncerLat(fuType: UInt): Bool = FuTypeOrR(fuType, uncerLat)
 
   def isVppu(fuType: UInt): Bool = FuTypeOrR(fuType, vppu)
 

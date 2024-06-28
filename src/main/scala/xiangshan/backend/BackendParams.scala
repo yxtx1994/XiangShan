@@ -81,6 +81,8 @@ case class BackendParams(
   def intPregParams: IntPregParams = pregParams.collectFirst { case x: IntPregParams => x }.get
   def fpPregParams: FpPregParams = pregParams.collectFirst { case x: FpPregParams => x }.get
   def vfPregParams: VfPregParams = pregParams.collectFirst { case x: VfPregParams => x }.get
+  def v0PregParams: V0PregParams = pregParams.collectFirst { case x: V0PregParams => x }.get
+  def vlPregParams: VlPregParams = pregParams.collectFirst { case x: VlPregParams => x }.get
   def getPregParams: Map[DataConfig, PregParams] = {
     pregParams.map(x => (x.dataCfg, x)).toMap
   }
@@ -125,8 +127,12 @@ case class BackendParams(
 
   def numStoreDp = memSchdParams.get.issueBlockParams.filter(x => x.isStAddrIQ || x.isHyAddrIQ).map(_.numEnq).sum
 
-  def genIQValidNumBundle(implicit p: Parameters) = {
+  def genIntIQValidNumBundle(implicit p: Parameters) = {
     this.intSchdParams.get.issueBlockParams.map(x => Vec(x.numDeq, UInt((x.numEntries).U.getWidth.W)))
+  }
+
+  def genFpIQValidNumBundle(implicit p: Parameters) = {
+    this.fpSchdParams.get.issueBlockParams.map(x => Vec(x.numDeq, UInt((x.numEntries).U.getWidth.W)))
   }
 
   def genIntWriteBackBundle(implicit p: Parameters) = {
@@ -139,6 +145,14 @@ case class BackendParams(
 
   def genVfWriteBackBundle(implicit p: Parameters) = {
     Seq.fill(this.getVfRfWriteSize)(new RfWritePortWithConfig(VecData(), vfPregParams.addrWidth))
+  }
+
+  def genV0WriteBackBundle(implicit p: Parameters) = {
+    Seq.fill(this.getV0RfWriteSize)(new RfWritePortWithConfig(V0Data(), v0PregParams.addrWidth))
+  }
+
+  def genVlWriteBackBundle(implicit p: Parameters) = {
+    Seq.fill(this.getVlRfWriteSize)(new RfWritePortWithConfig(VlData(), vlPregParams.addrWidth))
   }
 
   def genWriteBackBundles(implicit p: Parameters): Seq[RfWritePortWithConfig] = {
@@ -162,6 +176,16 @@ case class BackendParams(
   def getFpWbArbiterParams: WbArbiterParams = {
     val fpWbCfgs: Seq[FpWB] = allSchdParams.flatMap(_.getWbCfgs.flatten.flatten.filter(x => x.writeFp)).map(_.asInstanceOf[FpWB])
     datapath.WbArbiterParams(fpWbCfgs, vfPregParams, this)
+  }
+
+  def getV0WbArbiterParams: WbArbiterParams = {
+    val v0WbCfgs: Seq[V0WB] = allSchdParams.flatMap(_.getWbCfgs.flatten.flatten.filter(x => x.writeV0)).map(_.asInstanceOf[V0WB])
+    datapath.WbArbiterParams(v0WbCfgs, v0PregParams, this)
+  }
+
+  def getVlWbArbiterParams: WbArbiterParams = {
+    val vlWbCfgs: Seq[VlWB] = allSchdParams.flatMap(_.getWbCfgs.flatten.flatten.filter(x => x.writeVl)).map(_.asInstanceOf[VlWB])
+    datapath.WbArbiterParams(vlWbCfgs, vlPregParams, this)
   }
 
   /**
@@ -240,7 +264,7 @@ case class BackendParams(
   }
 
   /**
-    * Get size of write ports of vf regfile
+    * Get size of write ports of int regfile
     *
     * @return if [[IntPregParams.numWrite]] is [[None]], get size of ports in [[IntWB]]
     */
@@ -258,7 +282,7 @@ case class BackendParams(
   }
 
   /**
-    * Get size of read ports of int regfile
+    * Get size of read ports of vec regfile
     *
     * @return if [[VfPregParams.numRead]] is [[None]], get size of ports in [[VfRD]]
     */
@@ -267,7 +291,7 @@ case class BackendParams(
   }
 
   /**
-    * Get size of write ports of vf regfile
+    * Get size of write ports of vec regfile
     *
     * @return if [[VfPregParams.numWrite]] is [[None]], get size of ports in [[VfWB]]
     */
@@ -275,11 +299,22 @@ case class BackendParams(
     this.vfPregParams.numWrite.getOrElse(this.getWbPortIndices(VecData()).size)
   }
 
+  def getV0RfWriteSize = {
+    this.v0PregParams.numWrite.getOrElse(this.getWbPortIndices(V0Data()).size)
+  }
+
+  def getVlRfWriteSize = {
+    this.vlPregParams.numWrite.getOrElse(this.getWbPortIndices(VlData()).size)
+  }
+
   def getRfReadSize(dataCfg: DataConfig) = {
     dataCfg match{
       case IntData() => this.getPregParams(dataCfg).numRead.getOrElse(this.getRdPortIndices(dataCfg).size)
       case FpData()  => this.getPregParams(dataCfg).numRead.getOrElse(this.getRdPortIndices(dataCfg).size)
       case VecData() => this.getPregParams(dataCfg).numRead.getOrElse(this.getRdPortIndices(dataCfg).size)
+      case V0Data() => this.getPregParams(dataCfg).numRead.getOrElse(this.getRdPortIndices(dataCfg).size)
+      case VlData() => this.getPregParams(dataCfg).numRead.getOrElse(this.getRdPortIndices(dataCfg).size)
+      case _ => throw new IllegalArgumentException(s"DataConfig ${dataCfg} can not get RfReadSize")
     }
   }
 
@@ -315,6 +350,8 @@ case class BackendParams(
   def getIntWBExeGroup: Map[Int, Seq[ExeUnitParams]] = allRealExuParams.groupBy(x => x.getIntWBPort.getOrElse(IntWB(port = -1)).port).filter(_._1 != -1)
   def getFpWBExeGroup: Map[Int, Seq[ExeUnitParams]] = allRealExuParams.groupBy(x => x.getFpWBPort.getOrElse(FpWB(port = -1)).port).filter(_._1 != -1)
   def getVfWBExeGroup: Map[Int, Seq[ExeUnitParams]] = allRealExuParams.groupBy(x => x.getVfWBPort.getOrElse(VfWB(port = -1)).port).filter(_._1 != -1)
+  def getV0WBExeGroup: Map[Int, Seq[ExeUnitParams]] = allRealExuParams.groupBy(x => x.getV0WBPort.getOrElse(V0WB(port = -1)).port).filter(_._1 != -1)
+  def getVlWBExeGroup: Map[Int, Seq[ExeUnitParams]] = allRealExuParams.groupBy(x => x.getVlWBPort.getOrElse(VlWB(port = -1)).port).filter(_._1 != -1)
 
   private def isContinuous(portIndices: Seq[Int]): Boolean = {
     val portIndicesSet = portIndices.toSet

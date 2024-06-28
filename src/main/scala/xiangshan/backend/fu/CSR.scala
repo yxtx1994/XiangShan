@@ -41,21 +41,11 @@ class FpuCsrIO extends Bundle {
 
 class VpuCsrIO(implicit p: Parameters) extends XSBundle {
   val vstart = Input(UInt(XLEN.W))
-  val vxsat = Input(UInt(1.W))
   val vxrm = Input(UInt(2.W))
-  val vcsr = Input(UInt(XLEN.W))
-  val vl = Input(UInt(XLEN.W))
-  val vtype = Input(UInt(XLEN.W))
-  val vlenb = Input(UInt(XLEN.W))
 
-  val vill = Input(UInt(1.W))
-  val vma = Input(UInt(1.W))
-  val vta = Input(UInt(1.W))
-  val vsew = Input(UInt(3.W))
-  val vlmul = Input(UInt(3.W))
+  val vl = Output(UInt(XLEN.W))
 
   val set_vstart = Output(Valid(UInt(XLEN.W)))
-  val set_vl = Output(Valid(UInt(XLEN.W)))
   val set_vtype = Output(Valid(UInt(XLEN.W)))
   val set_vxsat = Output(Valid(UInt(1.W)))
 
@@ -1031,8 +1021,9 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
     fcsr := fflags_wfn(update = true)(RegEnable(csrio.fpu.fflags.bits, csrio.fpu.fflags.valid))
   }
   when(RegNext(csrio.vpu.set_vxsat.valid)) {
-    fcsr := fflags_wfn(update = true)(RegNext(csrio.fpu.fflags.bits))
+    vcsr := vxsat_wfn(update = true)(RegEnable(csrio.vpu.set_vxsat.bits, csrio.vpu.set_vxsat.valid))
   }
+
   // set fs and sd in mstatus
   when (csrw_dirty_fp_state || RegNext(csrio.fpu.dirty_fs)) {
     val mstatusNew = WireInit(mstatus.asTypeOf(new MstatusStruct))
@@ -1054,9 +1045,7 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
   when (RegNext(csrio.vpu.set_vtype.valid)) {
     vtype := RegEnable(csrio.vpu.set_vtype.bits, csrio.vpu.set_vtype.valid)
   }
-  when (RegNext(csrio.vpu.set_vl.valid)) {
-    vl := RegEnable(csrio.vpu.set_vl.bits, csrio.vpu.set_vl.valid)
-  }
+  vl := csrio.vpu.vl
   // set vs and sd in mstatus
   when(csrw_dirty_vs_state || RegNext(csrio.vpu.dirty_vs)) {
     val mstatusNew = WireInit(mstatus.asTypeOf(new MstatusStruct))
@@ -1067,16 +1056,6 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
 
   csrio.vpu.vstart := vstart
   csrio.vpu.vxrm := vcsr.asTypeOf(new VcsrStruct).vxrm
-  csrio.vpu.vxsat := vcsr.asTypeOf(new VcsrStruct).vxsat
-  csrio.vpu.vcsr := vcsr
-  csrio.vpu.vtype := vtype
-  csrio.vpu.vl := vl
-  csrio.vpu.vlenb := vlenb
-  csrio.vpu.vill := vtype.asTypeOf(new VtypeStruct).vill
-  csrio.vpu.vma := vtype.asTypeOf(new VtypeStruct).vma
-  csrio.vpu.vta := vtype.asTypeOf(new VtypeStruct).vta
-  csrio.vpu.vsew := vtype.asTypeOf(new VtypeStruct).vsew
-  csrio.vpu.vlmul := vtype.asTypeOf(new VtypeStruct).vlmul
 
   // Trigger Ctrl
   val triggerEnableVec = tdata1RegVec.map { tdata1 =>
@@ -1155,12 +1134,14 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
   // Branch control
   val retTarget = WireInit(0.U)
   val resetSatp = (addr === Satp.U || addr === Hgatp.U || addr === Vsatp.U) && wen // write to satp will cause the pipeline be flushed
+  val writeVstart = addr === Vstart.U && wen // write to vstart will cause the pipeline be flushed
+  dontTouch(writeVstart)
 
   val w_fcsr_change_rm = wen && addr === Fcsr.U && wdata(7, 5) =/= fcsr(7, 5)
   val w_frm_change_rm = wen && addr === Frm.U && wdata(2, 0) =/= fcsr(7, 5)
   val frm_change = w_fcsr_change_rm || w_frm_change_rm
   val isXRet = valid && func === CSROpType.jmp && !isEcall && !isEbreak
-  flushPipe := resetSatp || frm_change || isXRet || frontendTriggerUpdate
+  flushPipe := resetSatp || frm_change || isXRet || frontendTriggerUpdate || writeVstart
 
   private val illegalRetTarget = WireInit(false.B)
   when(valid) {
