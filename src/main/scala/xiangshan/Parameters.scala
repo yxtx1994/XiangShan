@@ -207,6 +207,8 @@ case class XSCoreParameters
     numRead = None,
     numWrite = None,
   ),
+  IntRegCacheSize: Int = 16,
+  MemRegCacheSize: Int = 12,
   prefetcher: Option[PrefetcherParams] = Some(SMSParams()),
   LoadPipelineWidth: Int = 3,
   StorePipelineWidth: Int = 2,
@@ -357,6 +359,9 @@ case class XSCoreParameters
 
   val allHistLens = SCHistLens ++ ITTageTableInfos.map(_._2) ++ TageTableInfos.map(_._2) :+ UbtbGHRLength
   val HistoryLength = allHistLens.max + numBr * FtqSize + 9 // 256 for the predictor configs now
+
+  val RegCacheSize = IntRegCacheSize + MemRegCacheSize
+  val RegCacheIdxWidth = log2Up(RegCacheSize)
 
   val intSchdParams = {
     implicit val schdType: SchedulerType = IntScheduler()
@@ -684,6 +689,10 @@ trait HasXSParameter {
   def RobSize = coreParams.RobSize
   def RabSize = coreParams.RabSize
   def VTypeBufferSize = coreParams.VTypeBufferSize
+  def IntRegCacheSize = coreParams.IntRegCacheSize
+  def MemRegCacheSize = coreParams.MemRegCacheSize
+  def RegCacheSize = coreParams.RegCacheSize
+  def RegCacheIdxWidth = coreParams.RegCacheIdxWidth
   /**
    * the minimum element length of vector elements
    */
