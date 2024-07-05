@@ -97,6 +97,8 @@ class SchedulerIO()(implicit params: SchdBlockParams, p: Parameters) extends XSB
     // Todo: remove this after no cancel signal from og1
     val og1Cancel = Input(ExuOH(backendParams.numExu))
     val cancelToBusyTable = Vec(backendParams.numExu, Flipped(ValidIO(new CancelSignal)))
+    // replace RCIdx to Wakeup Queue
+    val replaceRCIdx = OptionWrapper(params.needWriteRegCache, Vec(params.numWriteRegCache, Input(UInt(RegCacheIdxWidth.W))))
     // just be compatible to old code
     def apply(i: Int)(j: Int) = resp(i)(j)
   }
@@ -410,6 +412,20 @@ abstract class SchedulerImpBase(wrapper: Scheduler)(implicit params: SchdBlockPa
     }
     iq.io.wbBusyTableRead := io.fromWbFuBusyTable.fuBusyTableRead(i)
     io.wbFuBusyTable(i) := iq.io.wbBusyTableWrite
+    iq.io.replaceRCIdx.foreach(x => x := 0.U.asTypeOf(x))
+  }
+
+  // Connect each replace RCIdx to IQ
+  if (params.needWriteRegCache) {
+    val iqReplaceRCIdxVec = issueQueues.filter(_.params.needWriteRegCache).flatMap{ iq => 
+      iq.params.allExuParams.zip(iq.io.replaceRCIdx.get).filter(_._1.needWriteRegCache).map(_._2)
+    }
+    iqReplaceRCIdxVec.zip(io.fromDataPath.replaceRCIdx.get).foreach{ case (iq, in) => 
+      iq := in
+    }
+
+    println(s"[Scheduler] numWriteRegCache: ${params.numWriteRegCache}")
+    println(s"[Scheduler] iqReplaceRCIdxVec: ${iqReplaceRCIdxVec.size}")
   }
 
   println(s"[Scheduler] io.fromSchedulers.wakeupVec: ${io.fromSchedulers.wakeupVec.map(x => backendParams.getExuName(x.bits.exuIdx))}")
