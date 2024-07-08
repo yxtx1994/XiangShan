@@ -31,6 +31,7 @@ import huancun.BankBitsKey
 import system.HasSoCParameter
 import top.BusPerfMonitor
 import utility._
+import utility.sram.SramBroadcastBundle
 import xiangshan.cache.mmu.TlbRequestIO
 import xiangshan.backend.fu.PMPRespBundle
 
@@ -99,7 +100,8 @@ class L2Top()(implicit p: Parameters) extends LazyModule
     val config = new Config((_, _, _) => {
       case L2ParamKey => coreParams.L2CacheParamsOpt.get.copy(
         hartId = p(XSCoreParamsKey).HartId,
-        FPGAPlatform = debugOpts.FPGAPlatform
+        FPGAPlatform = debugOpts.FPGAPlatform,
+        hasMbist = hasMbist
       )
       case EnableCHI => p(EnableCHI)
       case BankBitsKey => log2Ceil(coreParams.L2NBanks)
@@ -157,6 +159,8 @@ class L2Top()(implicit p: Parameters) extends LazyModule
     val l2_tlb_req = IO(new TlbRequestIO(nRespDups = 2))
     val l2_pmp_resp = IO(Flipped(new PMPRespBundle))
     val l2_hint = IO(ValidIO(new L2ToL1Hint()))
+    val dft_reset = IO(Input(new DFTResetSignals()))
+    val dft_reset_out = IO(Output(new DFTResetSignals()))
 
     val resetDelayN = Module(new DelayN(UInt(PAddrBits.W), 5))
 
@@ -165,9 +169,16 @@ class L2Top()(implicit p: Parameters) extends LazyModule
     reset_vector.toCore := resetDelayN.io.out
     hartId.toCore := hartId.fromTile
     cpu_halt.toTile := cpu_halt.fromCore
+    dft_reset_out := dft_reset
     dontTouch(hartId)
     dontTouch(cpu_halt)
     if (!chi.isEmpty) { dontTouch(chi.get) }
+
+    val dft = if(hasMbist) Some(IO(Input(new SramBroadcastBundle))) else None
+    val dft_out = if(hasMbist) Some(IO(Output(new SramBroadcastBundle))) else None
+    if(hasMbist){
+      dft_out.get := dft.get
+    }
 
     if (l2cache.isDefined) {
       val l2 = l2cache.get.module
@@ -176,7 +187,13 @@ class L2Top()(implicit p: Parameters) extends LazyModule
       l2.io.hartId := hartId.fromTile
       l2.io.debugTopDown.robHeadPaddr := debugTopDown.robHeadPaddr
       l2.io.debugTopDown.robTrueCommit := debugTopDown.robTrueCommit
+      l2.dft_reset := dft_reset
+      dft_reset_out := l2.dft_reset_out
       debugTopDown.l2MissMatch := l2.io.debugTopDown.l2MissMatch
+      if(hasMbist) {
+        l2.dft.get := dft.get
+        dft_out.get := l2.dft_out.get
+      }
 
       /* l2 tlb */
       l2_tlb_req.req.bits := DontCare

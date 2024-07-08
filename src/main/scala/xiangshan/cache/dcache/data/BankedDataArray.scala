@@ -23,6 +23,7 @@ import utils._
 import utility._
 import chisel3.util._
 import freechips.rocketchip.tilelink.{ClientMetadata, TLClientParameters, TLEdgeOut}
+import utility.mbist.MbistPipeline
 import xiangshan.{L1CacheErrorInfo, XSCoreParamsKey}
 
 import scala.math.max
@@ -105,7 +106,8 @@ class DataSRAM(bankIdx: Int, wayIdx: Int)(implicit p: Parameters) extends DCache
     way = 1,
     shouldReset = false,
     holdRead = false,
-    singlePort = true
+    singlePort = true,
+    hasMbist = hasMbist
   ))
 
   data_sram.io.w.req.valid := io.w.en
@@ -177,7 +179,8 @@ class DataSRAMBank(index: Int)(implicit p: Parameters) extends DCacheModule {
       way = 1,
       shouldReset = false,
       holdRead = false,
-      singlePort = true
+      singlePort = true,
+      hasMbist = hasMbist
     ))
   }
 
@@ -325,7 +328,11 @@ class SramedDataArray(implicit p: Parameters) extends AbstractBankedDataArray {
   io.write.ready := true.B
   io.write_dup.foreach(_.ready := true.B)
 
-  val data_banks = List.tabulate(DCacheSetDiv)( k => List.tabulate(DCacheBanks)(i => List.tabulate(DCacheWays)(j => Module(new DataSRAM(i,j)))))
+  val data_banks = List.tabulate(DCacheSetDiv)( k => {
+    val banks = List.tabulate(DCacheBanks, DCacheWays)({case(i, j) => Module(new DataSRAM(i,j))})
+    val mbistPl = MbistPipeline.PlaceMbistPipeline(1, s"MbistPipeDataSet$k", hasMbist)
+    banks
+  })
   // ecc_banks also needs to be changed to two-dimensional to align with data_banks
   val ecc_banks = DataEccParam.map {
     case _ =>
@@ -333,14 +340,16 @@ class SramedDataArray(implicit p: Parameters) extends AbstractBankedDataArray {
         List.tabulate(DCacheWays)(j =>
           List.tabulate(DCacheBanks)(i =>
             Module(new SRAMTemplate(
-                Bits(eccBits.W),
-                set = DCacheSets / DCacheSetDiv,
-                way = 1,
-                shouldReset = false,
-                holdRead = false,
-                singlePort = true
+              Bits(eccBits.W),
+              set = DCacheSets / DCacheSetDiv,
+              way = 1,
+              shouldReset = false,
+              holdRead = false,
+              singlePort = true,
+              hasMbist = hasMbist
             ))
       )))
+      val mbistPl = MbistPipeline.PlaceMbistPipeline(1, s"MbistPipeDcacheEcc", hasMbist)
       ecc
   }
 
@@ -706,7 +715,12 @@ class BankedDataArray(implicit p: Parameters) extends AbstractBankedDataArray {
   io.write.ready := true.B
   io.write_dup.foreach(_.ready := true.B)
 
-  val data_banks = List.fill(DCacheSetDiv)(List.tabulate(DCacheBanks)(i => Module(new DataSRAMBank(i))))
+  val data_banks = List.tabulate(DCacheSetDiv) { k =>
+    val banks = List.tabulate(DCacheBanks)(i => Module(new DataSRAMBank(i)))
+    val mbistPl = MbistPipeline.PlaceMbistPipeline(1, s"MbistPipeDcacheDataSet$k", hasMbist)
+    banks
+  }
+
   val ecc_banks = DataEccParam.map {
     case _ =>
       val ecc = List.fill(DCacheSetDiv)(List.fill(DCacheBanks)(
@@ -716,12 +730,13 @@ class BankedDataArray(implicit p: Parameters) extends AbstractBankedDataArray {
           way = DCacheWays,
           shouldReset = false,
           holdRead = false,
-          singlePort = true
+          singlePort = true,
+          hasMbist = hasMbist
         ))
       ))
+      val mbistPl = MbistPipeline.PlaceMbistPipeline(1, "MbistPipeDcacheEcc", hasMbist)
       ecc
   }
-
   data_banks.map(_.map(_.dump()))
 
   val way_en = Wire(Vec(LoadPipelineWidth, io.read(0).bits.way_en.cloneType))

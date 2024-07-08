@@ -43,6 +43,8 @@ import xiangshan.frontend.HasInstrMMIOConst
 import xiangshan.mem.prefetch.{BasePrefecher, L1Prefetcher, SMSParams, SMSPrefetcher}
 import xiangshan.backend.datapath.NewPipelineConnect
 import system.SoCParamsKey
+import utility.mbist.{MbistInterface, MbistPipeline}
+import utility.sram.SramHelper
 
 trait HasMemBlockParameters extends HasXSParameter {
   // number of memory units
@@ -290,6 +292,7 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
     val outer_beu_errors_icache = Output(new L1BusErrorUnitInfo)
     val inner_l2_pf_enable = Input(Bool())
     val outer_l2_pf_enable = Output(Bool())
+    val dft_reset = Input(new DFTResetSignals())
     // val inner_hc_perfEvents = Output(Vec(numPCntHc * coreParams.L2NBanks, new PerfEvent))
     // val outer_hc_perfEvents = Input(Vec(numPCntHc * coreParams.L2NBanks, new PerfEvent))
   })
@@ -355,6 +358,7 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
       sms.io_act_stride := GatedRegNextN(io.ooo_to_mem.csrCtrl.l1D_pf_active_stride, 2, Some(30.U))
       sms.io_stride_en := false.B
       sms.io_dcache_evict <> dcache.io.sms_agt_evict_req
+      val mbistSmsPl = MbistPipeline.PlaceMbistPipeline(1, "MbistPipeSms", hasMbist)
       sms
   }
   prefetcherOpt.foreach{ pf => pf.io.l1_req.ready := false.B }
@@ -1623,7 +1627,7 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
         ModuleNode(ptw_to_l2_buffer)
       )
     )
-    ResetGen(resetTree, reset, !p(DebugOptionsKey).ResetGen)
+    ResetGen(resetTree, reset, Some(io.dft_reset), !p(DebugOptionsKey).ResetGen)
   } else {
     reset_io_frontend := DontCare
     reset_io_backend := DontCare
@@ -1688,4 +1692,35 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
   val allPerfInc = allPerfEvents.map(_._2.asTypeOf(new PerfEvent))
   val perfEvents = HPerfMonitor(csrevents, allPerfInc).getPerfEvents
   generatePerfEvent()
+
+  private val mbistPl = MbistPipeline.PlaceMbistPipeline(Int.MaxValue, "MbistPipeMemBlk", hasMbist)
+  private val mbistIntf = if(hasMbist) {
+    val params = mbistPl.get.nodeParams
+    val intf = Some(Module(new MbistInterface(
+      params = Seq(params),
+      ids = Seq(mbistPl.get.childrenIds),
+      name = s"MbistIntfMemBlk",
+      pipelineNum = 1
+    )))
+    intf.get.toPipeline.head <> mbistPl.get.mbist
+    mbistPl.get.registerCSV(intf.get.info, "MbistMemBlk")
+    intf.get.mbist := DontCare
+    dontTouch(intf.get.mbist)
+    //TODO: add mbist controller connections here
+    intf
+  } else {
+    None
+  }
+  private val sigFromSrams = if (hasMbist) Some(SramHelper.genBroadCastBundleTop()) else None
+  private val cg = ClockGate.getTop
+  dontTouch(cg)
+  val dft = if (hasMbist) Some(IO(sigFromSrams.get.cloneType)) else None
+  val dft_out = if (hasMbist) Some(IO(Output(sigFromSrams.get.cloneType))) else None
+  if (hasMbist) {
+    sigFromSrams.get := dft.get
+    cg.te := dft.get.cgen
+    dft_out.get := dft.get
+  } else {
+    cg.te := false.B
+  }
 }

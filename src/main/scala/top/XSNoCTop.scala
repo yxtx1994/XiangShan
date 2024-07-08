@@ -79,11 +79,6 @@ class XSNoCTop()(implicit p: Parameters) extends BaseXSSoc with HasSoCParameter
   core_with_l2.core_reset_sink := core_rst_node
 
   class XSNoCTopImp(wrapper: XSNoCTop) extends LazyRawModuleImp(wrapper) {
-    FileRegisters.add("dts", dts)
-    FileRegisters.add("graphml", graphML)
-    FileRegisters.add("json", json)
-    FileRegisters.add("plusArgs", freechips.rocketchip.util.PlusArgArtefacts.serialize_cHeader())
-
     val clock = IO(Input(Clock()))
     val reset = IO(Input(AsyncReset()))
     val bus_clock = IO(Input(Clock()))
@@ -96,6 +91,7 @@ class XSNoCTop()(implicit p: Parameters) extends BaseXSSoc with HasSoCParameter
       val nodeID = Input(UInt(p(SoCParamsKey).NodeIDWidth.W))
       val clintTime = Input(ValidIO(UInt(64.W)))
     })
+    val dft_reset = IO(Input(new DFTResetSignals()))
     // imsic axi4lite io
     val imsic_m_s = wrapper.u_imsic_bus_top.module.m_s.map(x => IO(chiselTypeOf(x)))
     val imsic_s_s = wrapper.u_imsic_bus_top.module.s_s.map(x => IO(chiselTypeOf(x)))
@@ -103,8 +99,8 @@ class XSNoCTop()(implicit p: Parameters) extends BaseXSSoc with HasSoCParameter
     val imsic_m_tl = wrapper.u_imsic_bus_top.tl_m.map(x => IO(chiselTypeOf(x.getWrappedValue)))
     val imsic_s_tl = wrapper.u_imsic_bus_top.tl_s.map(x => IO(chiselTypeOf(x.getWrappedValue)))
 
-    val reset_sync = withClockAndReset(clock, reset) { ResetGen() }
-    val bus_reset_sync = withClockAndReset(bus_clock, bus_reset) { ResetGen() }
+    val reset_sync = withClockAndReset(clock, reset) { ResetGen(2, Some(dft_reset)) }
+    val bus_reset_sync = withClockAndReset(bus_clock, bus_reset) { ResetGen(2, Some(dft_reset)) }
 
     // override LazyRawModuleImp's clock and reset
     childClock := clock
@@ -138,12 +134,17 @@ class XSNoCTop()(implicit p: Parameters) extends BaseXSSoc with HasSoCParameter
     core_rst_node.out.head._1 := false.B.asAsyncReset
 
     core_with_l2.module.io.debugTopDown.l3MissMatch := false.B
+    core_with_l2.module.dft_reset := dft_reset
+    val dft = if(core_with_l2.module.dft.isDefined) Some(IO(Input(core_with_l2.module.dft.get.cloneType))) else None
+    if(dft.isDefined) {
+      core_with_l2.module.dft.get := dft.get
+    }
 
     withClockAndReset(clock, reset_sync) {
       // Modules are reset one by one
       // reset ----> SYNC --> Core
       val resetChain = Seq(Seq(core_with_l2.module))
-      ResetGen(resetChain, reset_sync, !debugOpts.FPGAPlatform)
+      ResetGen(resetChain, reset_sync, Some(dft_reset), !debugOpts.FPGAPlatform)
     }
 
   }

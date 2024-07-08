@@ -544,7 +544,8 @@ class PatternHistoryTable()(implicit p: Parameters) extends XSModule with HasSMS
   val pht_ram = Module(new SRAMTemplate[PhtEntry](new PhtEntry,
     set = smsParams.pht_size / smsParams.pht_ways,
     way =smsParams.pht_ways,
-    singlePort = true
+    singlePort = true,
+    hasMbist = hasMbist
   ))
   def PHT_SETS = smsParams.pht_size / smsParams.pht_ways
   // clockgated on pht_valids

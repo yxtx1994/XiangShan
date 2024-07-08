@@ -26,10 +26,11 @@ import freechips.rocketchip.tilelink._
 import freechips.rocketchip.amba.axi4._
 import device.MsiInfoBundle
 import system.HasSoCParameter
-import top.{BusPerfMonitor, ArgParser, Generator}
-import utility.{DelayN, ResetGen, TLClientsMerger, TLEdgeBuffer, TLLogger, Constantin, ChiselDB, FileRegisters}
+import top.{ArgParser, BusPerfMonitor, Generator}
+import utility.{ChiselDB, Constantin, DFTResetSignals, DelayN, FileRegisters, ResetGen, TLClientsMerger, TLEdgeBuffer, TLLogger}
 import coupledL2.EnableCHI
 import coupledL2.tl2chi.PortIO
+import utility.sram.{SramBroadcastBundle, SramHelper}
 
 class XSTile()(implicit p: Parameters) extends LazyModule
   with HasXSParameter
@@ -104,9 +105,11 @@ class XSTile()(implicit p: Parameters) extends LazyModule
       val nodeID = if (enableCHI) Some(Input(UInt(NodeIDWidth.W))) else None
       val clintTime = Input(ValidIO(UInt(64.W)))
     })
+    val dft_reset = IO(Input(new DFTResetSignals()))
 
     dontTouch(io.hartId)
     dontTouch(io.msiInfo)
+    dontTouch(dft_reset)
     if (!io.chi.isEmpty) { dontTouch(io.chi.get) }
 
     val core_soft_rst = core_reset_sink.in.head._1 // unused
@@ -119,11 +122,18 @@ class XSTile()(implicit p: Parameters) extends LazyModule
     l2top.module.reset_vector.fromTile := io.reset_vector
     l2top.module.cpu_halt.fromCore := core.module.io.cpu_halt
     io.cpu_halt := l2top.module.cpu_halt.toTile
+    l2top.module.dft_reset := dft_reset
+    core.module.dft_reset := l2top.module.dft_reset_out
 
     core.module.io.perfEvents <> DontCare
 
     l2top.module.beu_errors.icache <> core.module.io.beu_errors.icache
     l2top.module.beu_errors.dcache <> core.module.io.beu_errors.dcache
+    val dft = if (hasMbist) Some(IO(Input(new SramBroadcastBundle))) else None
+    if (hasMbist) {
+      l2top.module.dft.get := dft.get
+      core.module.dft.get := l2top.module.dft_out.get
+    }
     if (enableL2) {
       // TODO: add ECC interface of L2
 

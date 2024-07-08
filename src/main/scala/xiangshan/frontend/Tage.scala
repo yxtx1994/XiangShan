@@ -27,6 +27,7 @@ import scala.math.min
 import scala.util.matching.Regex
 import scala.{Tuple2 => &}
 import os.followLink
+import utility.mbist.MbistPipeline
 
 trait TageParams extends HasBPUConst with HasXSParameter {
   // println(BankTageTableInfos)
@@ -162,7 +163,8 @@ class TageBTable(implicit p: Parameters) extends XSModule with TBTParams{
       way = numBr,
       shouldReset = false,
       holdRead = true,
-      bypassWrite = true
+      bypassWrite = true,
+      hasMbist = hasMbist
     ))
 
   // Power-on reset to weak taken
@@ -310,13 +312,12 @@ class TageTable
   // val s1_pc = io.req.bits.pc
   val req_unhashed_idx = getUnhashedIdx(io.req.bits.pc)
 
-  val us = Module(new FoldedSRAMTemplate(Bool(), set=nRowsPerBr, width=uFoldedWidth, way=numBr, shouldReset=true, extraReset=true, holdRead=true, singlePort=true))
+  val us = Module(new FoldedSRAMTemplate(Bool(), set=nRowsPerBr, width=uFoldedWidth, way=numBr, shouldReset=true, extraReset=true, holdRead=true, singlePort=true, hasMbist = hasMbist))
   us.extra_reset.get := io.update.reset_u.reduce(_||_) && io.update.mask.reduce(_||_)
 
 
   val table_banks = Seq.fill(nBanks)(
-    Module(new FoldedSRAMTemplate(new TageEntry, set=bankSize, width=bankFoldWidth, way=numBr, shouldReset=true, holdRead=true, singlePort=true)))
-
+    Module(new FoldedSRAMTemplate(new TageEntry, set=bankSize, width=bankFoldWidth, way=numBr, shouldReset=true, holdRead=true, singlePort=true, hasMbist = hasMbist)))
 
   val (s0_idx, s0_tag) = compute_tag_and_hash(req_unhashed_idx, io.req.bits.folded_hist)
   val s0_bank_req_1h = get_bank_mask(s0_idx)
@@ -558,6 +559,7 @@ class Tage(implicit p: Parameters) extends BaseTage {
   val bt = Module (new TageBTable)
   bt.io.req.valid := io.s0_fire(1)
   bt.io.req.bits := s0_pc_dup(1)
+  private val mbistPl = MbistPipeline.PlaceMbistPipeline(1, "MbistPipeTage", hasMbist)
 
   val bankTickCtrDistanceToTops = Seq.fill(numBr)(RegInit(((1 << TickWidth) - 1).U(TickWidth.W)))
   val bankTickCtrs = Seq.fill(numBr)(RegInit(0.U(TickWidth.W)))

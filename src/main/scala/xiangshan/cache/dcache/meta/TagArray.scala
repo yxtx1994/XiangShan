@@ -20,6 +20,7 @@ import org.chipsalliance.cde.config.Parameters
 import chisel3._
 import chisel3.util._
 import utility.{SRAMTemplate, XSPerfAccumulate}
+import utility.mbist.MbistPipeline
 import xiangshan.cache.CacheInstrucion._
 
 class TagReadReq(implicit p: Parameters) extends DCacheBundle {
@@ -65,12 +66,12 @@ class TagArray(implicit p: Parameters) extends AbstractTagArray {
   }
 
   val tag_array = Module(new SRAMTemplate(UInt(tagBits.W), set = nSets, way = nWays,
-    shouldReset = false, holdRead = false, singlePort = true))
+    shouldReset = false, holdRead = false, singlePort = true, hasMbist = hasMbist))
 
   val ecc_array = TagEccParam.map {
     case _ =>
       val ecc = Module(new SRAMTemplate(UInt(eccTagBits.W), set = nSets, way = nWays,
-      shouldReset = false, holdRead = false, singlePort = true))
+      shouldReset = false, holdRead = false, singlePort = true, hasMbist = hasMbist))
     ecc
   }
 
@@ -139,6 +140,7 @@ class DuplicatedTagArray(readPorts: Int)(implicit p: Parameters) extends Abstrac
   })
 
   val array = Seq.fill(readPorts) { Module(new TagArray) }
+  val mbistPl = MbistPipeline.PlaceMbistPipeline(1, s"MbistPipeDcacheTag", hasMbist)
 
   def getECCFromEncTag(encTag: UInt) = {
     require(encTag.getWidth == encTagBits)

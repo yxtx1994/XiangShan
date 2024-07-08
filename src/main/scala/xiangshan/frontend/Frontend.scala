@@ -21,6 +21,8 @@ import chisel3.util._
 import freechips.rocketchip.diplomacy.{LazyModule, LazyModuleImp}
 import utils._
 import utility._
+import utility.mbist.{MbistInterface, MbistPipeline}
+import utility.sram.{SramBroadcastBundle, SramHelper}
 import xiangshan._
 import xiangshan.backend.fu.{PFEvent, PMP, PMPChecker, PMPReqBundle}
 import xiangshan.cache.mmu._
@@ -355,4 +357,34 @@ class FrontendImp (outer: Frontend) extends LazyModuleImp(outer)
   val allPerfInc = allPerfEvents.map(_._2.asTypeOf(new PerfEvent))
   override val perfEvents = HPerfMonitor(csrevents, allPerfInc).getPerfEvents
   generatePerfEvent()
+
+  private val mbistPl = MbistPipeline.PlaceMbistPipeline(Int.MaxValue, "MbistPipeFrontend", hasMbist)
+  private val mbistIntf = if(hasMbist) {
+    val params = mbistPl.get.nodeParams
+    val intf = Some(Module(new MbistInterface(
+      params = Seq(params),
+      ids = Seq(mbistPl.get.childrenIds),
+      name = s"MbistIntfFrontend",
+      pipelineNum = 1
+    )))
+    intf.get.toPipeline.head <> mbistPl.get.mbist
+    mbistPl.get.registerCSV(intf.get.info, "MbistFrontend")
+    intf.get.mbist := DontCare
+    dontTouch(intf.get.mbist)
+    //TODO: add mbist controller connections here
+    intf
+  } else {
+    None
+  }
+
+  private val sigFromSrams = if (hasMbist) Some(SramHelper.genBroadCastBundleTop()) else None
+  private val cg = ClockGate.getTop
+  dontTouch(cg)
+  val dft = if (hasMbist) Some(IO(Input(new SramBroadcastBundle))) else None
+  if (hasMbist) {
+    sigFromSrams.get := dft.get
+    cg.te := dft.get.cgen
+  } else {
+    cg.te := false.B
+  }
 }

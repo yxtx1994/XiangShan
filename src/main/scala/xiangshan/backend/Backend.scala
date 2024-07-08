@@ -22,7 +22,7 @@ import chisel3.util._
 import device.MsiInfoBundle
 import freechips.rocketchip.diplomacy.{LazyModule, LazyModuleImp}
 import system.HasSoCParameter
-import utility.{Constantin, ZeroExt}
+import utility.{ClockGate, Constantin, ZeroExt}
 import utils.{HPerfMonitor, HasPerfEvents, PerfEvent}
 import xiangshan._
 import xiangshan.backend.Bundles.{DynInst, IssueQueueIQWakeUpBundle, LoadShouldCancel, MemExuInput, MemExuOutput, VPUCtrlSignals}
@@ -704,6 +704,16 @@ class BackendImp(override val wrapper: Backend)(implicit p: Parameters) extends 
   val perfEvents = HPerfMonitor(csrevents, allPerfInc).getPerfEvents
   csrio.perf.perfEventsBackend := VecInit(perfEvents.map(_._2.asTypeOf(new PerfEvent)))
   generatePerfEvent()
+
+  private val cg = ClockGate.getTop
+  dontTouch(cg)
+  val cgen = if(hasMbist) Some(IO(Input(Bool()))) else None
+  if(hasMbist) {
+    cg.te := cgen.get
+  } else {
+    cg.te := false.B
+  }
+
 }
 
 class BackendMemIO(implicit p: Parameters, params: BackendParams) extends XSBundle {

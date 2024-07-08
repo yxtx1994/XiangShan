@@ -16,14 +16,15 @@
 
 package xiangshan.cache.prefetch
 
-import org.chipsalliance.cde.config.{Parameters, Field}
+import org.chipsalliance.cde.config.{Field, Parameters}
 import chisel3._
 import chisel3.util._
 import xiangshan._
 import xiangshan.cache._
-import xiangshan.cache.mmu.{HasTlbConst}
+import xiangshan.cache.mmu.HasTlbConst
 import utils._
 import utility._
+import utility.mbist.MbistPipeline
 
 case object BOPParamsKey extends Field[BOPParameters]
 
@@ -166,7 +167,8 @@ class RecentRequestTable(implicit p: Parameters) extends PrefetchModule {
     }
   }
 
-  val rrTable = Module(new SRAMTemplate(rrTableEntry(), set = rrTableEntries, way = 1, shouldReset = true, singlePort = true))
+  val rrTable = Module(new SRAMTemplate(rrTableEntry(), set = rrTableEntries, way = 1, shouldReset = true, singlePort = true, hasMbist = hasMbist))
+  private val mbistPl = MbistPipeline.PlaceMbistPipeline(1, "MbistPipeBop", hasMbist)
 
   val wAddr = io.w.bits
   rrTable.io.w.req.valid := io.w.valid && !io.r.req.valid
