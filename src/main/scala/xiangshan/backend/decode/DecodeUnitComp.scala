@@ -208,6 +208,9 @@ class DecodeUnitComp()(implicit p : Parameters) extends XSModule with DecodeUnit
         csBundle(1).ldest := Vl_IDX.U
         csBundle(1).vecWen := false.B
         csBundle(1).vlWen := true.B
+        // vsetvl flush pipe and block backward
+        csBundle(1).flushPipe := Mux(VSETOpType.isVsetvl(latchedInst.fuOpType), true.B, false.B)
+        csBundle(1).blockBackward := Mux(VSETOpType.isVsetvl(latchedInst.fuOpType), true.B, false.B)
         when(VSETOpType.isVsetvli(latchedInst.fuOpType) && dest === 0.U && src1 === 0.U) {
           // write nothing, uop0 is a nop instruction
           csBundle(0).rfWen := false.B
@@ -462,13 +465,13 @@ class DecodeUnitComp()(implicit p : Parameters) extends XSModule with DecodeUnit
       /*
       i to vector move
        */
-      csBundle(0).srcType(0) := SrcType.reg
+      csBundle(0).srcType(0) := Mux(src1IsImm, SrcType.imm, SrcType.reg)
       csBundle(0).srcType(1) := SrcType.imm
       csBundle(0).srcType(2) := SrcType.imm
       csBundle(0).lsrc(1) := 0.U
       csBundle(0).ldest := VECTOR_TMP_REG_LMUL.U
       csBundle(0).fuType := FuType.i2v.U
-      csBundle(0).fuOpType := Cat(IF2VectorType.iDup2Vec(2, 0), vsewReg)
+      csBundle(0).fuOpType := Cat(Mux(src1IsImm, IF2VectorType.immDup2Vec(2, 0), IF2VectorType.iDup2Vec(2, 0)), vsewReg)
       csBundle(0).vecWen := true.B
 
       for (i <- 0 until MAX_VLMUL / 2) {

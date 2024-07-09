@@ -892,7 +892,7 @@ class StoreQueue(implicit p: Parameters) extends XSModule
     val ptr = rdataPtrExt(i).value
     val mmioStall = if(i == 0) mmio(rdataPtrExt(0).value) else (mmio(rdataPtrExt(i).value) || mmio(rdataPtrExt(i-1).value))
     val exceptionValid = if(i == 0) hasException(rdataPtrExt(0).value) else {
-      (hasException(rdataPtrExt(i).value) || hasException(rdataPtrExt(i-1).value)) && uop(rdataPtrExt(i).value).robIdx === uop(rdataPtrExt(i-1).value).robIdx
+      hasException(rdataPtrExt(i).value) || (hasException(rdataPtrExt(i-1).value) && uop(rdataPtrExt(i).value).robIdx === uop(rdataPtrExt(i-1).value).robIdx)
     }
     // Vector instructions that prevent triggered exceptions from being written to the 'databuffer'.
     val vecHasExceptionFlagValid = vecExceptionFlag.valid && isVec(ptr) && vecExceptionFlag.bits.robIdx === uop(ptr).robIdx
@@ -971,18 +971,11 @@ class StoreQueue(implicit p: Parameters) extends XSModule
     vecExceptionFlag.valid  := false.B
     vecExceptionFlag.bits   := 0.U.asTypeOf(new DynInst)
   }
-  val vecExceptionFlagAssertReg = RegInit(0.U(8.W))
 
   // A dumb defensive code. The flag should not be placed for a long period of time.
-  when(vecExceptionFlag.valid){
-    vecExceptionFlagAssertReg := vecExceptionFlagAssertReg + 1.U
-  }.otherwise{
-    vecExceptionFlagAssertReg := 0.U
-  }
   // A relatively large timeout period, not have any special meaning.
   // If an assert appears and you confirm that it is not a Bug: Increase the timeout or remove the assert.
-  assert(vecExceptionFlagAssertReg <= 150.U, s"vecExceptionFlag Timeout.")
-
+  TimeOutAssert(vecExceptionFlag.valid, 3000, "vecExceptionFlag timeout, Plase check for bugs or add timeouts.")
 
   // Initialize when unenabled difftest.
   for (i <- 0 until EnsbufferWidth) {
