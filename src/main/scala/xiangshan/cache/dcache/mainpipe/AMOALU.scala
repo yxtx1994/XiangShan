@@ -86,7 +86,8 @@ class AMOALU(operandBits: Int) extends Module
 
   val adder_out = {
     // partition the carry chain to support sub-xLen addition
-    val mask = ~(0.U(operandBits.W) +: widths.init.map(w => !io.mask(w/8-1) << (w-1))).reduce(_|_)
+    // val mask = ~(0.U(operandBits.W) +: widths.init.map(w => !io.mask(w/8-1) << (w-1))).reduce(_|_)
+    val mask = FillInterleaved(8, io.mask)
     (io.lhs & mask) + (io.rhs & mask)
   }
 
