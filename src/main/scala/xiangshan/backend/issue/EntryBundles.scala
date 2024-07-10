@@ -52,6 +52,9 @@ object EntryBundles extends HasCircularQueuePtrHelper {
     val dataSources           = DataSource()
     val srcLoadDependency     = Vec(LoadPipelineWidth, UInt(LoadDependencyWidth.W))
     val srcWakeUpL1ExuOH      = OptionWrapper(params.hasIQWakeUp, ExuVec())
+    //reg cache
+    val useRegCache           = OptionWrapper(params.needReadRegCache, Bool())
+    val regCacheIdx           = OptionWrapper(params.needReadRegCache, UInt(RegCacheIdxWidth.W))
   }
 
   class StatusVecMemPart(implicit p:Parameters, params: IssueBlockParams) extends Bundle {
@@ -332,6 +335,20 @@ object EntryBundles extends HasCircularQueuePtrHelper {
       } else {
         srcStatusNext.srcLoadDependency               := common.srcLoadDependencyNext(srcIdx)
       }
+
+      if (params.needReadRegCache) {
+        val wakeupSrcExuWriteRC = wakeupByIQOH.zip(commonIn.wakeUpFromIQ).filter(_._2.bits.params.needWriteRegCache)
+        val wakeupRC    = wakeupSrcExuWriteRC.map(_._1).fold(false.B)(_ || _)
+        val wakeupRCIdx = Mux1H(wakeupSrcExuWriteRC.map(_._1), wakeupSrcExuWriteRC.map(_._2.bits.rcDest.get))
+        val replaceRC   = wakeupSrcExuWriteRC.map(x => x._2.bits.rfWen && x._2.bits.rcDest.get === srcStatus.regCacheIdx.get).fold(false.B)(_ || _)
+
+        srcStatusNext.useRegCache.get                 := MuxCase(srcStatus.useRegCache.get, Seq(
+                                                            cancel    -> false.B,
+                                                            wakeupRC  -> true.B,
+                                                            replaceRC -> false.B,
+                                                         ))
+        srcStatusNext.regCacheIdx.get                 := Mux(wakeupRC, wakeupRCIdx, srcStatus.regCacheIdx.get)
+      }
     }
     entryUpdate.status.blocked                        := false.B
     entryUpdate.status.issued                         := MuxCase(status.issued, Seq(
@@ -360,6 +377,7 @@ object EntryBundles extends HasCircularQueuePtrHelper {
       val wakeupByIQWithoutCancel = hasIQWakeupGet.srcWakeupByIQWithoutCancel(srcIdx).asUInt.orR
       val wakeupByIQWithoutCancelOH = hasIQWakeupGet.srcWakeupByIQWithoutCancel(srcIdx)
       val isWakeupByMemIQ = wakeupByIQWithoutCancelOH.zip(commonIn.wakeUpFromIQ).filter(_._2.bits.params.isMemExeUnit).map(_._1).fold(false.B)(_ || _)
+      val useRegCache = status.srcStatus(srcIdx).useRegCache.getOrElse(false.B) && status.srcStatus(srcIdx).dataSources.readReg
       dataSourceOut.value                             := (if (isComp)
                                                             if (params.inVfSchd && params.readVfRf && params.hasWakeupFromMem) {
                                                               MuxCase(status.srcStatus(srcIdx).dataSources.value, Seq(
@@ -369,10 +387,14 @@ object EntryBundles extends HasCircularQueuePtrHelper {
                                                             } else {
                                                               MuxCase(status.srcStatus(srcIdx).dataSources.value, Seq(
                                                                 wakeupByIQWithoutCancel                        -> DataSource.forward,
+                                                                useRegCache                                    -> DataSource.regcache,
                                                               ))
                                                             }
-                                                          else
-                                                            status.srcStatus(srcIdx).dataSources.value)
+                                                          else {
+                                                              MuxCase(status.srcStatus(srcIdx).dataSources.value, Seq(
+                                                                useRegCache                                    -> DataSource.regcache,
+                                                              ))
+                                                          })
     }
     commonOut.isFirstIssue                            := !status.firstIssue
     commonOut.entry.valid                             := validReg
