@@ -321,16 +321,15 @@ object TopMain extends App {
   Constantin.init(enableConstantin && !envInFPGA)
   ChiselDB.init(enableChiselDB && !envInFPGA)
 
-  val soc = if (config(SoCParamsKey).UseXSNoCTop)
-    DisableMonitors(p => LazyModule(new XSNoCTop()(p)))(config)
-  else
-    DisableMonitors(p => LazyModule(new XSTop()(p)))(config)
-
-  Generator.execute(firrtlOpts, soc.module, firtoolOpts)
-
-  // generate difftest bundles (w/o DifftestTopIO)
   if (enableDifftest) {
-    DifftestModule.finish("XiangShan", false)
+    Generator.execute(firrtlOpts, DisableMonitors(p => new XSNoCWrapper()(p))(config), firtoolOpts)
+  } else {
+    val soc = if (config(SoCParamsKey).UseXSNoCTop)
+      DisableMonitors(p => LazyModule(new XSNoCTop()(p)))(config)
+    else
+      DisableMonitors(p => LazyModule(new XSTop()(p)))(config)
+
+    Generator.execute(firrtlOpts, soc.module, firtoolOpts)
   }
 
   FileRegisters.write(fileDir = "./build", filePrefix = "XSTop.")

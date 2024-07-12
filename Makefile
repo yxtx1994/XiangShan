@@ -138,7 +138,7 @@ $(TOP_V): $(SCALA_FILE)
 	mkdir -p $(@D)
 	$(TIME_CMD) mill -i xiangshan.runMain $(FPGATOP)   \
 		--target-dir $(@D) --config $(CONFIG) $(FPGA_MEM_ARGS)        \
-		--num-cores $(NUM_CORES) $(RELEASE_ARGS)
+		--num-cores $(NUM_CORES) $(RELEASE_ARGS) $(RELEASE_EXTRA_ARGS)
 	$(MEM_GEN_SEP) "$(MEM_GEN)" "$@.conf" "$(@D)"
 	@git log -n 1 >> .__head__
 	@git diff >> .__diff__

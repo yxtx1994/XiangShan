@@ -31,6 +31,9 @@ import freechips.rocketchip.tilelink._
 import coupledL2.tl2chi.PortIO
 import freechips.rocketchip.tile.MaxHartIdBits
 
+import difftest.common.DifftestWiring
+import difftest.DifftestModule
+
 class XSNoCTop()(implicit p: Parameters) extends BaseXSSoc with HasSoCParameter
 {
   override lazy val desiredName: String = "XSTop"
@@ -150,3 +153,38 @@ class XSNoCTop()(implicit p: Parameters) extends BaseXSSoc with HasSoCParameter
 
   lazy val module = new XSNoCTopImp(this)
 }
+
+class XSNoCWrapper(implicit p: Parameters) extends Module {
+  override val desiredName: String = "XSWrapper"
+  val l_soc = LazyModule(new XSNoCTop())
+  val soc = Module(l_soc.module)
+
+  // Expose XSTop IOs outside, i.e. io
+  def exposeIO(data: Data, name: String): Unit = {
+    val dummy = IO(chiselTypeOf(data)).suggestName(name)
+    dummy <> data
+  }
+  def exposeOptionIO(data: Option[Data], name: String): Unit = {
+    if (data.isDefined) {
+      val dummy = IO(chiselTypeOf(data.get)).suggestName(name)
+      dummy <> data.get
+    }
+  }
+  exposeIO(l_soc.clint, "clint")
+  exposeIO(l_soc.debug, "debug")
+  exposeIO(l_soc.plic, "plic")
+  exposeIO(l_soc.beu, "beu")
+  soc.clock := clock
+  soc.reset := reset.asAsyncReset
+  exposeIO(soc.bus_clock, "bus_clock")
+  exposeIO(soc.bus_reset, "bus_reset")
+  exposeIO(soc.io, "io")
+  exposeOptionIO(soc.imsic_m_s, "imsic_m_s")
+  exposeOptionIO(soc.imsic_s_s, "imsic_s_s")
+  exposeOptionIO(soc.imsic_m_tl, "imsic_m_tl")
+  exposeOptionIO(soc.imsic_s_tl, "imsic_s_tl")
+
+  DifftestWiring.createAndConnectExtraIOs()
+  DifftestModule.generateJsonProfile("XiangShan")
+}
+
