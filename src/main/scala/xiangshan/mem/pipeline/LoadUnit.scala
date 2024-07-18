@@ -924,6 +924,7 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   val s2_fire   = s2_valid && !s2_kill && s2_can_go
   val s2_vecActive = RegEnable(s1_out.vecActive, true.B, s1_fire)
   val s2_isvec  = RegEnable(s1_out.isvec, false.B, s1_fire)
+  val s2_data_select  = genRdataOH(s2_out.uop)
 
   s2_kill := s2_in.uop.robIdx.needFlush(io.redirect)
   s2_ready := !s2_valid || s2_kill || s3_ready
@@ -1207,6 +1208,7 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   val s3_vec_alignedType = RegEnable(s2_out.alignedType, s2_fire)
   val s3_vec_mBIndex     = RegEnable(s2_out.mbIndex, s2_fire)
   val s3_mmio         = Wire(Valid(new MemExuOutput))
+  val s3_data_select  = RegEnable(s2_data_select, 0.U(s2_data_select.getWidth.W), s2_fire)
   // TODO: Fix vector load merge buffer nack
   val s3_vec_mb_nack  = Wire(Bool())
   s3_vec_mb_nack     := false.B
@@ -1385,7 +1387,7 @@ class LoadUnit(implicit p: Parameters) extends XSModule
     "b1110".U -> s3_merged_data_frm_cache(127, 112),
     "b1111".U -> s3_merged_data_frm_cache(127, 120)
   ))
-  val s3_ld_data_frm_cache = rdataHelper(s3_ld_raw_data_frm_cache.uop, s3_picked_data_frm_cache)
+  val s3_ld_data_frm_cache = newRdataHelper(s3_data_select, s3_picked_data_frm_cache)
 
   // FIXME: add 1 cycle delay ?
   // io.lsq.uncache.ready := !s3_valid
