@@ -15,6 +15,7 @@ import xiangshan.backend.Bundles.{DynInst, ExuOH}
 import xiangshan.backend.datapath.DataSource
 import xiangshan.backend.fu.FuType.FuTypeOrR
 import xiangshan.backend.dispatch.Dispatch2IqFpImp
+import xiangshan.backend.regcache.RCTagTableReadPort
 import scala.collection._
 
 class Dispatch2Iq(val schdBlockParams : SchdBlockParams)(implicit p: Parameters) extends LazyModule with HasXSParameter {
@@ -70,6 +71,10 @@ class Dispatch2Iq(val schdBlockParams : SchdBlockParams)(implicit p: Parameters)
     case VfScheduler() | MemScheduler() => numRegSrcVl * numIn
     case _ => 0
   }
+  val numRCTagTableStateRead = schdBlockParams.schdType match {
+    case IntScheduler() | MemScheduler() => numRegSrcInt * numIn
+    case _ => 0
+  }
 
   val isMem = schdBlockParams.schdType == MemScheduler()
 
@@ -97,6 +102,7 @@ abstract class Dispatch2IqImp(override val wrapper: Dispatch2Iq)(implicit p: Par
   val numVfStateRead = wrapper.numVfStateRead
   val numV0StateRead = wrapper.numV0StateRead
   val numVlStateRead = wrapper.numVlStateRead
+  val numRCTagTableStateRead = wrapper.numRCTagTableStateRead
   val numIssueBlock = wrapper.issueBlockParams.size
 
   val io = IO(new Bundle() {
@@ -107,6 +113,7 @@ abstract class Dispatch2IqImp(override val wrapper: Dispatch2Iq)(implicit p: Par
     val readVfState = if (numVfStateRead > 0) Some(Vec(numVfStateRead, Flipped(new BusyTableReadIO))) else None
     val readV0State = if (numV0StateRead > 0) Some(Vec(numV0StateRead, Flipped(new BusyTableReadIO))) else None
     val readVlState = if (numVlStateRead > 0) Some(Vec(numVlStateRead, Flipped(new BusyTableReadIO))) else None
+    val readRCTagTableState = OptionWrapper(numRCTagTableStateRead > 0, Vec(numRCTagTableStateRead, Flipped(new RCTagTableReadPort(RegCacheIdxWidth, params.pregIdxWidth))))
     val out = MixedVec(params.issueBlockParams.filter(iq => iq.StdCnt == 0).map(x => Vec(x.numEnq, DecoupledIO(new DynInst))))
     val enqLsqIO = if (wrapper.isMem) Some(Flipped(new LsqEnqIO)) else None
     val iqValidCnt = MixedVec(params.issueBlockParams.filter(_.StdCnt == 0).map(x => Input(UInt(log2Ceil(x.numEntries).W))))
@@ -143,6 +150,8 @@ abstract class Dispatch2IqImp(override val wrapper: Dispatch2Iq)(implicit p: Par
   private val intAllSrcLoadDependency = OptionWrapper(io.readIntState.isDefined, Wire(Vec(numIn * numRegSrc, Vec(LoadPipelineWidth, UInt(LoadDependencyWidth.W)))))
   private val fpAllSrcLoadDependency  = OptionWrapper(io.readFpState.isDefined,  Wire(Vec(numIn * numRegSrc, Vec(LoadPipelineWidth, UInt(LoadDependencyWidth.W)))))
   private val vecAllSrcLoadDependency = OptionWrapper(io.readVfState.isDefined,  Wire(Vec(numIn * numRegSrc, Vec(LoadPipelineWidth, UInt(LoadDependencyWidth.W)))))
+  private val rcTagTableStateVec    = OptionWrapper(io.readRCTagTableState.isDefined, Wire(Vec(numRCTagTableStateRead, Bool())))
+  private val rcTagTableAddrVec     = OptionWrapper(io.readRCTagTableState.isDefined, Wire(Vec(numRCTagTableStateRead, UInt(RegCacheIdxWidth.W))))
 
   // We always read physical register states when in gives the instructions.
   // This usually brings better timing.
@@ -208,6 +217,13 @@ abstract class Dispatch2IqImp(override val wrapper: Dispatch2Iq)(implicit p: Par
       vecAllSrcLoadDependency.get(i * numRegSrc + numRegSrc - 1) := vlSrcLoadDependency.get(i);
     }
   }
+  if (io.readRCTagTableState.isDefined) {
+    require(io.readRCTagTableState.get.size == intReqPsrcVec.size,
+      s"[Dispatch2IqImp] readRCTagTableState size: ${io.readRCTagTableState.get.size}, int psrc size: ${intReqPsrcVec.size}")
+    io.readRCTagTableState.get.map(_.tag).zip(intReqPsrcVec).foreach(x => x._1 := x._2)
+    io.readRCTagTableState.get.map(_.valid).zip(rcTagTableStateVec.get).foreach(x => x._2 := x._1)
+    io.readRCTagTableState.get.map(_.addr).zip(rcTagTableAddrVec.get).foreach(x => x._2 := x._1)
+  }
 
   uopsIn
     .flatMap(x => x.bits.srcState.take(numRegSrc) zip x.bits.srcType.take(numRegSrc))
@@ -244,6 +260,18 @@ abstract class Dispatch2IqImp(override val wrapper: Dispatch2Iq)(implicit p: Par
         }.otherwise {
           ldp := 0.U.asTypeOf(ldp)
         }
+    }
+
+  uopsIn
+    .flatMap(x => x.bits.useRegCache.take(numRegSrc) zip x.bits.regCacheIdx.take(numRegSrc))
+    .zip(
+      rcTagTableStateVec.getOrElse(VecInit(Seq.fill(numIn * numRegSrc)(false.B).toSeq)) zip 
+      rcTagTableAddrVec.getOrElse(VecInit(Seq.fill(numIn * numRegSrc)(0.U).toSeq))
+    )
+    .foreach {
+      case ((useRC, rcIdx), (state, addr)) =>
+        useRC := state
+        rcIdx := addr
     }
 
   /**
