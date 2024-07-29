@@ -162,7 +162,7 @@ class UopInfoGen (implicit p: Parameters) extends XSModule {
     addTime + foldTime
   }
   val numOfUopVFREDOSUM = {
-    val uvlMax = MuxLookup(vsew, 1.U)(Seq(
+    val uvlMax = MuxLookup(vsew, 8.U)(Seq(
       VSew.e16 -> 8.U,
       VSew.e32 -> 4.U,
       VSew.e64 -> 2.U,
