@@ -601,7 +601,7 @@ class VSegmentUnit (implicit p: Parameters) extends VLSUModule
     instMicroOpValid := false.B
   }
   // writeback to backend
-  val writebackOut                     = WireInit(0.U.asTypeOf(io.uopwriteback.bits))
+  val writebackOut                     = WireInit(io.uopwriteback.bits)
   val writebackValid                   = (state === s_finish) && !isEmpty(enqPtr, deqPtr)
   writebackOut.uop                    := uopq(deqPtr.value).uop
   writebackOut.uop.vpu                := instMicroOp.uop.vpu
@@ -621,7 +621,6 @@ class VSegmentUnit (implicit p: Parameters) extends VLSUModule
   io.uopwriteback.valid               := RegNext(writebackValid)
   io.uopwriteback.bits                := RegEnable(writebackOut, writebackValid)
 
-  dontTouch(writebackOut)
   dontTouch(writebackValid)
 
   //to RS
@@ -638,7 +637,6 @@ class VSegmentUnit (implicit p: Parameters) extends VLSUModule
   io.feedback.valid                   := RegNext(feedbackValid)
   io.feedback.bits                    := RegEnable(feedbackOut, feedbackValid)
 
-  dontTouch(feedbackOut)
   dontTouch(feedbackValid)
 
   // exception
