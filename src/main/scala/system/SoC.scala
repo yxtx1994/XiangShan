@@ -34,6 +34,7 @@ import xiangshan.backend.fu.PMAConst
 import xiangshan.{DebugOptionsKey, XSTileKey}
 import coupledL2.EnableCHI
 import coupledL2.tl2chi.CHIIssue
+import openLLC.OpenLLCParam
 
 case object SoCParamsKey extends Field[SoCParameters]
 
@@ -50,6 +51,7 @@ case class SoCParameters
     ways = 8,
     sets = 2048 // 1MB per bank
   )),
+  OpenLLCParamsOpt: Option[OpenLLCParam] = None,
   XSTopPrefix: Option[String] = None,
   NodeIDWidthList: Map[String, Int] = Map(
     "B" -> 7,
