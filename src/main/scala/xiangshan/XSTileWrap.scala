@@ -36,7 +36,7 @@ class XSTileWrap()(implicit p: Parameters) extends LazyModule
 {
   override def shouldBeInlined: Boolean = false
 
-  val tile = LazyModule(new XSTile())
+  val tile = LazyModule(new XSTileNew())
 
   // interrupts sync
   val clintIntNode = IntIdentityNode()
@@ -68,7 +68,7 @@ class XSTileWrap()(implicit p: Parameters) extends LazyModule
     tile.module.io.hartId := io.hartId
     tile.module.io.msiInfo := imsicAsync.o.msiInfo
     tile.module.io.reset_vector := io.reset_vector
-    io.cpu_halt := tile.module.io.cpu_halt 
+    io.cpu_halt := tile.module.io.cpu_halt
     io.debugTopDown <> tile.module.io.debugTopDown
     tile.module.io.nodeID.foreach(_ := io.nodeID.get)
 
