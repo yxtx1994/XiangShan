@@ -850,8 +850,8 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   io.wakeup.bits := s0_wakeup_uop
 
   // prefetch.i(Zicbop)
-  io.ifetchPrefetch.valid := s0_int_iss_select && s0_sel_src.prf_i
-  io.ifetchPrefetch.bits.vaddr := s0_out.vaddr
+  io.ifetchPrefetch.valid := RegNext(s0_int_iss_select && s0_sel_src.prf_i)
+  io.ifetchPrefetch.bits.vaddr := RegEnable(s0_out.vaddr, 0.U, s0_int_iss_select && s0_sel_src.prf_i)
 
   XSDebug(io.dcache.req.fire,
     p"[DCACHE LOAD REQ] pc ${Hexadecimal(s0_sel_src.uop.pc)}, vaddr ${Hexadecimal(s0_dcache_vaddr)}\n"
@@ -891,6 +891,7 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   val s1_paddr_dup_dcache = Wire(UInt())
   val s1_exception        = ExceptionNO.selectByFu(s1_out.uop.exceptionVec, LduCfg).asUInt.orR   // af & pf exception were modified below.
   val s1_tlb_miss         = io.tlb.resp.bits.miss && io.tlb.resp.valid && s1_valid
+  val s1_pbmt             = Mux(io.tlb.resp.valid, io.tlb.resp.bits.pbmt(0), 0.U(2.W))
   val s1_prf              = s1_in.isPrefetch
   val s1_hw_prf           = s1_in.isHWPrefetch
   val s1_sw_prf           = s1_prf && !s1_hw_prf
@@ -1068,6 +1069,7 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   val s2_data_select  = genRdataOH(s2_out.uop)
   val s2_data_select_by_offset = genDataSelectByOffset(s2_out.paddr(2, 0))
   val s2_frm_mabuf = s2_in.isFrmMisAlignBuf
+  val s2_pbmt = RegEnable(s1_pbmt, s1_fire)
 
   s2_kill := s2_in.uop.robIdx.needFlush(io.redirect)
   s2_ready := !s2_valid || s2_kill || s3_ready
@@ -1108,7 +1110,7 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   // writeback access fault caused by ecc error / bus error
   // * ecc data error is slow to generate, so we will not use it until load stage 3
   // * in load stage 3, an extra signal io.load_error will be used to
-  val s2_actually_mmio = s2_pmp.mmio
+  val s2_actually_mmio = s2_pmp.mmio || Pbmt.isUncache(s2_pbmt)
   val s2_mmio          = !s2_prf &&
                           s2_actually_mmio &&
                          !s2_exception &&
