@@ -647,6 +647,8 @@ class HybridUnit(implicit p: Parameters) extends XSModule
   storeTrigger.io.fromCsrTrigger.triggerCanRaiseBpExp := io.fromCsrTrigger.triggerCanRaiseBpExp
   storeTrigger.io.fromCsrTrigger.debugMode            := io.fromCsrTrigger.debugMode
   storeTrigger.io.fromLoadStore.vaddr                 := s1_vaddr
+  storeTrigger.io.fromLoadStore.isVectorStride        := s1_in.isvec && s1_in.is128bit
+  storeTrigger.io.fromLoadStore.mask                  := s1_in.mask
 
   when (s1_ld_flow) {
     when (!s1_late_kill) {
@@ -665,6 +667,11 @@ class HybridUnit(implicit p: Parameters) extends XSModule
     s1_out.uop.exceptionVec(storeAccessFault)      := io.tlb.resp.bits.excp(0).af.st
     s1_out.uop.trigger                             := storeTrigger.io.toLoadStore.triggerAction
     s1_out.uop.exceptionVec(breakPoint)            := TriggerAction.isExp(storeTrigger.io.toLoadStore.triggerAction)
+    s1_out.vaddr                                   := Mux(
+      TriggerAction.isExp(storeTrigger.io.toLoadStore.triggerAction) || TriggerAction.isDmode(storeTrigger.io.toLoadStore.triggerAction),
+      storeTrigger.io.toLoadStore.triggerVaddr,
+      s1_in.vaddr
+    )
   }
 
   // load trigger
@@ -674,10 +681,17 @@ class HybridUnit(implicit p: Parameters) extends XSModule
   loadTrigger.io.fromCsrTrigger.triggerCanRaiseBpExp := io.fromCsrTrigger.triggerCanRaiseBpExp
   loadTrigger.io.fromCsrTrigger.debugMode            := io.fromCsrTrigger.debugMode
   loadTrigger.io.fromLoadStore.vaddr                 := s1_vaddr
+  loadTrigger.io.fromLoadStore.isVectorStride        := s1_in.isvec && s1_in.is128bit
+  loadTrigger.io.fromLoadStore.mask                  := s1_in.mask
 
   when (s1_ld_flow) {
     s1_out.uop.exceptionVec(breakPoint) := TriggerAction.isExp(loadTrigger.io.toLoadStore.triggerAction)
     s1_out.uop.trigger := loadTrigger.io.toLoadStore.triggerAction
+    s1_out.vaddr                                   := Mux(
+      TriggerAction.isExp(loadTrigger.io.toLoadStore.triggerAction) || TriggerAction.isDmode(loadTrigger.io.toLoadStore.triggerAction),
+      loadTrigger.io.toLoadStore.triggerVaddr,
+      s1_in.vaddr
+    )
   }
 
   // pointer chasing
