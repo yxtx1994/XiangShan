@@ -156,6 +156,7 @@ class NewCSR(implicit val p: Parameters) extends Module
         val vtype = UInt(XLEN.W)
         val vlenb = UInt(XLEN.W)
         val off = Bool()
+        val vstartChange = Bool()
       }
       // debug
       val debugMode = Bool()
@@ -881,6 +882,7 @@ class NewCSR(implicit val p: Parameters) extends Module
   io.status.vecState.vtype := vtype.rdata.asUInt // Todo: check correct
   io.status.vecState.vlenb := vlenb.rdata.asUInt
   io.status.vecState.off := mstatus.regOut.VS === ContextStatus.Off
+  io.status.vecState.vstartChange := vstartChange
   io.status.interrupt := intrMod.io.out.interruptVec.valid
   io.status.wfiEvent := debugIntr || (mie.rdata.asUInt & mip.rdata.asUInt).orR
   io.status.debugMode := debugMode

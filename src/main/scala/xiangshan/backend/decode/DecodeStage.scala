@@ -70,7 +70,7 @@ class DecodeStage(implicit p: Parameters) extends XSModule
       val out = new StallReasonIO(DecodeWidth)
     }
     val vsetvlVType = Input(VType())
-    val vstart = Input(Vl())
+    val vstart = Input(ValidIO(Vl()))
 
     val toCSR = new Bundle {
       val trapInstInfo = ValidIO(new TrapInstInfo)
@@ -94,12 +94,19 @@ class DecodeStage(implicit p: Parameters) extends XSModule
 
   val canAccept = Wire(Bool())
 
+  val vstart = RegInit(0.U.asTypeOf(Vl()))
+  when(io.vstart.valid){
+    vstart := io.vstart.bits
+  }.elsewhen(io.vstart.bits =/= 0.U){
+    vstart := 0.U.asTypeOf(Vl())
+  }
+
   //Simple 6
   decoders.zip(io.in).foreach { case (dst, src) => dst.io.enq.ctrlFlow := src.bits }
   decoders.foreach { case dst => dst.io.csrCtrl := io.csrCtrl }
   decoders.foreach { case dst => dst.io.fromCSR := io.fromCSR }
   decoders.foreach { case dst => dst.io.enq.vtype := vtypeGen.io.vtype }
-  decoders.foreach { case dst => dst.io.enq.vstart := io.vstart }
+  decoders.foreach { case dst => dst.io.enq.vstart := vstart }
   val isComplexVec = VecInit(inValids.zip(decoders.map(_.io.deq.isComplex)).map { case (valid, isComplex) => valid && isComplex })
   val isSimpleVec = VecInit(inValids.zip(decoders.map(_.io.deq.isComplex)).map { case (valid, isComplex) => valid && !isComplex })
   val simpleDecodedInst = VecInit(decoders.map(_.io.deq.decodedInst))

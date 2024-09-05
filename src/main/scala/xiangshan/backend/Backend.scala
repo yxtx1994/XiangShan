@@ -448,7 +448,9 @@ class BackendImp(override val wrapper: Backend)(implicit p: Parameters) extends 
   csrio.vpu.set_vxsat := ctrlBlock.io.robio.csr.vxsat
   csrio.vpu.set_vstart.valid := ctrlBlock.io.robio.csr.vstart.valid
   csrio.vpu.set_vstart.bits := ctrlBlock.io.robio.csr.vstart.bits
-  ctrlBlock.io.toDecode.vstart := csrio.vpu.vstart
+  ctrlBlock.io.toDecode.vstart.bits  := csrio.vpu.vstart.bits
+  ctrlBlock.io.toDecode.vstart.valid := csrio.vpu.vstart.valid
+
   //Todo here need change design
   csrio.vpu.set_vtype.valid := commitVType.valid
   csrio.vpu.set_vtype.bits := ZeroExt(vtype, XLEN)

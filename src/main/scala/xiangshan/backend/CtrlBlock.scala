@@ -619,9 +619,10 @@ class CtrlBlockImp(
   // exu block to decode
   decode.io.vsetvlVType := io.toDecode.vsetvlVType
   // backend to decode
-  decode.io.vstart := io.toDecode.vstart
+  decode.io.vstart.bits := io.toDecode.vstart.bits
+  decode.io.vstart.valid := io.toDecode.vstart.valid
   // backend to rob
-  rob.io.vstartIsZero := io.toDecode.vstart === 0.U
+  rob.io.vstartIsZero := io.toDecode.vstart.bits === 0.U
 
   io.toCSR.trapInstInfo := decode.io.toCSR.trapInstInfo
 
@@ -698,7 +699,7 @@ class CtrlBlockIO()(implicit p: Parameters, params: BackendParams) extends XSBun
 
   val toDecode = new Bundle {
     val vsetvlVType = Input(VType())
-    val vstart = Input(Vl())
+    val vstart = Input(ValidIO(Vl()))
   }
 
   val perfInfo = Output(new Bundle{

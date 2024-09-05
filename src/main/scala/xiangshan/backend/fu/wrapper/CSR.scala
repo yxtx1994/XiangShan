@@ -263,8 +263,9 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
   // Todo: summerize all difftest skip condition
   csrOut.isPerfCnt  := csrMod.io.out.bits.isPerfCnt && csrModOutValid && func =/= CSROpType.jmp
   csrOut.fpu.frm    := csrMod.io.status.fpState.frm.asUInt
-  csrOut.vpu.vstart := csrMod.io.status.vecState.vstart.asUInt
   csrOut.vpu.vxrm   := csrMod.io.status.vecState.vxrm.asUInt
+  csrOut.vpu.vstart.bits  := csrMod.io.status.vecState.vstart.asUInt
+  csrOut.vpu.vstart.valid := csrMod.io.status.vecState.vstartChange
 
   csrOut.isXRet := isXRetFlag
 

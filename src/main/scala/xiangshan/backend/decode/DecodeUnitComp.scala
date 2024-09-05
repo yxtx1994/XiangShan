@@ -150,7 +150,6 @@ class DecodeUnitComp()(implicit p : Parameters) extends XSModule with DecodeUnit
   isVsetSimple := latchedInst.isVset
   val vlmulReg = latchedInst.vpu.vlmul
   val vsewReg = latchedInst.vpu.vsew
-  val vstartReg = latchedInst.vpu.vstart
 
   //Type of uop Div
   val typeOfSplit = latchedInst.uopSplitType
@@ -191,11 +190,6 @@ class DecodeUnitComp()(implicit p : Parameters) extends XSModule with DecodeUnit
   csBundle(0).firstUop := true.B
   csBundle(numOfUop - 1.U).lastUop := true.B
 
-  // when vstart is not zero, the last uop will modify vstart to zero
-  // therefore, blockback and flush pipe
-  csBundle(numOfUop - 1.U).blockBackward := vstartReg =/= 0.U
-  csBundle(0.U).flushPipe := vstartReg =/= 0.U
-
   switch(typeOfSplit) {
     is(UopSplitType.VSET) {
       // In simple decoder, rfWen and vecWen are not set
@@ -203,7 +197,7 @@ class DecodeUnitComp()(implicit p : Parameters) extends XSModule with DecodeUnit
         // Default
         // uop0 set rd, never flushPipe
         csBundle(0).fuType := FuType.vsetiwi.U
-        csBundle(0).flushPipe := Mux(VSETOpType.isVsetvl(latchedInst.fuOpType), true.B, vstartReg =/= 0.U)
+        csBundle(0).flushPipe := VSETOpType.isVsetvl(latchedInst.fuOpType)
         csBundle(0).blockBackward := false.B
         csBundle(0).rfWen := true.B
         // uop1 set vl, vsetvl will flushPipe
@@ -211,7 +205,7 @@ class DecodeUnitComp()(implicit p : Parameters) extends XSModule with DecodeUnit
         csBundle(1).vecWen := false.B
         csBundle(1).vlWen := true.B
         csBundle(1).flushPipe := false.B
-        csBundle(1).blockBackward := Mux(VSETOpType.isVsetvl(latchedInst.fuOpType), true.B, vstartReg =/= 0.U)
+        csBundle(1).blockBackward := VSETOpType.isVsetvl(latchedInst.fuOpType)
         when(VSETOpType.isVsetvli(latchedInst.fuOpType) && dest === 0.U && src1 === 0.U) {
           // write nothing, uop0 is a nop instruction
           csBundle(0).rfWen := false.B
@@ -1906,10 +1900,6 @@ class DecodeUnitComp()(implicit p : Parameters) extends XSModule with DecodeUnit
   val complexNum = Mux(uopRes > readyCounter, readyCounter, uopRes)
 
   fixedDecodedInst := csBundle
-
-  // when vstart is not zero, the last uop will modify vstart to zero
-  // therefore, blockback and flush pipe
-  fixedDecodedInst(numOfUop - 1.U).flushPipe := (vstartReg =/= 0.U) || latchedInst.flushPipe
 
   for(i <- 0 until RenameWidth) {
     outValids(i) := complexNum > i.U

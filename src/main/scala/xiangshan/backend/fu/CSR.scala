@@ -40,7 +40,7 @@ class FpuCsrIO extends Bundle {
 }
 
 class VpuCsrIO(implicit p: Parameters) extends XSBundle {
-  val vstart = Input(UInt(XLEN.W))
+  val vstart = Input(Valid(UInt(XLEN.W)))
   val vxrm = Input(UInt(2.W))
 
   val vl = Output(UInt(XLEN.W))
