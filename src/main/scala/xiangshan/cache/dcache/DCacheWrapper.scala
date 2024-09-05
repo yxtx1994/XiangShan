@@ -533,6 +533,7 @@ class UncacheWordResp(implicit p: Parameters) extends DCacheBundle
   val data      = UInt(XLEN.W)
   val data_delayed = UInt(XLEN.W)
   val id        = UInt(uncacheIdxBits.W)
+  val nc        = Bool()
   val miss      = Bool()
   val replay    = Bool()
   val tag_error = Bool()

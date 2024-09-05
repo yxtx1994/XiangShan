@@ -908,6 +908,7 @@ class MemBlockInlinedImp(outer: MemBlockInlined) extends LazyModuleImp(outer)
       loadUnits(i).io.lsq.uncache.bits := DontCare
     }
     lsq.io.ld_raw_data(i) <> loadUnits(i).io.lsq.ld_raw_data
+    lsq.io.ncOut(i) <> loadUnits(i).io.lsq.nc_ldin
     loadUnits(i).io.lsq.nc_ldin.valid := DontCare
     loadUnits(i).io.lsq.nc_ldin.bits := DontCare
     lsq.io.l2_hint.valid := l2_hint.valid
@@ -1317,7 +1318,7 @@ class MemBlockInlinedImp(outer: MemBlockInlined) extends LazyModuleImp(outer)
     )).andR))
     resultOnehot
   }
-  val allRedirect = loadUnits.map(_.io.rollback) ++ hybridUnits.map(_.io.ldu_io.rollback) ++ Seq(lsq.io.nack_rollback) ++ lsq.io.nuke_rollback
+  val allRedirect = loadUnits.map(_.io.rollback) ++ hybridUnits.map(_.io.ldu_io.rollback) ++ lsq.io.nack_rollback ++ lsq.io.nuke_rollback
   val oldestOneHot = selectOldestRedirect(allRedirect)
   val oldestRedirect = WireDefault(Mux1H(oldestOneHot, allRedirect))
   // memory replay would not cause IAF/IPF/IGPF
