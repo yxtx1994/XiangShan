@@ -234,11 +234,7 @@ class LoadPipe(id: Int)(implicit p: Parameters) extends DCacheModule with HasPer
   val s1_wpu_pred_fail = Wire(Bool())
   val s1_wpu_pred_fail_and_real_hit = Wire(Bool())
   if (dwpuParam.enWPU) {
-    when(s1_wpu_pred_valid) {
-      s1_pred_tag_match_way_dup_dc := s1_wpu_pred_way_en
-    }.otherwise {
-      s1_pred_tag_match_way_dup_dc := s1_tag_match_way_dup_dc
-    }
+    s1_pred_tag_match_way_dup_dc := s1_wpu_pred_way_en
     s1_wpu_pred_fail := s1_valid && s1_tag_match_way_dup_dc =/= s1_pred_tag_match_way_dup_dc
     s1_wpu_pred_fail_and_real_hit := s1_wpu_pred_fail && s1_tag_match_way_dup_dc.orR
   } else {
