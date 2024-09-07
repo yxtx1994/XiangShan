@@ -100,10 +100,3 @@ class MemUnitImp(override val wrapper: MemUnit)(implicit p: Parameters, val para
           s"  hasDebugInfo: ${params.hasDebugInfo}" +
           s"  hasTopDownInfo: ${params.hasTopDownInfo}")
 }
-
-class AtomicsUnitImp(override val wrapper: MemUnit)(implicit p: Parameters, params: MemUnitParams)
-  extends MemUnitImp(wrapper)
-{
-  io.suggestName("none")
-  override lazy val io = IO(new MemUnitIO()).suggestName("io")
-}
