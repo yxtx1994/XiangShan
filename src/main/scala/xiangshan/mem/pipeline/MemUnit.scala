@@ -101,14 +101,6 @@ class MemUnitImp(override val wrapper: MemUnit)(implicit p: Parameters, val para
           s"  hasTopDownInfo: ${params.hasTopDownInfo}")
 }
 
-
-class LoadUnitImp(override val wrapper: MemUnit)(implicit p: Parameters, params: MemUnitParams)
-  extends MemUnitImp(wrapper)
-{
-  io.suggestName("none")
-  override lazy val io = IO(new MemUnitIO()).suggestName("io")
-}
-
 class HybridUnitImp(override val wrapper: MemUnit)(implicit p: Parameters, params: MemUnitParams)
   extends MemUnitImp(wrapper)
 {
