@@ -123,39 +123,39 @@ class XSTile()(implicit p: Parameters) extends LazyModule
 
     val core_soft_rst = core_reset_sink.in.head._1 // unused
 
-    l2top.module.hartId.fromTile := io.hartId
-    core.module.io.hartId := l2top.module.hartId.toCore
-    core.module.io.reset_vector := l2top.module.reset_vector.toCore
+    l2top.module.io.hartId.fromTile := io.hartId
+    core.module.io.hartId := l2top.module.io.hartId.toCore
+    core.module.io.reset_vector := l2top.module.io.reset_vector.toCore
     core.module.io.msiInfo := io.msiInfo
     core.module.io.clintTime := io.clintTime
-    l2top.module.reset_vector.fromTile := io.reset_vector
-    l2top.module.cpu_halt.fromCore := core.module.io.cpu_halt
-    io.cpu_halt := l2top.module.cpu_halt.toTile
+    l2top.module.io.reset_vector.fromTile := io.reset_vector
+    l2top.module.io.cpu_halt.fromCore := core.module.io.cpu_halt
+    io.cpu_halt := l2top.module.io.cpu_halt.toTile
 
     core.module.io.perfEvents <> DontCare
 
-    l2top.module.beu_errors.icache <> core.module.io.beu_errors.icache
-    l2top.module.beu_errors.dcache <> core.module.io.beu_errors.dcache
+    l2top.module.io.beu_errors.icache <> core.module.io.beu_errors.icache
+    l2top.module.io.beu_errors.dcache <> core.module.io.beu_errors.dcache
     if (enableL2) {
       // TODO: add ECC interface of L2
 
-      l2top.module.beu_errors.l2 <> 0.U.asTypeOf(l2top.module.beu_errors.l2)
-      core.module.io.l2_hint.bits.sourceId := l2top.module.l2_hint.bits.sourceId
-      core.module.io.l2_hint.bits.isKeyword := l2top.module.l2_hint.bits.isKeyword
-      core.module.io.l2_hint.valid := l2top.module.l2_hint.valid
+      l2top.module.io.beu_errors.l2 <> 0.U.asTypeOf(l2top.module.io.beu_errors.l2)
+      core.module.io.l2_hint.bits.sourceId := l2top.module.io.l2_hint.bits.sourceId
+      core.module.io.l2_hint.bits.isKeyword := l2top.module.io.l2_hint.bits.isKeyword
+      core.module.io.l2_hint.valid := l2top.module.io.l2_hint.valid
 
       core.module.io.l2PfqBusy := false.B
-      core.module.io.debugTopDown.l2MissMatch := l2top.module.debugTopDown.l2MissMatch
-      l2top.module.debugTopDown.robHeadPaddr := core.module.io.debugTopDown.robHeadPaddr
-      l2top.module.debugTopDown.robTrueCommit := core.module.io.debugTopDown.robTrueCommit
-      l2top.module.l2_pmp_resp := core.module.io.l2_pmp_resp
-      core.module.io.l2_tlb_req <> l2top.module.l2_tlb_req
+      core.module.io.debugTopDown.l2MissMatch := l2top.module.io.debugTopDown.l2MissMatch
+      l2top.module.io.debugTopDown.robHeadPaddr := core.module.io.debugTopDown.robHeadPaddr
+      l2top.module.io.debugTopDown.robTrueCommit := core.module.io.debugTopDown.robTrueCommit
+      l2top.module.io.l2_pmp_resp := core.module.io.l2_pmp_resp
+      core.module.io.l2_tlb_req <> l2top.module.io.l2_tlb_req
     } else {
 
-      l2top.module.beu_errors.l2 <> 0.U.asTypeOf(l2top.module.beu_errors.l2)
-      core.module.io.l2_hint.bits.sourceId := l2top.module.l2_hint.bits.sourceId
-      core.module.io.l2_hint.bits.isKeyword := l2top.module.l2_hint.bits.isKeyword
-      core.module.io.l2_hint.valid := l2top.module.l2_hint.valid
+      l2top.module.io.beu_errors.l2 <> 0.U.asTypeOf(l2top.module.io.beu_errors.l2)
+      core.module.io.l2_hint.bits.sourceId := l2top.module.io.l2_hint.bits.sourceId
+      core.module.io.l2_hint.bits.isKeyword := l2top.module.io.l2_hint.bits.isKeyword
+      core.module.io.l2_hint.valid := l2top.module.io.l2_hint.valid
 
       core.module.io.l2PfqBusy := false.B
       core.module.io.debugTopDown.l2MissMatch := false.B
@@ -169,8 +169,8 @@ class XSTile()(implicit p: Parameters) extends LazyModule
     io.debugTopDown.robHeadPaddr := core.module.io.debugTopDown.robHeadPaddr
     core.module.io.debugTopDown.l3MissMatch := io.debugTopDown.l3MissMatch
 
-    io.chi.foreach(_ <> l2top.module.chi.get)
-    l2top.module.nodeID.foreach(_ := io.nodeID.get)
+    io.chi.foreach(_ <> l2top.module.io.chi.get)
+    l2top.module.io.nodeID.foreach(_ := io.nodeID.get)
 
     if (debugOpts.ResetGen && enableL2) {
       core.module.reset := l2top.module.reset_core

@@ -18,6 +18,7 @@ package xiangshan.frontend
 import org.chipsalliance.cde.config.Parameters
 import chisel3._
 import chisel3.util._
+import chisel3.util.experimental.InlineInstance
 import freechips.rocketchip.diplomacy.{LazyModule, LazyModuleImp}
 import utils._
 import utility._
@@ -36,33 +37,47 @@ class Frontend()(implicit p: Parameters) extends LazyModule with HasXSParameter 
   lazy val module = new FrontendImp(this)
 }
 
+class FrontendIO(implicit p: Parameters) extends XSBundle {
+  val hartId = Input(UInt(hartIdLen.W))
+  val reset_vector = Input(UInt(PAddrBits.W))
+  val fencei = Input(Bool())
+  val ptw = new TlbPtwIO()
+  val backend = new FrontendToCtrlIO
+  val softPrefetch = Vec(backendParams.LduCnt, Flipped(Valid(new SoftIfetchPrefetchBundle)))
+  val sfence = Input(new SfenceBundle)
+  val tlbCsr = Input(new TlbCsrBundle)
+  val csrCtrl = Input(new CustomCSRCtrlIO)
+  val error  = ValidIO(new L1CacheErrorInfo)
+  val frontendInfo = new Bundle {
+    val ibufFull  = Output(Bool())
+    val bpuInfo = new Bundle {
+      val bpRight = Output(UInt(XLEN.W))
+      val bpWrong = Output(UInt(XLEN.W))
+    }
+  }
+  val debugTopDown = new Bundle {
+    val robHeadVaddr = Flipped(Valid(UInt(VAddrBits.W)))
+  }
+}
 
-class FrontendImp (outer: Frontend) extends LazyModuleImp(outer)
+class FrontendImp(outer: Frontend) extends LazyModuleImp(outer) {
+  val io = IO(new FrontendIO)
+
+  val innerModule = Module(new FrontendImpInlined(outer))
+
+  io <> innerModule.io
+
+  if (p(DebugOptionsKey).ResetGen) {
+    ResetGen(ResetGenNode(Seq(ModuleNode(innerModule))), reset, sim = false)
+  }
+}
+
+class FrontendImpInlined(outer: Frontend) extends Module
   with HasXSParameter
   with HasPerfEvents
+  with InlineInstance
 {
-  val io = IO(new Bundle() {
-    val hartId = Input(UInt(hartIdLen.W))
-    val reset_vector = Input(UInt(PAddrBits.W))
-    val fencei = Input(Bool())
-    val ptw = new TlbPtwIO()
-    val backend = new FrontendToCtrlIO
-    val softPrefetch = Vec(backendParams.LduCnt, Flipped(Valid(new SoftIfetchPrefetchBundle)))
-    val sfence = Input(new SfenceBundle)
-    val tlbCsr = Input(new TlbCsrBundle)
-    val csrCtrl = Input(new CustomCSRCtrlIO)
-    val error  = ValidIO(new L1CacheErrorInfo)
-    val frontendInfo = new Bundle {
-      val ibufFull  = Output(Bool())
-      val bpuInfo = new Bundle {
-        val bpRight = Output(UInt(XLEN.W))
-        val bpWrong = Output(UInt(XLEN.W))
-      }
-    }
-    val debugTopDown = new Bundle {
-      val robHeadVaddr = Flipped(Valid(UInt(VAddrBits.W)))
-    }
-  })
+  val io = IO(new FrontendIO)
 
   //decouped-frontend modules
   val instrUncache = outer.instrUncache.module

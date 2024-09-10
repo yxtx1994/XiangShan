@@ -19,6 +19,7 @@ package xiangshan.backend
 import org.chipsalliance.cde.config.Parameters
 import chisel3._
 import chisel3.util._
+import chisel3.util.experimental.InlineInstance
 import device.MsiInfoBundle
 import freechips.rocketchip.diplomacy.{LazyModule, LazyModuleImp}
 import system.HasSoCParameter
@@ -167,9 +168,22 @@ class Backend(val params: BackendParams)(implicit p: Parameters) extends LazyMod
   lazy val module = new BackendImp(this)
 }
 
-class BackendImp(override val wrapper: Backend)(implicit p: Parameters) extends LazyModuleImp(wrapper)
+class BackendImp(override val wrapper: Backend)(implicit p: Parameters) extends LazyModuleImp(wrapper) {
+  val io = IO(new BackendIO()(p, wrapper.params))
+
+  val innerModule = Module(new BackendImpInlined(wrapper)(p))
+
+  io <> innerModule.io
+
+  if (p(DebugOptionsKey).ResetGen) {
+    ResetGen(ResetGenNode(Seq(ModuleNode(innerModule))), reset, sim = false)
+  }
+}
+
+class BackendImpInlined(val wrapper: Backend)(implicit p: Parameters) extends Module
   with HasXSParameter
-  with HasPerfEvents {
+  with HasPerfEvents
+  with InlineInstance {
   implicit private val params: BackendParams = wrapper.params
 
   val io = IO(new BackendIO()(p, wrapper.params))
@@ -717,9 +731,7 @@ class BackendImp(override val wrapper: Backend)(implicit p: Parameters) extends 
       ModuleNode(wbFuBusyTable),
       ResetGenNode(Seq(
         ModuleNode(ctrlBlock),
-        ResetGenNode(Seq(
-          CellNode(io.frontendReset)
-        ))
+        CellNode(io.frontendReset)
       ))
     ))
     ResetGen(leftResetTree, reset, sim = false)

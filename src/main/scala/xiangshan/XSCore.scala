@@ -162,8 +162,8 @@ class XSCoreImp(outer: XSCoreBase) extends LazyModuleImp(outer)
 
   backend.io.perf.frontendInfo := frontend.io.frontendInfo
   backend.io.perf.memInfo := memBlock.io.memInfo
-  backend.io.perf.perfEventsFrontend := frontend.getPerf
-  backend.io.perf.perfEventsLsu := memBlock.getPerf
+  backend.io.perf.perfEventsFrontend := frontend.innerModule.getPerf
+  backend.io.perf.perfEventsLsu := memBlock.innerModule.getPerf
   backend.io.perf.perfEventsHc := io.perfEvents
   backend.io.perf.perfEventsBackend := DontCare
   backend.io.perf.retiredInstr := DontCare
@@ -239,7 +239,7 @@ class XSCoreImp(outer: XSCoreBase) extends LazyModuleImp(outer)
   io.l2_pf_enable := memBlock.io.outer_l2_pf_enable
 
   if (debugOpts.ResetGen) {
-    backend.reset := memBlock.reset_backend
+    backend.reset := memBlock.io.reset_backend
     frontend.reset := backend.io.frontendReset
   }
 }

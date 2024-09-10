@@ -19,6 +19,7 @@ package xiangshan.backend
 import org.chipsalliance.cde.config.Parameters
 import chisel3._
 import chisel3.util._
+import chisel3.util.experimental.InlineInstance
 import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.diplomacy.{BundleBridgeSource, LazyModule, LazyModuleImp}
 import freechips.rocketchip.interrupts.{IntSinkNode, IntSinkPortSimple}
@@ -253,7 +254,56 @@ class MemBlock()(implicit p: Parameters) extends LazyModule
 
 }
 
-class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
+class MemBlockIO(implicit p: Parameters) extends XSBundle
+  with HasMemBlockParameters {
+  val hartId = Input(UInt(hartIdLen.W))
+  val redirect = Flipped(ValidIO(new Redirect))
+
+  val ooo_to_mem = new ooo_to_mem
+  val mem_to_ooo = new mem_to_ooo
+  val fetch_to_mem = new fetch_to_mem
+
+  val ifetchPrefetch = Vec(LduCnt, ValidIO(new SoftIfetchPrefetchBundle))
+
+  // misc
+  val error = ValidIO(new L1CacheErrorInfo)
+  val memInfo = new Bundle {
+    val sqFull = Output(Bool())
+    val lqFull = Output(Bool())
+    val dcacheMSHRFull = Output(Bool())
+  }
+  val debug_ls = new DebugLSIO
+  val l2_hint = Input(Valid(new L2ToL1Hint()))
+  val l2PfqBusy = Input(Bool())
+  val l2_tlb_req = Flipped(new TlbRequestIO(nRespDups = 2))
+  val l2_pmp_resp = new PMPRespBundle
+
+  val debugTopDown = new Bundle {
+    val robHeadVaddr = Flipped(Valid(UInt(VAddrBits.W)))
+    val toCore = new MemCoreTopDownIO
+  }
+  val debugRolling = Flipped(new RobDebugRollingIO)
+
+  // All the signals from/to frontend/backend to/from bus will go through MemBlock
+  val fromTopToBackend = Input(new Bundle {
+    val msiInfo   = ValidIO(new MsiInfoBundle)
+    val clintTime = ValidIO(UInt(64.W))
+  })
+  val inner_hartId = Output(UInt(hartIdLen.W))
+  val inner_reset_vector = Output(UInt(PAddrBits.W))
+  val outer_reset_vector = Input(UInt(PAddrBits.W))
+  val outer_cpu_halt = Output(Bool())
+  val inner_beu_errors_icache = Input(new L1BusErrorUnitInfo)
+  val outer_beu_errors_icache = Output(new L1BusErrorUnitInfo)
+  val inner_l2_pf_enable = Input(Bool())
+  val outer_l2_pf_enable = Output(Bool())
+  // val inner_hc_perfEvents = Output(Vec(numPCntHc * coreParams.L2NBanks, new PerfEvent))
+  // val outer_hc_perfEvents = Input(Vec(numPCntHc * coreParams.L2NBanks, new PerfEvent))
+
+  val reset_backend = Output(Reset())
+}
+
+class MemBlockImpInlined(outer: MemBlock) extends Module
   with HasXSParameter
   with HasFPUParameters
   with HasPerfEvents
@@ -261,55 +311,9 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
   with HasCircularQueuePtrHelper
   with HasMemBlockParameters
   with SdtrigExt
+  with InlineInstance
 {
-  val io = IO(new Bundle {
-    val hartId = Input(UInt(hartIdLen.W))
-    val redirect = Flipped(ValidIO(new Redirect))
-
-    val ooo_to_mem = new ooo_to_mem
-    val mem_to_ooo = new mem_to_ooo
-    val fetch_to_mem = new fetch_to_mem
-
-    val ifetchPrefetch = Vec(LduCnt, ValidIO(new SoftIfetchPrefetchBundle))
-
-    // misc
-    val error = ValidIO(new L1CacheErrorInfo)
-    val memInfo = new Bundle {
-      val sqFull = Output(Bool())
-      val lqFull = Output(Bool())
-      val dcacheMSHRFull = Output(Bool())
-    }
-    val debug_ls = new DebugLSIO
-    val l2_hint = Input(Valid(new L2ToL1Hint()))
-    val l2PfqBusy = Input(Bool())
-    val l2_tlb_req = Flipped(new TlbRequestIO(nRespDups = 2))
-    val l2_pmp_resp = new PMPRespBundle
-
-    val debugTopDown = new Bundle {
-      val robHeadVaddr = Flipped(Valid(UInt(VAddrBits.W)))
-      val toCore = new MemCoreTopDownIO
-    }
-    val debugRolling = Flipped(new RobDebugRollingIO)
-
-    // All the signals from/to frontend/backend to/from bus will go through MemBlock
-    val fromTopToBackend = Input(new Bundle {
-      val msiInfo   = ValidIO(new MsiInfoBundle)
-      val clintTime = ValidIO(UInt(64.W))
-    })
-    val inner_hartId = Output(UInt(hartIdLen.W))
-    val inner_reset_vector = Output(UInt(PAddrBits.W))
-    val outer_reset_vector = Input(UInt(PAddrBits.W))
-    val outer_cpu_halt = Output(Bool())
-    val inner_beu_errors_icache = Input(new L1BusErrorUnitInfo)
-    val outer_beu_errors_icache = Output(new L1BusErrorUnitInfo)
-    val inner_l2_pf_enable = Input(Bool())
-    val outer_l2_pf_enable = Output(Bool())
-    // val inner_hc_perfEvents = Output(Vec(numPCntHc * coreParams.L2NBanks, new PerfEvent))
-    // val outer_hc_perfEvents = Input(Vec(numPCntHc * coreParams.L2NBanks, new PerfEvent))
-  })
-
-  // reset signals of frontend & backend are generated in memblock
-  val reset_backend = IO(Output(Reset()))
+  val io = IO(new MemBlockIO)
 
   dontTouch(io.inner_hartId)
   dontTouch(io.inner_reset_vector)
@@ -1729,13 +1733,13 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
         ModuleNode(dtlb_ld_tlb_ld),
         ModuleNode(dcache),
         ModuleNode(l1d_to_l2_buffer),
-        CellNode(reset_backend)
+        CellNode(io.reset_backend)
       )
     )
     ResetGen(leftResetTree, reset, sim = false)
     ResetGen(rightResetTree, reset, sim = false)
   } else {
-    reset_backend := DontCare
+    io.reset_backend := DontCare
   }
 
   // top-down info
@@ -1786,4 +1790,16 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
   val allPerfInc = allPerfEvents.map(_._2.asTypeOf(new PerfEvent))
   val perfEvents = HPerfMonitor(csrevents, allPerfInc).getPerfEvents
   generatePerfEvent()
+}
+
+class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer) {
+  val io = IO(new MemBlockIO)
+
+  val innerModule = Module(new MemBlockImpInlined(outer))
+
+  io <> innerModule.io
+
+  if (p(DebugOptionsKey).ResetGen) {
+    ResetGen(ResetGenNode(Seq(ModuleNode(innerModule))), reset, sim = false)
+  }
 }
