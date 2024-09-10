@@ -172,8 +172,12 @@ class XSTile()(implicit p: Parameters) extends LazyModule
     io.chi.foreach(_ <> l2top.module.chi.get)
     l2top.module.nodeID.foreach(_ := io.nodeID.get)
 
-    if (debugOpts.ResetGen && enableL2) {
-      core.module.reset := l2top.module.reset_core
+    if (enableL2) {
+      l2top.module.clock := clock.asBool
+      l2top.module.reset := reset.asAsyncReset
+      if (debugOpts.ResetGen) {
+        core.module.reset := l2top.module.reset_core
+      }
     }
   }
 

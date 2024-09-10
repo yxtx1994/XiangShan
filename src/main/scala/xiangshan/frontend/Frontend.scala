@@ -18,7 +18,7 @@ package xiangshan.frontend
 import org.chipsalliance.cde.config.Parameters
 import chisel3._
 import chisel3.util._
-import freechips.rocketchip.diplomacy.{LazyModule, LazyModuleImp}
+import freechips.rocketchip.diplomacy.{LazyModule, LazyRawModuleImp}
 import utils._
 import utility._
 import xiangshan._
@@ -36,11 +36,12 @@ class Frontend()(implicit p: Parameters) extends LazyModule with HasXSParameter 
   lazy val module = new FrontendImp(this)
 }
 
-
-class FrontendImp (outer: Frontend) extends LazyModuleImp(outer)
+class FrontendImp (outer: Frontend) extends LazyRawModuleImp(outer)
   with HasXSParameter
   with HasPerfEvents
 {
+  val clock = IO(Input(Bool()))
+  val reset = IO(Input(AsyncReset()))
   val io = IO(new Bundle() {
     val hartId = Input(UInt(hartIdLen.W))
     val reset_vector = Input(UInt(PAddrBits.W))
@@ -331,6 +332,16 @@ class FrontendImp (outer: Frontend) extends LazyModuleImp(outer)
   icache.io.hartId := io.hartId
 
   itlbRepeater1.io.debugTopDown.robHeadVaddr := io.debugTopDown.robHeadVaddr
+
+  // reset gen
+  if (p(DebugOptionsKey).ResetGen) {
+    withClockAndReset(clock.asClock, reset) {
+      ResetGen(ResetGenNode(Seq(CellNode(childReset))), reset, sim = false)
+    }
+  } else {
+    childReset := reset
+  }
+  childClock := clock.asClock
 
   val frontendBubble = Mux(io.backend.canAccept, DecodeWidth.U - PopCount(ibuffer.io.out.map(_.valid)), 0.U)
   XSPerfAccumulate("FrontendBubble", frontendBubble)

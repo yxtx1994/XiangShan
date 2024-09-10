@@ -134,7 +134,9 @@ class L2Top()(implicit p: Parameters) extends LazyModule
   beu.node := TLBuffer.chainNode(1) := mmio_xbar
   mmio_port := TLBuffer() := mmio_xbar
 
-  class L2TopImp(wrapper: LazyModule) extends LazyModuleImp(wrapper) {
+  class L2TopImp(wrapper: LazyModule) extends LazyRawModuleImp(wrapper) {
+    val clock = IO(Input(Bool()))
+    val reset = IO(Input(AsyncReset()))
     val beu_errors = IO(Input(chiselTypeOf(beu.module.io.errors)))
     val reset_vector = IO(new Bundle {
       val fromTile = Input(UInt(PAddrBits.W))
@@ -160,9 +162,25 @@ class L2Top()(implicit p: Parameters) extends LazyModule
     val l2_hint = IO(ValidIO(new L2ToL1Hint()))
     val reset_core = IO(Output(Reset()))
 
-    val resetDelayN = Module(new DelayN(UInt(PAddrBits.W), 5))
+    if (debugOpts.ResetGen) {
+      withClockAndReset(clock.asClock, reset) {
+        val resetTree = ResetGenNode(Seq(
+          CellNode(reset_core),
+          CellNode(childReset)
+        ))
+        ResetGen(resetTree, reset, sim = false)
+      }
+    } else {
+      childReset := reset
+      reset_core := DontCare
+    }
+
+    childClock := clock.asClock
+
+    val resetDelayN = withClockAndReset(childClock, childReset) { Module(new DelayN(UInt(PAddrBits.W), 5)) }
 
     beu.module.io.errors <> beu_errors
+    // resetDelayN.clock := childClock
     resetDelayN.io.in := reset_vector.fromTile
     reset_vector.toCore := resetDelayN.io.out
     hartId.toCore := hartId.fromTile
@@ -216,13 +234,6 @@ class L2Top()(implicit p: Parameters) extends LazyModule
       l2_tlb_req.req.bits := DontCare
       l2_tlb_req.req_kill := DontCare
       l2_tlb_req.resp.ready := true.B
-    }
-
-    if (debugOpts.ResetGen) {
-      val resetTree = ResetGenNode(Seq(CellNode(reset_core)))
-      ResetGen(resetTree, reset, sim = false)
-    } else {
-      reset_core := DontCare
     }
   }
 

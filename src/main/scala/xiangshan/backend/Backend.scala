@@ -20,7 +20,7 @@ import org.chipsalliance.cde.config.Parameters
 import chisel3._
 import chisel3.util._
 import device.MsiInfoBundle
-import freechips.rocketchip.diplomacy.{LazyModule, LazyModuleImp}
+import freechips.rocketchip.diplomacy.{LazyModule, LazyRawModuleImp}
 import system.HasSoCParameter
 import utility._
 import utils.{HPerfMonitor, HasPerfEvents, PerfEvent}
@@ -167,11 +167,13 @@ class Backend(val params: BackendParams)(implicit p: Parameters) extends LazyMod
   lazy val module = new BackendImp(this)
 }
 
-class BackendImp(override val wrapper: Backend)(implicit p: Parameters) extends LazyModuleImp(wrapper)
+class BackendImp(override val wrapper: Backend)(implicit p: Parameters) extends LazyRawModuleImp(wrapper)
   with HasXSParameter
   with HasPerfEvents {
   implicit private val params: BackendParams = wrapper.params
 
+  val clock = IO(Input(Bool()))
+  val reset = IO(Input(AsyncReset()))
   val io = IO(new BackendIO()(p, wrapper.params))
 
   private val ctrlBlock = wrapper.ctrlBlock.module
@@ -699,34 +701,39 @@ class BackendImp(override val wrapper: Backend)(implicit p: Parameters) extends 
 
   // reset tree
   if (p(DebugOptionsKey).ResetGen) {
-    val rightResetTree = ResetGenNode(Seq(
-      ModuleNode(dataPath),
-      ModuleNode(intExuBlock),
-      ModuleNode(fpExuBlock),
-      ModuleNode(vfExuBlock),
-      ModuleNode(bypassNetwork),
-      ModuleNode(wbDataPath)
-    ))
-    val leftResetTree = ResetGenNode(Seq(
-      ModuleNode(pcTargetMem),
-      ModuleNode(intScheduler),
-      ModuleNode(fpScheduler),
-      ModuleNode(vfScheduler),
-      ModuleNode(memScheduler),
-      ModuleNode(og2ForVector),
-      ModuleNode(wbFuBusyTable),
-      ResetGenNode(Seq(
-        ModuleNode(ctrlBlock),
+    withClockAndReset(clock.asClock, reset) {
+      val rightResetTree = ResetGenNode(Seq(
+        ModuleNode(dataPath),
+        ModuleNode(intExuBlock),
+        ModuleNode(fpExuBlock),
+        ModuleNode(vfExuBlock),
+        ModuleNode(bypassNetwork),
+        ModuleNode(wbDataPath)
+      ))
+      val leftResetTree = ResetGenNode(Seq(
+        ModuleNode(pcTargetMem),
+        ModuleNode(intScheduler),
+        ModuleNode(fpScheduler),
+        ModuleNode(vfScheduler),
+        ModuleNode(memScheduler),
+        ModuleNode(og2ForVector),
+        ModuleNode(wbFuBusyTable),
         ResetGenNode(Seq(
+          ModuleNode(ctrlBlock),
           CellNode(io.frontendReset)
         ))
       ))
-    ))
-    ResetGen(leftResetTree, reset, sim = false)
-    ResetGen(rightResetTree, reset, sim = false)
+      ResetGen(ResetGenNode(Seq(
+        CellNode(childReset),
+        rightResetTree,
+        leftResetTree,
+      )), reset, sim = false)
+    }
   } else {
     io.frontendReset := DontCare
+    childReset := reset
   }
+  childClock := clock.asClock
 
   // perf events
   val pfevent = Module(new PFEvent)

@@ -103,6 +103,8 @@ class XSCoreImp(outer: XSCoreBase) extends LazyModuleImp(outer)
   val backend = outer.backend.module
   val memBlock = outer.memBlock.module
 
+  frontend.clock := clock.asBool
+  frontend.reset := (if (debugOpts.ResetGen) backend.io.frontendReset.asAsyncReset else reset.asAsyncReset)
   frontend.io.hartId := memBlock.io.inner_hartId
   frontend.io.reset_vector := memBlock.io.inner_reset_vector
   frontend.io.softPrefetch <> memBlock.io.ifetchPrefetch
@@ -111,6 +113,9 @@ class XSCoreImp(outer: XSCoreBase) extends LazyModuleImp(outer)
   frontend.io.tlbCsr <> backend.io.frontendTlbCsr
   frontend.io.csrCtrl <> backend.io.frontendCsrCtrl
   frontend.io.fencei <> backend.io.fenceio.fencei
+
+  backend.clock := clock.asBool
+  backend.reset := (if (debugOpts.ResetGen) memBlock.reset_backend.asAsyncReset else reset.asAsyncReset)
 
   backend.io.fromTop := memBlock.io.mem_to_ooo.topToBackendBypass
 
@@ -170,6 +175,8 @@ class XSCoreImp(outer: XSCoreBase) extends LazyModuleImp(outer)
   backend.io.perf.ctrlInfo := DontCare
 
   // top -> memBlock
+  memBlock.reset := reset.asAsyncReset
+  memBlock.clock := clock.asBool
   memBlock.io.fromTopToBackend.clintTime := io.clintTime
   memBlock.io.fromTopToBackend.msiInfo := io.msiInfo
   memBlock.io.hartId := io.hartId
@@ -239,7 +246,7 @@ class XSCoreImp(outer: XSCoreBase) extends LazyModuleImp(outer)
   io.l2_pf_enable := memBlock.io.outer_l2_pf_enable
 
   if (debugOpts.ResetGen) {
-    backend.reset := memBlock.reset_backend
-    frontend.reset := backend.io.frontendReset
+    // backend.reset := memBlock.reset_backend
+    // frontend.reset := backend.io.frontendReset
   }
 }

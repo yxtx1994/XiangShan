@@ -253,7 +253,7 @@ class MemBlock()(implicit p: Parameters) extends LazyModule
 
 }
 
-class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
+class MemBlockImp(outer: MemBlock) extends LazyRawModuleImp(outer)
   with HasXSParameter
   with HasFPUParameters
   with HasPerfEvents
@@ -262,6 +262,8 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
   with HasMemBlockParameters
   with SdtrigExt
 {
+  val clock = IO(Input(Bool()))
+  val reset = IO(Input(AsyncReset()))
   val io = IO(new Bundle {
     val hartId = Input(UInt(hartIdLen.W))
     val redirect = Flipped(ValidIO(new Redirect))
@@ -538,8 +540,8 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
       val l2_trace = Wire(new LoadPfDbBundle)
       l2_trace.paddr := outer.l2_pf_sender_opt.get.out.head._1.addr
       val table = ChiselDB.createTable(s"L2PrefetchTrace$hartId", new LoadPfDbBundle, basicDB = false)
-      table.log(l2_trace, l1_pf_to_l2.valid, "StreamPrefetchTrace", clock, reset)
-      table.log(l2_trace, !l1_pf_to_l2.valid && sms_pf_to_l2.valid, "L2PrefetchTrace", clock, reset)
+      table.log(l2_trace, l1_pf_to_l2.valid, "StreamPrefetchTrace", childClock, childReset)
+      table.log(l2_trace, !l1_pf_to_l2.valid && sms_pf_to_l2.valid, "L2PrefetchTrace", childClock, childReset)
 
       val l1_pf_to_l3 = ValidIODelay(l1_pf.io.l3_req, 4)
       outer.l3_pf_sender_opt.foreach(_.out.head._1.addr_valid := l1_pf_to_l3.valid)
@@ -549,7 +551,7 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
       val l3_trace = Wire(new LoadPfDbBundle)
       l3_trace.paddr := outer.l3_pf_sender_opt.map(_.out.head._1.addr).getOrElse(0.U)
       val l3_table = ChiselDB.createTable(s"L3PrefetchTrace$hartId", new LoadPfDbBundle, basicDB = false)
-      l3_table.log(l3_trace, l1_pf_to_l3.valid, "StreamPrefetchTrace", clock, reset)
+      l3_table.log(l3_trace, l1_pf_to_l3.valid, "StreamPrefetchTrace", childClock, childReset)
 
       XSPerfAccumulate("prefetch_fire_l2", outer.l2_pf_sender_opt.get.out.head._1.addr_valid)
       XSPerfAccumulate("prefetch_fire_l3", outer.l3_pf_sender_opt.map(_.out.head._1.addr_valid).getOrElse(false.B))
@@ -1710,33 +1712,40 @@ class MemBlockImp(outer: MemBlock) extends LazyModuleImp(outer)
 
   // reset tree of MemBlock
   if (p(DebugOptionsKey).ResetGen) {
-    val leftResetTree = ResetGenNode(
-      Seq(
-        ModuleNode(ptw),
-        ModuleNode(ptw_to_l2_buffer),
-        ModuleNode(lsq),
-        ModuleNode(dtlb_st_tlb_st),
-        ModuleNode(dtlb_prefetch_tlb_prefetch),
-        ModuleNode(pmp)
+    withClockAndReset(clock.asClock, reset) {
+      val leftResetTree = ResetGenNode(
+        Seq(
+          ModuleNode(ptw),
+          ModuleNode(ptw_to_l2_buffer),
+          ModuleNode(lsq),
+          ModuleNode(dtlb_st_tlb_st),
+          ModuleNode(dtlb_prefetch_tlb_prefetch),
+          ModuleNode(pmp)
+        )
+        ++ pmp_checkers.map(ModuleNode(_))
+        ++ (if (prefetcherOpt.isDefined) Seq(ModuleNode(prefetcherOpt.get)) else Nil)
+        ++ (if (l1PrefetcherOpt.isDefined) Seq(ModuleNode(l1PrefetcherOpt.get)) else Nil)
       )
-      ++ pmp_checkers.map(ModuleNode(_))
-      ++ (if (prefetcherOpt.isDefined) Seq(ModuleNode(prefetcherOpt.get)) else Nil)
-      ++ (if (l1PrefetcherOpt.isDefined) Seq(ModuleNode(l1PrefetcherOpt.get)) else Nil)
-    )
-    val rightResetTree = ResetGenNode(
-      Seq(
-        ModuleNode(sbuffer),
-        ModuleNode(dtlb_ld_tlb_ld),
-        ModuleNode(dcache),
-        ModuleNode(l1d_to_l2_buffer),
-        CellNode(reset_backend)
+      val rightResetTree = ResetGenNode(
+        Seq(
+          ModuleNode(sbuffer),
+          ModuleNode(dtlb_ld_tlb_ld),
+          ModuleNode(dcache),
+          ModuleNode(l1d_to_l2_buffer),
+          CellNode(reset_backend)
+        )
       )
-    )
-    ResetGen(leftResetTree, reset, sim = false)
-    ResetGen(rightResetTree, reset, sim = false)
+      ResetGen(ResetGenNode(Seq(
+        leftResetTree,
+        rightResetTree,
+        CellNode(childReset)
+      )), reset, sim = false)
+    }
   } else {
+    childReset := reset
     reset_backend := DontCare
   }
+  childClock := clock.asClock
 
   // top-down info
   dcache.io.debugTopDown.robHeadVaddr := io.debugTopDown.robHeadVaddr
