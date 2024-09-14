@@ -219,7 +219,9 @@ class StoreQueue(implicit p: Parameters) extends XSModule
     numForward = LoadPipelineWidth
   ))
   vaddrModule.io := DontCare
-  val dataBuffer = Module(new DatamoduleResultBuffer(new DataBufferEntry))
+  val dataBuffers = List.fill(2)(Module(new DatamoduleResultBuffer(new DataBufferEntry)))
+  val dataBufferS0 = dataBuffers(0)
+  val dataBufferS1 = dataBuffers(1)
   val difftestBuffer = if (env.EnableDifftest) Some(Module(new DatamoduleResultBuffer(new DynInst))) else None
   val exceptionBuffer = Module(new StoreExceptionBuffer)
   exceptionBuffer.io.redirect := io.brqRedirect
@@ -291,7 +293,7 @@ class StoreQueue(implicit p: Parameters) extends XSModule
   // store miss align info
   io.maControl.storeInfo.data := dataModule.io.rdata(0).data
   io.maControl.storeInfo.dataReady := doMisalignSt
-  io.maControl.storeInfo.completeSbTrans := doMisalignSt && dataBuffer.io.enq(0).fire
+  io.maControl.storeInfo.completeSbTrans := doMisalignSt && dataBufferS0.io.enq(0).fire
 
   // store can be committed by ROB
   io.rob.mmio := DontCare
@@ -301,9 +303,9 @@ class StoreQueue(implicit p: Parameters) extends XSModule
   assert(EnsbufferWidth <= 2)
   // rdataPtrExtNext and rdataPtrExtNext+1 entry will be read from dataModule
   val rdataPtrExtNext = Wire(Vec(EnsbufferWidth, new SqPtr))
-  rdataPtrExtNext := WireInit(Mux(dataBuffer.io.enq(1).fire,
+  rdataPtrExtNext := WireInit(Mux(dataBufferS0.io.enq(1).fire,
     VecInit(rdataPtrExt.map(_ + 2.U)),
-    Mux(dataBuffer.io.enq(0).fire || io.mmioStout.fire || io.vecmmioStout.fire,
+    Mux(dataBufferS0.io.enq(0).fire || io.mmioStout.fire || io.vecmmioStout.fire,
       VecInit(rdataPtrExt.map(_ + 1.U)),
       rdataPtrExt
     )
@@ -955,50 +957,52 @@ class StoreQueue(implicit p: Parameters) extends XSModule
     val vecHasExceptionFlagValid = vecExceptionFlag.valid && isVec(ptr)
     if (i == 0) {
       // use dataBuffer write port 0 to writeback missaligned store out
-      dataBuffer.io.enq(i).valid := Mux(
+      dataBufferS0.io.enq(i).valid := Mux(
         doMisalignSt,
         io.maControl.control.writeSb,
         allocated(ptr) && committed(ptr) && ((!isVec(ptr) && (allvalid(ptr) || hasException(ptr))) || vecMbCommit(ptr)) && !mmioStall
       )
     } else {
-      dataBuffer.io.enq(i).valid := Mux(
+      dataBufferS0.io.enq(i).valid := Mux(
         doMisalignSt,
         false.B,
         allocated(ptr) && committed(ptr) && ((!isVec(ptr) && (allvalid(ptr) || hasException(ptr))) || vecMbCommit(ptr)) && !mmioStall
       )
     }
     // Note that store data/addr should both be valid after store's commit
-    assert(!dataBuffer.io.enq(i).valid || allvalid(ptr) || doMisalignSt || (allocated(ptr) && vecMbCommit(ptr)))
-    dataBuffer.io.enq(i).bits.addr     := Mux(doMisalignSt, io.maControl.control.paddr, paddrModule.io.rdata(i))
-    dataBuffer.io.enq(i).bits.vaddr    := Mux(doMisalignSt, io.maControl.control.vaddr, vaddrModule.io.rdata(i))
-    dataBuffer.io.enq(i).bits.data     := Mux(doMisalignSt, io.maControl.control.wdata, dataModule.io.rdata(i).data)
-    dataBuffer.io.enq(i).bits.mask     := Mux(doMisalignSt, io.maControl.control.wmask, dataModule.io.rdata(i).mask)
-    dataBuffer.io.enq(i).bits.wline    := Mux(doMisalignSt, false.B, paddrModule.io.rlineflag(i))
-    dataBuffer.io.enq(i).bits.sqPtr    := rdataPtrExt(i)
-    dataBuffer.io.enq(i).bits.prefetch := Mux(doMisalignSt, false.B, prefetch(ptr))
+    assert(!dataBufferS0.io.enq(i).valid || allvalid(ptr) || doMisalignSt || (allocated(ptr) && vecMbCommit(ptr)))
+    dataBufferS0.io.enq(i).bits.addr     := Mux(doMisalignSt, io.maControl.control.paddr, paddrModule.io.rdata(i))
+    dataBufferS0.io.enq(i).bits.vaddr    := Mux(doMisalignSt, io.maControl.control.vaddr, vaddrModule.io.rdata(i))
+    dataBufferS0.io.enq(i).bits.data     := Mux(doMisalignSt, io.maControl.control.wdata, dataModule.io.rdata(i).data)
+    dataBufferS0.io.enq(i).bits.mask     := Mux(doMisalignSt, io.maControl.control.wmask, dataModule.io.rdata(i).mask)
+    dataBufferS0.io.enq(i).bits.wline    := Mux(doMisalignSt, false.B, paddrModule.io.rlineflag(i))
+    dataBufferS0.io.enq(i).bits.sqPtr    := rdataPtrExt(i)
+    dataBufferS0.io.enq(i).bits.prefetch := Mux(doMisalignSt, false.B, prefetch(ptr))
     // when scalar has exception, will also not write into sbuffer
-    dataBuffer.io.enq(i).bits.vecValid := Mux(doMisalignSt, true.B, (!isVec(ptr) || (vecDataValid(ptr) && vecNotAllMask)) && !exceptionValid && !vecHasExceptionFlagValid)
+    dataBufferS0.io.enq(i).bits.vecValid := Mux(doMisalignSt, true.B, (!isVec(ptr) || (vecDataValid(ptr) && vecNotAllMask)) && !exceptionValid && !vecHasExceptionFlagValid)
 //    dataBuffer.io.enq(i).bits.vecValid := (!isVec(ptr) || vecDataValid(ptr)) && !hasException(ptr)
+
+    dataBufferS0.io.deq <> dataBufferS1.io.enq
   }
 
   // Send data stored in sbufferReqBitsReg to sbuffer
   for (i <- 0 until EnsbufferWidth) {
-    io.sbuffer(i).valid := dataBuffer.io.deq(i).valid
-    dataBuffer.io.deq(i).ready := io.sbuffer(i).ready
+    io.sbuffer(i).valid := dataBufferS1.io.deq(i).valid
+    dataBufferS1.io.deq(i).ready := io.sbuffer(i).ready
     io.sbuffer(i).bits := DontCare
     io.sbuffer(i).bits.cmd   := MemoryOpConstants.M_XWR
-    io.sbuffer(i).bits.addr  := dataBuffer.io.deq(i).bits.addr
-    io.sbuffer(i).bits.vaddr := dataBuffer.io.deq(i).bits.vaddr
-    io.sbuffer(i).bits.data  := dataBuffer.io.deq(i).bits.data
-    io.sbuffer(i).bits.mask  := dataBuffer.io.deq(i).bits.mask
-    io.sbuffer(i).bits.wline := dataBuffer.io.deq(i).bits.wline && dataBuffer.io.deq(i).bits.vecValid
-    io.sbuffer(i).bits.prefetch := dataBuffer.io.deq(i).bits.prefetch
-    io.sbuffer(i).bits.vecValid := dataBuffer.io.deq(i).bits.vecValid
+    io.sbuffer(i).bits.addr  := dataBufferS1.io.deq(i).bits.addr
+    io.sbuffer(i).bits.vaddr := dataBufferS1.io.deq(i).bits.vaddr
+    io.sbuffer(i).bits.data  := dataBufferS1.io.deq(i).bits.data
+    io.sbuffer(i).bits.mask  := dataBufferS1.io.deq(i).bits.mask
+    io.sbuffer(i).bits.wline := dataBufferS1.io.deq(i).bits.wline && dataBufferS1.io.deq(i).bits.vecValid
+    io.sbuffer(i).bits.prefetch := dataBufferS1.io.deq(i).bits.prefetch
+    io.sbuffer(i).bits.vecValid := dataBufferS1.io.deq(i).bits.vecValid
     // io.sbuffer(i).fire is RegNexted, as sbuffer data write takes 2 cycles.
     // Before data write finish, sbuffer is unable to provide store to load
     // forward data. As an workaround, deqPtrExt and allocated flag update
     // is delayed so that load can get the right data from store queue.
-    val ptr = dataBuffer.io.deq(i).bits.sqPtr.value
+    val ptr = dataBufferS1.io.deq(i).bits.sqPtr.value
     when (RegNext(io.sbuffer(i).fire && !doMisalignSt)) {
       allocated(RegEnable(ptr, io.sbuffer(i).fire)) := false.B
       XSDebug("sbuffer "+i+" fire: ptr %d\n", ptr)
