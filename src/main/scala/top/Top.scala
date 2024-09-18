@@ -144,6 +144,7 @@ class XSTop()(implicit p: Parameters) extends BaseXSSoc() with HasSoCParameter
         println("Connecting L1 prefetcher to L3!")
         recv := l3_pf_sender_opt.get
       })
+      /*
       l3.tpmeta_recv_node.foreach(recv => {
         for ((core, i) <- core_with_l2.zipWithIndex) {
           println(s"Connecting core_$i\'s L2 TPmeta request to L3!")
@@ -158,6 +159,8 @@ class XSTop()(implicit p: Parameters) extends BaseXSSoc() with HasSoCParameter
           core.core_l3_tpmeta_sink_port.get := broadcast.node
         }
       })
+
+       */
     case None =>
   }
 
