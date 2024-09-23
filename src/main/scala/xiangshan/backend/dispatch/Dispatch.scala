@@ -324,12 +324,11 @@ class Dispatch(implicit p: Parameters) extends XSModule with HasPerfEvents {
   //   However, dispatch stage cannot rely on the infos from rename stage, since the `rename.io.out.valid` relies on its
   // ready which is assigned from `dispatch.io.recv`. This would cause a combinational loop:
   //   dispatch.io.recv <- dispatch.io.fromRename.valid <- rename.io.out.valid <- rename.io.out.ready <- dispatch.io.recv
-  // val dqCanAccept = !((isOnlyDq0.asUInt.orR && !io.toIntDq0.canAccept) || (isOnlyDq1.asUInt.orR && !io.toIntDq1.canAccept) ||
-  //   (isBothDq01.asUInt.orR && !io.toIntDq0.canAccept && !io.toIntDq1.canAccept) ||
-  //   (isFp.asUInt.orR && !io.toVecDq.canAccept) || (isLs.asUInt.orR && !io.toLsDq.canAccept))
+  val dqCanAccept = !((isOnlyDq0.asUInt.orR && !io.toIntDq0.canAccept) || (isOnlyDq1.asUInt.orR && !io.toIntDq1.canAccept) ||
+                      (isBothDq01.asUInt.orR && !io.toIntDq0.canAccept && !io.toIntDq1.canAccept)) && io.toFpDq.canAccept && io.toVecDq.canAccept && io.toLsDq.canAccept
 
   // Todo: use decode2dispatch bypass infos to loose `can accept` condition
-  val dqCanAccept = io.toIntDq0.canAccept && io.toIntDq1.canAccept && io.toFpDq.canAccept && io.toVecDq.canAccept && io.toLsDq.canAccept
+  // val dqCanAccept = io.toIntDq0.canAccept && io.toIntDq1.canAccept && io.toFpDq.canAccept && io.toVecDq.canAccept && io.toLsDq.canAccept
 
   // input for ROB, LSQ, Dispatch Queue
   for (i <- 0 until RenameWidth) {
