@@ -688,7 +688,7 @@ class SramedDataArray(implicit p: Parameters) extends AbstractBankedDataArray {
 // the smallest access unit is bank
 class BankedDataArray(implicit p: Parameters) extends AbstractBankedDataArray {
   println("  DCacheType: BankedDataArray")
-  val ReduceReadlineConflict = false
+  val ReduceReadlineConflict = true
 
   io.write.ready := true.B
   io.write_dup.foreach(_.ready := true.B)
@@ -751,7 +751,8 @@ class BankedDataArray(implicit p: Parameters) extends AbstractBankedDataArray {
   val rr_bank_conflict = Seq.tabulate(LoadPipelineWidth)(x => Seq.tabulate(LoadPipelineWidth)(y =>
     io.read(x).valid && io.read(y).valid &&
     div_addrs(x) === div_addrs(y) &&
-    (io.read(x).bits.bankMask & io.read(y).bits.bankMask) =/= 0.U
+    (io.read(x).bits.bankMask & io.read(y).bits.bankMask) =/= 0.U &&
+    set_addrs(x) =/= set_addrs(y)
   ))
   val rrl_bank_conflict = Wire(Vec(LoadPipelineWidth, Bool()))
   val rrl_bank_conflict_intend = Wire(Vec(LoadPipelineWidth, Bool()))
