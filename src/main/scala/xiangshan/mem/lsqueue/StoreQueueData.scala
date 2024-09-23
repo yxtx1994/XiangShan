@@ -145,7 +145,7 @@ class SQData8Module(numEntries: Int, numRead: Int, numWrite: Int, numForward: In
   //   }
   // })
   (0 until numWrite).map(i => {
-     val s0_wenVec = Wire(Vec(StoreQueueNWriteBanks, Bool())) 
+    val s0_wenVec = Wire(Vec(StoreQueueNWriteBanks, Bool()))
     for(bank <- 0 until StoreQueueNWriteBanks) {
       s0_wenVec(bank) := io.data.wen(i) && get_bank(io.data.waddr(i)) === bank.U
     }
@@ -174,7 +174,7 @@ class SQData8Module(numEntries: Int, numRead: Int, numWrite: Int, numForward: In
   //   }
   // })
   (0 until numWrite).map(i => {
-    val s0_wenVec = Wire(Vec(StoreQueueNWriteBanks, Bool())) 
+    val s0_wenVec = Wire(Vec(StoreQueueNWriteBanks, Bool()))
     for(bank <- 0 until StoreQueueNWriteBanks) {
       s0_wenVec(bank) := io.mask.wen(i) && get_bank(io.mask.waddr(i)) === bank.U
     }
@@ -243,7 +243,7 @@ class SQData8Module(numEntries: Int, numRead: Int, numWrite: Int, numForward: In
         res
       })
     }
-    
+
     for (j <- 0 until numEntries) {
       val needCheck0 = io.needForward(i)(0)(j)
       val needCheck1 = io.needForward(i)(1)(j)

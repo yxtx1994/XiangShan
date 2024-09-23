@@ -552,7 +552,7 @@ case class DebugOptions
   EnablePerfDebug: Boolean = true,
   UseDRAMSim: Boolean = false,
   EnableConstantin: Boolean = false,
-  EnableChiselDB: Boolean = false,
+  EnableChiselDB: Boolean = true,
   AlwaysBasicDB: Boolean = true,
   EnableRollingDB: Boolean = false
 )
@@ -590,7 +590,7 @@ trait HasXSParameter {
   def GPAddrBits = {
     if (EnableSv48)
       coreParams.GPAddrBitsSv48x4
-    else 
+    else
       coreParams.GPAddrBitsSv39x4
   }
   def VAddrBits = {

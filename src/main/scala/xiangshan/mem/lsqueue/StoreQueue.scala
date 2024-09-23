@@ -294,7 +294,7 @@ class StoreQueue(implicit p: Parameters) extends XSModule
   val doMisalignSt = GatedValidRegNext((rdataPtrExt(0).value === deqPtr) && (cmtPtr === deqPtr) && allocated(deqPtr) && datavalid(deqPtr) && unaligned(deqPtr) && !isVec(deqPtr))
   val finishMisalignSt = GatedValidRegNext(doMisalignSt && io.maControl.control.removeSq && !io.maControl.control.hasException)
   val misalignBlock = doMisalignSt && !finishMisalignSt
-  
+
   // store miss align info
   io.maControl.storeInfo.data := dataModule.io.rdata(0).data
   io.maControl.storeInfo.dataReady := doMisalignSt
@@ -887,6 +887,9 @@ class StoreQueue(implicit p: Parameters) extends XSModule
   io.mmioStout.bits.debug.paddr := DontCare
   io.mmioStout.bits.debug.isPerfCnt := false.B
   io.mmioStout.bits.debug.vaddr := DontCare
+  io.mmioStout.bits.debug.hit := uncacheUop.storeSetHit
+  io.mmioStout.bits.debug.ssid := uncacheUop.ssid
+
   // Remove MMIO inst from store queue after MMIO request is being sent
   // That inst will be traced by uncache state machine
   when (io.mmioStout.fire) {
@@ -909,6 +912,8 @@ class StoreQueue(implicit p: Parameters) extends XSModule
   io.vecmmioStout.bits.debug.paddr := DontCare
   io.vecmmioStout.bits.debug.isPerfCnt := false.B
   io.vecmmioStout.bits.debug.vaddr := DontCare
+  io.vecmmioStout.bits.debug.hit := uop(deqPtr).storeSetHit
+  io.vecmmioStout.bits.debug.ssid := uop(deqPtr).ssid
   // Remove MMIO inst from store queue after MMIO request is being sent
   // That inst will be traced by uncache state machine
   when (io.vecmmioStout.fire) {

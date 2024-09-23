@@ -550,6 +550,8 @@ class LoadMisalignBuffer(implicit p: Parameters) extends XSModule
   io.writeBack.bits.debug.isPerfCnt := false.B
   io.writeBack.bits.debug.paddr := req.paddr
   io.writeBack.bits.debug.vaddr := req.vaddr
+  io.writeBack.bits.debug.hit := req.uop.storeSetHit
+  io.writeBack.bits.debug.ssid := req.uop.ssid
 
   val flush = req_valid && req.uop.robIdx.needFlush(io.redirect)
 

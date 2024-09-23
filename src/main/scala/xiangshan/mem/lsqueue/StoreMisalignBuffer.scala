@@ -240,7 +240,7 @@ class StoreMisalignBuffer(implicit p: Parameters) extends XSModule
     SB -> 0.U,
     SH -> 1.U,
     SW -> 3.U,
-    SD -> 7.U 
+    SD -> 7.U
   )) + req.vaddr(4, 0)
   // to see if (vaddr + opSize - 1) and vaddr are in the same 16 bytes region
   val cross16BytesBoundary = req_valid && (highAddress(4) =/= req.vaddr(4))
@@ -547,7 +547,7 @@ class StoreMisalignBuffer(implicit p: Parameters) extends XSModule
   io.sqControl.control.writeSb := bufferState === s_sq_req
   io.sqControl.control.wdata   := splitStoreData(curPtr).wdata
   io.sqControl.control.wmask   := splitStoreData(curPtr).wmask
-  // the paddr and vaddr is not corresponding to the exact addr of 
+  // the paddr and vaddr is not corresponding to the exact addr of
   io.sqControl.control.paddr   := splitStoreResp(curPtr).paddr
   io.sqControl.control.vaddr   := splitStoreResp(curPtr).vaddr
   io.sqControl.control.last    := !((unWriteStores & ~UIntToOH(curPtr)).orR)
@@ -573,9 +573,11 @@ class StoreMisalignBuffer(implicit p: Parameters) extends XSModule
   io.writeBack.bits.debug.isPerfCnt := false.B
   io.writeBack.bits.debug.paddr := req.paddr
   io.writeBack.bits.debug.vaddr := req.vaddr
+  io.writeBack.bits.debug.hit := req.uop.storeSetHit
+  io.writeBack.bits.debug.ssid := req.uop.ssid
 
   io.sqControl.control.removeSq := req_valid && (bufferState === s_wait) && !(globalMMIO || globalException) && (io.rob.scommit =/= 0.U)
-  
+
   val flush = req_valid && req.uop.robIdx.needFlush(io.redirect)
 
   when (flush && (bufferState =/= s_idle)) {

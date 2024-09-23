@@ -372,7 +372,7 @@ class MainPipe(implicit p: Parameters) extends DCacheModule with HasPerfEvents w
   val s1_hit = s1_tag_match && s1_has_permission
   val s1_pregen_can_go_to_mq = !s1_req.replace && !s1_req.probe && !s1_req.miss && (s1_req.isStore || s1_req.isAMO) && !s1_hit
 
-  // s2: select data, return resp if this is a store miss
+  // s2: select data, return resp if this is a store iss
   val s2_valid = RegInit(false.B)
   val s2_req = RegEnable(s1_req, s1_fire)
   val s2_tag_match = RegEnable(s1_tag_match, s1_fire)
@@ -607,7 +607,7 @@ class MainPipe(implicit p: Parameters) extends DCacheModule with HasPerfEvents w
     })
   }
 
-  
+
   io.lrsc_locked_block.valid := lrsc_valid_dup(1)
   io.lrsc_locked_block.bits  := lrsc_addr_dup
   io.block_lr := GatedValidRegNext(lrsc_valid)
