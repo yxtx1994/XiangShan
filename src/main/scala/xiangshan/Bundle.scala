@@ -27,7 +27,7 @@ import xiangshan.backend.decode.{ImmUnion, XDecode}
 import xiangshan.backend.fu.FuType
 import xiangshan.backend.rob.RobPtr
 import xiangshan.frontend._
-import xiangshan.mem.{LqPtr, SqPtr}
+import xiangshan.mem.{LqPtr, SqPtr, LoadReplayCauses}
 import xiangshan.backend.Bundles.{DynInst, UopIdx}
 import xiangshan.backend.fu.vector.Bundles.VType
 import xiangshan.frontend.{AllAheadFoldedHistoryOldestBits, AllFoldedHistories, BPUCtrl, CGHPtr, FtqPtr, FtqToCtrlIO}
@@ -253,6 +253,7 @@ class PerfDebugInfo(implicit p: Parameters) extends XSBundle {
   val runahead_checkpoint_id = UInt(XLEN.W)
   val tlbFirstReqTime = UInt(XLEN.W)
   val tlbRespTime = UInt(XLEN.W) // when getting hit result (including delay in L2TLB hit)
+  val cause = UInt(LoadReplayCauses.allCauses.W)
 }
 
 // Separate LSQ
@@ -356,6 +357,8 @@ class DebugBundle(implicit p: Parameters) extends XSBundle {
   /* add L/S inst info in EXU */
   // val L1toL2TlbLatency = UInt(XLEN.W)
   // val levelTlbHit = UInt(2.W)
+  val hit = Bool()
+  val ssid = UInt(SSIDWidth.W)
 }
 
 class SoftIfetchPrefetchBundle(implicit p: Parameters) extends XSBundle {

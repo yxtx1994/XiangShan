@@ -203,7 +203,7 @@ class HybridUnit(implicit p: Parameters) extends XSModule
   val s0_rep_stall           = io.lsin.valid && isAfter(io.ldu_io.replay.bits.uop.robIdx, io.lsin.bits.uop.robIdx)
   private val SRC_NUM = 8
   private val Seq(
-    super_rep_idx, fast_rep_idx, lsq_rep_idx, high_pf_idx, 
+    super_rep_idx, fast_rep_idx, lsq_rep_idx, high_pf_idx,
     int_iss_idx, vec_iss_idx, l2l_fwd_idx, low_pf_idx
   ) = (0 until SRC_NUM).toSeq
   // load flow source valid
@@ -1187,6 +1187,8 @@ class HybridUnit(implicit p: Parameters) extends XSModule
   s3_out.bits.debug.isPerfCnt := false.B
   s3_out.bits.debug.paddr     := s3_in.paddr
   s3_out.bits.debug.vaddr     := s3_in.vaddr
+  s3_out.bits.debug.hit := s3_in.uop.storeSetHit
+  s3_out.bits.debug.ssid := s3_in.uop.ssid
 
   when (s3_force_rep) {
     s3_out.bits.uop.exceptionVec := 0.U.asTypeOf(s3_in.uop.exceptionVec.cloneType)

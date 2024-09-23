@@ -273,7 +273,7 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   val s0_rep_stall           = io.ldin.valid && isAfter(io.replay.bits.uop.robIdx, io.ldin.bits.uop.robIdx)
   private val SRC_NUM = 10
   private val Seq(
-    mab_idx, super_rep_idx, fast_rep_idx, mmio_idx, lsq_rep_idx, 
+    mab_idx, super_rep_idx, fast_rep_idx, mmio_idx, lsq_rep_idx,
     high_pf_idx, vec_iss_idx, int_iss_idx, l2l_fwd_idx, low_pf_idx
   ) = (0 until SRC_NUM).toSeq
   // load flow source valid
@@ -719,6 +719,11 @@ class LoadUnit(implicit p: Parameters) extends XSModule
     s0_out.uop.debugInfo.tlbFirstReqTime := GTimer()
   }.otherwise{
     s0_out.uop.debugInfo.tlbFirstReqTime := s0_sel_src.uop.debugInfo.tlbFirstReqTime
+  }
+  when (s0_src_select_vec(int_iss_idx) && s0_sel_src.isFirstIssue) {
+    s0_out.uop.debugInfo.issueTime := GTimer()
+  } .otherwise {
+    s0_out.uop.debugInfo.issueTime := s0_sel_src.uop.debugInfo.issueTime
   }
   s0_out.schedIndex     := s0_sel_src.sched_idx
 
@@ -1373,6 +1378,9 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   s3_out.bits.debug.isPerfCnt := false.B
   s3_out.bits.debug.paddr     := s3_in.paddr
   s3_out.bits.debug.vaddr     := s3_in.vaddr
+  s3_out.bits.debug.hit := s3_in.uop.storeSetHit
+  s3_out.bits.debug.ssid := s3_in.uop.ssid
+  s3_out.bits.uop.debugInfo.cause := s3_in.uop.debugInfo.cause.asUInt | io.lsq.ldin.bits.rep_info.cause.asUInt
 
   // Vector load, writeback to merge buffer
   // TODO: Add assertion in merge buffer, merge buffer must accept vec load writeback

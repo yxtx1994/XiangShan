@@ -28,7 +28,7 @@ import xiangshan.backend.BackendParams
 import xiangshan.backend.Bundles.{DynInst, ExceptionInfo, ExuOutput}
 import xiangshan.backend.fu.{FuConfig, FuType}
 import xiangshan.frontend.FtqPtr
-import xiangshan.mem.{LqPtr, LsqEnqIO, SqPtr}
+import xiangshan.mem.{LqPtr, LsqEnqIO, SqPtr, genVWmask}
 import xiangshan.backend.Bundles.{DynInst, ExceptionInfo, ExuOutput}
 import xiangshan.backend.ctrlblock.{DebugLSIO, DebugLsInfo, LsTopdownInfo}
 import xiangshan.backend.fu.vector.Bundles.VType
@@ -209,8 +209,8 @@ class RobImp(override val wrapper: Rob)(implicit p: Parameters, params: BackendP
       connectCommitEntry(robDeqGroup(i), robBanksRdataNextLineUpdate(i))
     }
   }
-  
-  // In each robentry, the ftqIdx and ftqOffset belong to the first instruction that was compressed, 
+
+  // In each robentry, the ftqIdx and ftqOffset belong to the first instruction that was compressed,
   // that is Necessary when exceptions happen.
   // Update the ftqIdx and ftqOffset to correctly notify the frontend which instructions have been committed.
   for (i <- 0 until CommitWidth) {
@@ -484,6 +484,7 @@ class RobImp(override val wrapper: Rob)(implicit p: Parameters, params: BackendP
       debug_microOp(wbIdx).debugInfo.selectTime := wb.bits.debugInfo.selectTime
       debug_microOp(wbIdx).debugInfo.issueTime := wb.bits.debugInfo.issueTime
       debug_microOp(wbIdx).debugInfo.writebackTime := wb.bits.debugInfo.writebackTime
+      debug_microOp(wbIdx).debugInfo.cause := wb.bits.debugInfo.cause
 
       // debug for lqidx and sqidx
       debug_microOp(wbIdx).lqIdx := wb.bits.lqIdx.getOrElse(0.U.asTypeOf(new LqPtr))
@@ -1242,6 +1243,7 @@ class RobImp(override val wrapper: Rob)(implicit p: Parameters, params: BackendP
   val selectLatency = commitDebugUop.map(uop => uop.debugInfo.selectTime - uop.debugInfo.enqRsTime)
   val issueLatency = commitDebugUop.map(uop => uop.debugInfo.issueTime - uop.debugInfo.selectTime)
   val executeLatency = commitDebugUop.map(uop => uop.debugInfo.writebackTime - uop.debugInfo.issueTime)
+  val replayCause = commitDebugUop.map(uop => uop.debugInfo.cause)
   val rsFuLatency = commitDebugUop.map(uop => uop.debugInfo.writebackTime - uop.debugInfo.enqRsTime)
   val commitLatency = commitDebugUop.map(uop => timer - uop.debugInfo.writebackTime)
 
@@ -1316,6 +1318,77 @@ class RobImp(override val wrapper: Rob)(implicit p: Parameters, params: BackendP
           reset = reset
         )
       }
+    }
+
+    val mdp_exuDebug = Reg(Vec(RobSize, new DebugBundle))
+    for (wb <- exuWBs) {
+      when(wb.valid) {
+        val wbIdx = wb.bits.robIdx.value
+        mdp_exuDebug(wbIdx) := wb.bits.debug
+        mdp_exuDebug(wbIdx).hit := wb.bits.debug.hit
+        mdp_exuDebug(wbIdx).ssid := wb.bits.debug.ssid
+      }
+    }
+    val mdpTableName = "MdpTable" + p(XSCoreParamsKey).HartId.toString
+    val debug_mdpTable = ChiselDB.createTable(mdpTableName, new MdpInfoEntry, basicDB = true)
+    for (i <- 0 until CommitWidth) {
+      val uop = commitDebugUop(i)
+      val ptr = deqPtrVec(i).value
+      val exuUop = debug_microOp(ptr)
+      val exuOut = mdp_exuDebug(ptr)
+      val isLoad = io.commits.info(i).commitType === CommitType.LOAD
+      val isStore = io.commits.info(i).commitType === CommitType.STORE
+      val isMMIO = exuOut.isMMIO
+      when (io.commits.commitValid(i) && io.commits.isCommit && (isLoad || isStore) && !isMMIO) {
+        val debug_mdpData = Wire(new MdpInfoEntry)
+        debug_mdpData.isLoad := isLoad
+        debug_mdpData.pc := uop.pc
+        debug_mdpData.vaddr := exuOut.vaddr
+        debug_mdpData.paddr := exuOut.paddr
+        debug_mdpData.mask := genVWmask(exuOut.vaddr, uop.fuOpType(1,0))
+        debug_mdpData.hit := exuUop.storeSetHit
+        debug_mdpData.ssid := exuUop.ssid
+        debug_mdpTable.log(
+          data = debug_mdpData,
+          en = io.commits.commitValid(i) && io.commits.isCommit && (isLoad || isStore) && !isMMIO,
+          site = instSiteName,
+          clock = clock,
+          reset = reset
+        )
+      }
+    }
+      // log when committing
+    val load_debug_table = ChiselDB.createTable("LoadDebugTable" + p(XSCoreParamsKey).HartId.toString, new LoadInfoEntry, basicDB = true)
+    for (i <- 0 until CommitWidth) {
+      val log_enable = io.commits.commitValid(i) && io.commits.isCommit && (io.commits.info(i).commitType === CommitType.LOAD)
+      val commit_index = deqPtrVec(i).value
+      val load_debug_data = Wire(new LoadInfoEntry)
+      val uop = commitDebugUop(i)
+      val cause = replayCause(i)
+      load_debug_data.robIdx := commit_index
+      load_debug_data.pc := uop.pc
+      load_debug_data.vaddr := debug_lsTopdownInfo(commit_index).s1.vaddr_bits
+      load_debug_data.paddr := debug_lsTopdownInfo(commit_index).s2.paddr_bits
+      load_debug_data.cacheMiss := debug_lsTopdownInfo(commit_index).s2.first_real_miss
+      load_debug_data.tlbQueryLatency := 0.U
+      load_debug_data.exeLatency := executeLatency(i)
+      load_debug_data.memAmb := cause(0)
+      load_debug_data.tlbMiss := cause(1)
+      load_debug_data.fwdFail := cause(2)
+      load_debug_data.dcacheRep := cause(3)
+      load_debug_data.dcacheMiss := cause(4)
+      load_debug_data.wpuFail := cause(5)
+      load_debug_data.bankConflict := cause(6)
+      load_debug_data.rarNack := cause(7)
+      load_debug_data.rawNack := cause(8)
+      load_debug_data.nuke := cause(9)
+      load_debug_table.log(
+        data = load_debug_data,
+        en = log_enable,
+        site = instSiteName,
+        clock = clock,
+        reset = reset
+      )
     }
   }
 

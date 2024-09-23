@@ -219,7 +219,10 @@ class StoreUnit(implicit p: Parameters) extends XSModule
   io.st_mask_out.valid       := s0_use_flow_rs || s0_use_flow_vec
   io.st_mask_out.bits.mask   := s0_out.mask
   io.st_mask_out.bits.sqIdx  := s0_out.uop.sqIdx
-  
+
+  dontTouch(io.stin.bits.uop.storeSetHit)
+  dontTouch(io.stin.bits.uop.ssid)
+
   io.stin.ready := s1_ready && s0_use_flow_rs
   io.vecstin.ready := s1_ready && s0_use_flow_vec
   io.prefetch_req.ready := s1_ready && io.dcache.req.ready && !s0_iss_valid && !s0_vec_valid && !s0_ma_st_valid
@@ -461,6 +464,8 @@ class StoreUnit(implicit p: Parameters) extends XSModule
   s3_out.debug.paddr     := s3_in.paddr
   s3_out.debug.vaddr     := s3_in.vaddr
   s3_out.debug.isPerfCnt := false.B
+  s3_out.debug.hit := s3_in.uop.storeSetHit
+  s3_out.debug.ssid := s3_in.uop.ssid
 
   // Pipeline
   // --------------------------------------------------------------------------------

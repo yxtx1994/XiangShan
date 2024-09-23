@@ -52,12 +52,33 @@ class InstInfoEntry(implicit p: Parameters) extends XSBundle{
 }
 
 class LoadInfoEntry(implicit p: Parameters) extends XSBundle{
+  val robIdx = UInt(XLEN.W)
   val pc = UInt(VAddrBits.W)
   val vaddr = UInt(VAddrBits.W)
   val paddr = UInt(PAddrBits.W)
   val cacheMiss = Bool()
   val tlbQueryLatency = UInt(64.W)
   val exeLatency = UInt(64.W)
+  val memAmb = Bool()
+  val tlbMiss = Bool()
+  val fwdFail = Bool()
+  val dcacheRep = Bool()
+  val dcacheMiss = Bool()
+  val wpuFail = Bool()
+  val bankConflict = Bool()
+  val rarNack = Bool()
+  val rawNack = Bool()
+  val nuke = Bool()
+}
+
+class MdpInfoEntry(implicit p: Parameters) extends XSBundle {
+  val isLoad = Bool()
+  val pc = UInt(VAddrBits.W)
+  val vaddr = UInt(VAddrBits.W)
+  val paddr = UInt(PAddrBits.W)
+  val mask = UInt((VLEN/8).W)
+  val hit = Bool()
+  val ssid = UInt(SSIDWidth.W)
 }
 
 class StreamPFTraceInEntry(implicit p: Parameters) extends XSBundle with HasL1PrefetchHelper{
