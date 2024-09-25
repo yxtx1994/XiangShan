@@ -1070,7 +1070,10 @@ class MemBlockInlinedImp(outer: MemBlockInlined) extends LazyModuleImp(outer)
   // lsq to l2 CMO
   outer.cmo_sender match {
     case Some(x) =>
-      x.out.head._1 <> lsq.io.cmoOpReq
+      // x.out.head._1 <> lsq.io.cmoOpReq
+      x.out.head._1.valid := RegNext(lsq.io.cmoOpReq.valid)
+      x.out.head._1.bits  := RegNext(lsq.io.cmoOpReq.bits)
+      lsq.io.cmoOpReq.ready := RegNext(x.out.head._1.ready)
     case None =>
       lsq.io.cmoOpReq.ready  := false.B
   }
