@@ -274,7 +274,7 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   val s0_rep_stall           = io.ldin.valid && isAfter(io.replay.bits.uop.robIdx, io.ldin.bits.uop.robIdx)
   private val SRC_NUM = 10
   private val Seq(
-    mab_idx, super_rep_idx, fast_rep_idx, mmio_idx, lsq_rep_idx, 
+    mab_idx, super_rep_idx, fast_rep_idx, mmio_idx, lsq_rep_idx,
     high_pf_idx, vec_iss_idx, int_iss_idx, l2l_fwd_idx, low_pf_idx
   ) = (0 until SRC_NUM).toSeq
   // load flow source valid
@@ -1383,7 +1383,7 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   // Int load, if hit, will be writebacked at s3
   s3_out.valid                := s3_valid && s3_safe_writeback
   s3_out.bits.uop             := s3_in.uop
-  s3_out.bits.uop.fpWen       := s3_in.uop.fpWen && !s3_exception
+  s3_out.bits.uop.fpWen       := s3_in.uop.fpWen
   s3_out.bits.uop.exceptionVec(loadAccessFault) := (s3_dly_ld_err || s3_in.uop.exceptionVec(loadAccessFault)) && s3_vecActive
   s3_out.bits.uop.flushPipe   := false.B
   s3_out.bits.uop.replayInst  := s3_rep_frm_fetch || s3_flushPipe
