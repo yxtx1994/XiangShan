@@ -212,6 +212,7 @@ class Sbuffer(implicit p: Parameters)
 
   val ptag = Reg(Vec(StoreBufferSize, UInt(PTagWidth.W)))
   val vtag = Reg(Vec(StoreBufferSize, UInt(VTagWidth.W)))
+  val pc = Reg(Vec(StoreBufferSize, UInt(VAddrBits.W)))
   val debug_mask = Reg(Vec(StoreBufferSize, Vec(CacheLineWords, Vec(DataBytes, Bool()))))
   val waitInflightMask = Reg(Vec(StoreBufferSize, UInt(StoreBufferSize.W)))
   val data = dataModule.io.dataOut
@@ -317,6 +318,7 @@ class Sbuffer(implicit p: Parameters)
 
   val inptags = io.in.map(in => getPTag(in.bits.addr))
   val invtags = io.in.map(in => getVTag(in.bits.vaddr))
+  val inpc = io.in.map(in => in.bits.pc)
   val sameTag = inptags(0) === inptags(1) && io.in(0).valid && io.in(1).valid && io.in(0).bits.vecValid && io.in(1).bits.vecValid
   val firstWord = getVWord(io.in(0).bits.addr)
   val secondWord = getVWord(io.in(1).bits.addr)
@@ -436,6 +438,7 @@ class Sbuffer(implicit p: Parameters)
         // missqReplayCount(insertIdx) := 0.U
         ptag(entryIdx) := reqptag
         vtag(entryIdx) := reqvtag // update vtag if a new sbuffer line is allocated
+        pc(entryIdx) := req.pc
       }
     })
   }
@@ -673,6 +676,7 @@ class Sbuffer(implicit p: Parameters)
   val sbuffer_out_s1_evictionIdx = RegEnable(sbuffer_out_s0_evictionIdx, sbuffer_out_s0_fire)
   val sbuffer_out_s1_evictionPTag = RegEnable(ptag(sbuffer_out_s0_evictionIdx), sbuffer_out_s0_fire)
   val sbuffer_out_s1_evictionVTag = RegEnable(vtag(sbuffer_out_s0_evictionIdx), sbuffer_out_s0_fire)
+  val sbuffer_out_s1_evictionPc = RegEnable(pc(sbuffer_out_s0_evictionIdx), sbuffer_out_s0_fire)
 
   io.dcache.req.valid := sbuffer_out_s1_valid && !blockDcacheWrite
   io.dcache.req.bits := DontCare
@@ -682,6 +686,7 @@ class Sbuffer(implicit p: Parameters)
   io.dcache.req.bits.data  := data(sbuffer_out_s1_evictionIdx).asUInt
   io.dcache.req.bits.mask  := mask(sbuffer_out_s1_evictionIdx).asUInt
   io.dcache.req.bits.id := sbuffer_out_s1_evictionIdx
+  io.dcache.req.bits.pc := sbuffer_out_s1_evictionPc
 
   when (sbuffer_out_s1_fire) {
     assert(!(io.dcache.req.bits.vaddr === 0.U))

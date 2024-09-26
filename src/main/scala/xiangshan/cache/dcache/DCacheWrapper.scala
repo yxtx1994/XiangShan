@@ -20,6 +20,7 @@ import chisel3._
 import chisel3.experimental.ExtModule
 import chisel3.util._
 import coupledL2.VaddrField
+import coupledL2.PCField
 import coupledL2.IsKeywordField
 import coupledL2.IsKeywordKey
 import freechips.rocketchip.diplomacy.{IdRange, LazyModule, LazyModuleImp, TransferSizes}
@@ -360,6 +361,7 @@ class DCacheWordReq(implicit p: Parameters) extends DCacheBundle
 {
   val cmd    = UInt(M_SZ.W)
   val vaddr  = UInt(VAddrBits.W)
+  val pc     = UInt(VAddrBits.W)
   val data   = UInt(VLEN.W)
   val mask   = UInt((VLEN/8).W)
   val id     = UInt(reqIdWidth.W)
@@ -381,6 +383,7 @@ class DCacheLineReq(implicit p: Parameters) extends DCacheBundle
   val cmd    = UInt(M_SZ.W)
   val vaddr  = UInt(VAddrBits.W)
   val addr   = UInt(PAddrBits.W)
+  val pc     = UInt(VAddrBits.W)
   val data   = UInt((cfg.blockBytes * 8).W)
   val mask   = UInt(cfg.blockBytes.W)
   val id     = UInt(reqIdWidth.W)
@@ -792,6 +795,7 @@ class DCache()(implicit p: Parameters) extends LazyModule with HasDCacheParamete
     PrefetchField(),
     ReqSourceField(),
     VaddrField(VAddrBits - blockOffBits),
+    PCField(VAddrBits),
   //  IsKeywordField()
   ) ++ cacheParams.aliasBitsOpt.map(AliasField)
   val echoFields: Seq[BundleFieldBase] = Seq(

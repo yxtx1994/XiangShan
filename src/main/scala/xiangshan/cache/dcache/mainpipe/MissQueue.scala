@@ -19,6 +19,7 @@ package xiangshan.cache
 import chisel3._
 import chisel3.util._
 import coupledL2.VaddrKey
+import coupledL2.PCKey
 import coupledL2.IsKeywordKey
 import difftest._
 import freechips.rocketchip.tilelink.ClientStates._
@@ -252,6 +253,8 @@ class MissReqPipeRegBundle(edge: TLEdgeOut)(implicit p: Parameters) extends DCac
     acquire.user.lift(AliasKey).foreach(_ := req.vaddr(13, 12))
     // pass vaddr to l2
     acquire.user.lift(VaddrKey).foreach(_ := req.vaddr(VAddrBits - 1, blockOffBits))
+    // pass pc to l2
+    acquire.user.lift(PCKey).foreach(_ := req.pc)
 
     // miss req pipe reg pass keyword to L2, is priority
     acquire.echo.lift(IsKeywordKey).foreach(_ := isKeyword())
@@ -692,6 +695,8 @@ class MissEntry(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheModule
   io.mem_acquire.bits.user.lift(AliasKey).foreach( _ := req.vaddr(13, 12))
   // pass vaddr to l2
   io.mem_acquire.bits.user.lift(VaddrKey).foreach( _ := req.vaddr(VAddrBits-1, blockOffBits))
+  // pass pc to l2
+  io.mem_acquire.bits.user.lift(PCKey).foreach(_ := req.pc)
   // pass keyword to L2
   io.mem_acquire.bits.echo.lift(IsKeywordKey).foreach(_ := isKeyword)
   // trigger prefetch
@@ -731,6 +736,7 @@ class MissEntry(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheModule
   io.main_pipe_req.bits.cmd := req.cmd
   io.main_pipe_req.bits.vaddr := req.vaddr
   io.main_pipe_req.bits.addr := req.addr
+  io.main_pipe_req.bits.pc := req.pc
   io.main_pipe_req.bits.word_idx := req.word_idx
   io.main_pipe_req.bits.amo_data := req.amo_data
   io.main_pipe_req.bits.amo_mask := req.amo_mask

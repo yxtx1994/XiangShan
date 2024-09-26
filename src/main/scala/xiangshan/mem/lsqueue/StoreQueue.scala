@@ -66,6 +66,7 @@ class DataBufferEntry (implicit p: Parameters)  extends DCacheBundle {
   val sqPtr  = new SqPtr
   val prefetch = Bool()
   val vecValid = Bool()
+  val pc = UInt(VAddrBits.W)
 }
 
 class StoreExceptionBuffer(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelper {
@@ -917,6 +918,7 @@ class StoreQueue(implicit p: Parameters) extends XSModule
     // when scalar has exception, will also not write into sbuffer
     dataBuffer.io.enq(i).bits.vecValid := (!isVec(ptr) || (vecDataValid(ptr) && vecNotAllMask)) && !exceptionValid && !vecHasExceptionFlagValid
 //    dataBuffer.io.enq(i).bits.vecValid := (!isVec(ptr) || vecDataValid(ptr)) && !hasException(ptr)
+    dataBuffer.io.enq(i).bits.pc       := uop(ptr).pc // right?
   }
 
   // Send data stored in sbufferReqBitsReg to sbuffer
@@ -929,6 +931,7 @@ class StoreQueue(implicit p: Parameters) extends XSModule
     io.sbuffer(i).bits.cmd   := MemoryOpConstants.M_XWR
     io.sbuffer(i).bits.addr  := dataBuffer.io.deq(i).bits.addr
     io.sbuffer(i).bits.vaddr := dataBuffer.io.deq(i).bits.vaddr
+    io.sbuffer(i).bits.pc    := dataBuffer.io.deq(i).bits.pc
     io.sbuffer(i).bits.data  := dataBuffer.io.deq(i).bits.data
     io.sbuffer(i).bits.mask  := dataBuffer.io.deq(i).bits.mask
     io.sbuffer(i).bits.wline := dataBuffer.io.deq(i).bits.wline && dataBuffer.io.deq(i).bits.vecValid

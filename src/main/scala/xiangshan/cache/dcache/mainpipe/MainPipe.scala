@@ -47,6 +47,7 @@ class MainPipeReq(implicit p: Parameters) extends DCacheBundle {
   // if dcache size > 32KB, vaddr is also needed for store
   // vaddr is used to get extra index bits
   val vaddr  = UInt(VAddrBits.W)
+  val pc = UInt(VAddrBits.W)
   // must be aligned to block
   val addr   = UInt(PAddrBits.W)
 
@@ -87,6 +88,7 @@ class MainPipeReq(implicit p: Parameters) extends DCacheBundle {
     req.cmd := store.cmd
     req.addr := store.addr
     req.vaddr := store.vaddr
+    req.pc := store.pc
     req.store_data := store.data
     req.store_mask := store.mask
     req.replace := false.B
@@ -1445,7 +1447,8 @@ class MainPipe(implicit p: Parameters) extends DCacheModule with HasPerfEvents w
   miss_req.req_coh := s2_hit_coh
   miss_req.id := s2_req.id
   miss_req.cancel := false.B
-  miss_req.pc := DontCare
+  miss_req.pc := s2_req.pc
+  dontTouch(miss_req.pc)
   miss_req.full_overwrite := s2_req.isStore && s2_req.store_mask.andR
 
   io.store_replay_resp.valid := s2_valid_dup(5) && s2_can_go_to_mq_dup(1) && replay && s2_req.isStore
