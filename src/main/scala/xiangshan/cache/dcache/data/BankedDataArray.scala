@@ -369,7 +369,7 @@ class SramedDataArray(implicit p: Parameters) extends AbstractBankedDataArray {
 
   // read conflict
   val rr_bank_conflict = Seq.tabulate(LoadPipelineWidth)(x => Seq.tabulate(LoadPipelineWidth)(y =>
-    io.read(x).valid && !io.read(x).bits.kill && io.read(y).valid &&
+    io.read(x).valid && io.read(y).valid &&
     div_addrs(x) === div_addrs(y) &&
     (io.read(x).bits.bankMask & io.read(y).bits.bankMask) =/= 0.U &&
     io.read(x).bits.way_en === io.read(y).bits.way_en &&
@@ -778,7 +778,7 @@ class BankedDataArray(implicit p: Parameters) extends AbstractBankedDataArray {
     // remove fake rr_bank_conflict situation in s2
     val real_other_bank_conflict_reg = RegNext(wr_bank_conflict(i) || rrl_bank_conflict(i))
     val real_rr_bank_conflict_reg = (if (i == 0) 0.B else (0 until i).map{ j =>
-      RegNext(rr_bank_conflict(j)(i)) && (set_addrs_reg(j) =/= set_addrs_reg(i)) && !RegNext(io.read(j).bits.kill)
+      RegNext(rr_bank_conflict(j)(i)) && (set_addrs_reg(j) =/= set_addrs_reg(i))
     }.reduce(_ || _))
     io.bank_conflict_slow(i) := real_other_bank_conflict_reg || real_rr_bank_conflict_reg
 
