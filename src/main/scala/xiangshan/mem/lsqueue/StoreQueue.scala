@@ -852,8 +852,8 @@ class StoreQueue(implicit p: Parameters) extends XSModule
   val deqCanDoCbo = GatedRegNext(LSUOpType.isCbo(uop(deqPtr).fuOpType) && allocated(deqPtr) && addrvalid(deqPtr))
   when (deqCanDoCbo) {
     // disable uncache channel
-    // FIXME lyq: Whether NC will also be interrupted by CBO
     mmioReq.valid := false.B
+    ncReq.valid := false.B
 
     when (io.cmoOpReq.fire) {
       mmioState := s_resp
@@ -903,6 +903,7 @@ class StoreQueue(implicit p: Parameters) extends XSModule
   io.mmioStout.bits.data := shiftDataToLow(paddrModule.io.rdata(0), dataModule.io.rdata(0).data) // dataModule.io.rdata.read(deqPtr)
   io.mmioStout.bits.isFromLoadUnit := DontCare
   io.mmioStout.bits.debug.isMMIO := true.B
+  io.mmioStout.bits.debug.isNC := false.B
   io.mmioStout.bits.debug.paddr := DontCare
   io.mmioStout.bits.debug.isPerfCnt := false.B
   io.mmioStout.bits.debug.vaddr := DontCare
@@ -926,6 +927,7 @@ class StoreQueue(implicit p: Parameters) extends XSModule
   io.vecmmioStout.bits.uop.sqIdx := deqPtrExt(0)
   io.vecmmioStout.bits.data := shiftDataToLow(paddrModule.io.rdata(0), dataModule.io.rdata(0).data) // dataModule.io.rdata.read(deqPtr)
   io.vecmmioStout.bits.debug.isMMIO := true.B
+  io.vecmmioStout.bits.debug.isNC   := false.B
   io.vecmmioStout.bits.debug.paddr := DontCare
   io.vecmmioStout.bits.debug.isPerfCnt := false.B
   io.vecmmioStout.bits.debug.vaddr := DontCare
@@ -982,22 +984,17 @@ class StoreQueue(implicit p: Parameters) extends XSModule
   // remove retired insts from sq, add retired store to sbuffer
 
   // [1] Store NC: Read data to uncache
-  for (i <- 0 until EnsbufferWidth) {
-    val ptr = rdataPtrExt(i).value
-    val mmioStall = if(i == 0) mmio(rdataPtrExt(0).value) else (mmio(rdataPtrExt(i).value) || mmio(rdataPtrExt(i-1).value))
-    val exceptionValid = if (i == 0) hasException(rdataPtrExt(0).value) else {
-      hasException(rdataPtrExt(i).value) || (hasException(rdataPtrExt(i - 1).value))
-    }
-    ncReq.valid := nc(ptr) && allocated(ptr) && committed(ptr) && ((!isVec(ptr) && (allvalid(ptr) || hasException(ptr))) || vecMbCommit(ptr)) && !mmioStall
-    ncReq.bits := DontCare
-    ncReq.bits.cmd  := MemoryOpConstants.M_XWR
-    ncReq.bits.addr := paddrModule.io.rdata(i) // data(deqPtr) -> rdata(0)
-    ncReq.bits.data := shiftDataToLow(paddrModule.io.rdata(i), dataModule.io.rdata(i).data)
-    ncReq.bits.mask := shiftMaskToLow(paddrModule.io.rdata(i), dataModule.io.rdata(i).mask)
-    ncReq.bits.atomic := atomic(GatedRegNext(rdataPtrExtNext(i)).value)
-    ncReq.bits.nc := true.B
-    ncReq.bits.id := rdataPtrExt(i).value
-  }
+  // TODO: CAN NOT deal with vector nc now!
+  val rptr0 = rdataPtrExt(0).value
+  ncReq.valid := nc(rptr0) && allocated(rptr0) && committed(rptr0) && !mmio(rptr0) && !isVec(rptr0)
+  ncReq.bits := DontCare
+  ncReq.bits.cmd  := MemoryOpConstants.M_XWR
+  ncReq.bits.addr := paddrModule.io.rdata(0) // data(deqPtr) -> rdata(0)
+  ncReq.bits.data := shiftDataToLow(paddrModule.io.rdata(0), dataModule.io.rdata(0).data)
+  ncReq.bits.mask := shiftMaskToLow(paddrModule.io.rdata(0), dataModule.io.rdata(0).mask)
+  ncReq.bits.atomic := atomic(GatedRegNext(rdataPtrExtNext(0)).value)
+  ncReq.bits.nc := true.B
+  ncReq.bits.id := rdataPtrExt(0).value
   
   mmioReq.ready := io.uncache.req.ready
   ncReq.ready := io.uncache.req.ready && !mmioReq.valid
@@ -1016,6 +1013,7 @@ class StoreQueue(implicit p: Parameters) extends XSModule
   for (i <- 0 until EnsbufferWidth) {
     val ptr = rdataPtrExt(i).value
     val mmioStall = if(i == 0) mmio(rdataPtrExt(0).value) else (mmio(rdataPtrExt(i).value) || mmio(rdataPtrExt(i-1).value))
+    val ncStall = if(i == 0) nc(rdataPtrExt(0).value) else (nc(rdataPtrExt(i).value) || nc(rdataPtrExt(i-1).value))
     val exceptionValid = if(i == 0) hasException(rdataPtrExt(0).value) else {
       hasException(rdataPtrExt(i).value) || (hasException(rdataPtrExt(i-1).value) && uop(rdataPtrExt(i).value).robIdx === uop(rdataPtrExt(i-1).value).robIdx)
     }
@@ -1027,13 +1025,13 @@ class StoreQueue(implicit p: Parameters) extends XSModule
       dataBuffer.io.enq(i).valid := Mux(
         doMisalignSt,
         io.maControl.control.writeSb,
-        allocated(ptr) && committed(ptr) && ((!isVec(ptr) && (allvalid(ptr) || hasException(ptr))) || vecMbCommit(ptr)) && !mmioStall && !nc(ptr)
+        allocated(ptr) && committed(ptr) && ((!isVec(ptr) && (allvalid(ptr) || hasException(ptr))) || vecMbCommit(ptr)) && !mmioStall && !ncStall
       )
     } else {
       dataBuffer.io.enq(i).valid := Mux(
         doMisalignSt,
         false.B,
-        allocated(ptr) && committed(ptr) && ((!isVec(ptr) && (allvalid(ptr) || hasException(ptr))) || vecMbCommit(ptr)) && !mmioStall && !nc(ptr)
+        allocated(ptr) && committed(ptr) && ((!isVec(ptr) && (allvalid(ptr) || hasException(ptr))) || vecMbCommit(ptr)) && !mmioStall && !ncStall
       )
     }
     // Note that store data/addr should both be valid after store's commit
@@ -1078,8 +1076,9 @@ class StoreQueue(implicit p: Parameters) extends XSModule
   // Flags are used to record whether there are any exceptions when the queue is displayed.
   // This is determined each time a write is made to the 'databuffer', prevent subsequent uop of the same instruction from writing to the 'dataBuffer'.
   val vecCommitHasException = (0 until EnsbufferWidth).map{ i =>
-    val ptr                 = rdataPtrExt(i).value
-    val mmioStall           = if(i == 0) mmio(rdataPtrExt(0).value) else (mmio(rdataPtrExt(i).value) || mmio(rdataPtrExt(i-1).value))
+    val ptr = rdataPtrExt(i).value
+    val mmioStall = if(i == 0) mmio(rdataPtrExt(0).value) else (mmio(rdataPtrExt(i).value) || mmio(rdataPtrExt(i-1).value))
+    val ncStall = if(i == 0) nc(rdataPtrExt(0).value) else (nc(rdataPtrExt(i).value) || nc(rdataPtrExt(i-1).value))
     val exceptionVliad      = isVec(ptr) && hasException(ptr) && dataBuffer.io.enq(i).fire
     (exceptionVliad, uop(ptr), vecLastFlow(ptr))
   }
@@ -1109,9 +1108,8 @@ class StoreQueue(implicit p: Parameters) extends XSModule
 
 
   val vecExceptionFlagCancel  = (0 until EnsbufferWidth).map{ i =>
-    val ptr                   = rdataPtrExt(i).value
-    val mmioStall             = if(i == 0) mmio(rdataPtrExt(0).value) else (mmio(rdataPtrExt(i).value) || mmio(rdataPtrExt(i-1).value))
-    val vecLastFlowCommit      = vecLastFlow(ptr) && (uop(ptr).robIdx === vecExceptionFlag.bits.robIdx) && dataBuffer.io.enq(i).fire
+    val ptr = rdataPtrExt(i).value
+    val vecLastFlowCommit = vecLastFlow(ptr) && (uop(ptr).robIdx === vecExceptionFlag.bits.robIdx) && dataBuffer.io.enq(i).fire
     vecLastFlowCommit
   }.reduce(_ || _)
 
@@ -1138,7 +1136,6 @@ class StoreQueue(implicit p: Parameters) extends XSModule
   if (env.EnableDifftest) {
     for (i <- 0 until EnsbufferWidth) {
       val ptr = rdataPtrExt(i).value
-      val mmioStall = if(i == 0) mmio(rdataPtrExt(0).value) else (mmio(rdataPtrExt(i).value) || mmio(rdataPtrExt(i-1).value))
       difftestBuffer.get.io.enq(i).valid := dataBuffer.io.enq(i).valid
       difftestBuffer.get.io.enq(i).bits := uop(ptr)
     }
