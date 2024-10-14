@@ -303,6 +303,7 @@ class StoreQueue(implicit p: Parameters) extends XSModule
 
   val mmioReq = Wire(chiselTypeOf(io.uncache.req))
   val ncReq = Wire(chiselTypeOf(io.uncache.req))
+  val ncResp = Wire(chiselTypeOf(io.uncache.resp))
   
   // store miss align info
   io.maControl.storeInfo.data := dataModule.io.rdata(0).data
@@ -319,7 +320,7 @@ class StoreQueue(implicit p: Parameters) extends XSModule
   val rdataPtrExtNext = Wire(Vec(EnsbufferWidth, new SqPtr))
   rdataPtrExtNext := rdataPtrExt.map(i => i +
     PopCount(dataBuffer.io.enq.map(_.fire)) +
-    PopCount(ncReq.fire || io.mmioStout.fire || io.vecmmioStout.fire)
+    PopCount(ncResp.fire || io.mmioStout.fire || io.vecmmioStout.fire)
   )
 
   // deqPtrExtNext traces which inst is about to leave store queue
@@ -333,12 +334,12 @@ class StoreQueue(implicit p: Parameters) extends XSModule
   val deqPtrExtNext = Wire(Vec(EnsbufferWidth, new SqPtr))
   deqPtrExtNext := deqPtrExt.map(i =>  i +
     RegNext(PopCount(VecInit(io.sbuffer.map(_.fire)))) +
-    PopCount(ncReq.fire || io.mmioStout.fire || io.vecmmioStout.fire)
+    PopCount(ncResp.fire || io.mmioStout.fire || io.vecmmioStout.fire)
   )
 
   io.sqDeq := RegNext(
     RegNext(PopCount(VecInit(io.sbuffer.map(_.fire && !misalignBlock)))) +
-    PopCount(ncReq.fire || io.mmioStout.fire || io.vecmmioStout.fire || finishMisalignSt)
+    PopCount(ncResp.fire || io.mmioStout.fire || io.vecmmioStout.fire || finishMisalignSt)
   )
 
   assert(!RegNext(RegNext(io.sbuffer(0).fire) && (io.mmioStout.fire || io.vecmmioStout.fire)))
@@ -846,14 +847,64 @@ class StoreQueue(implicit p: Parameters) extends XSModule
   mmioReq.bits.nc := false.B
   mmioReq.bits.id := rdataPtrExt(0).value
 
+  /**
+    * NC Store
+    * (1) req: when it has been commited, it can be sent to lower level.
+    * (2) resp: because SQ data forward is required, it can only be deq when ncResp is received
+    */
+  // TODO: CAN NOT deal with vector nc now!
+  val nc_idle :: nc_req :: nc_resp :: Nil = Enum(3)
+  val ncState = RegInit(nc_idle)
+  val ncDoReq = io.uncache.req.fire && io.uncache.req.bits.nc
+  val rptr0 = rdataPtrExt(0).value
+  switch(ncState){
+    is(nc_idle) {
+      when(nc(rptr0) && allocated(rptr0) && committed(rptr0) && !mmio(rptr0) && !isVec(rptr0)) {
+        ncState := nc_req
+      }
+    }
+    is(nc_req) {
+      when(ncDoReq) {
+        ncState := nc_resp
+      }
+    }
+    is(nc_resp) {
+      when(ncResp.fire) {
+        ncState := nc_idle
+      }
+    }
+  }
+  ncReq.valid := ncState === nc_req
+  ncReq.bits := DontCare
+  ncReq.bits.cmd  := MemoryOpConstants.M_XWR
+  ncReq.bits.addr := paddrModule.io.rdata(0)
+  ncReq.bits.data := shiftDataToLow(paddrModule.io.rdata(0), dataModule.io.rdata(0).data)
+  ncReq.bits.mask := shiftMaskToLow(paddrModule.io.rdata(0), dataModule.io.rdata(0).mask)
+  ncReq.bits.atomic := atomic(GatedRegNext(rdataPtrExtNext(0)).value)
+  ncReq.bits.nc := true.B
+  ncReq.bits.id := rdataPtrExt(0).value
+  
+  ncResp.ready := io.uncache.resp.ready
+  ncResp.valid := io.uncache.resp.fire && io.uncache.resp.bits.nc
+  ncResp.bits <> io.uncache.resp.bits
+  when (ncResp.fire) {
+    val ptr = io.uncache.resp.bits.id
+    allocated(ptr) := false.B
+    XSDebug("nc fire: ptr %d\n", ptr)
+  }
+  
+  mmioReq.ready := io.uncache.req.ready
+  ncReq.ready := io.uncache.req.ready && !mmioReq.valid
+  io.uncache.req.valid := mmioReq.valid || ncReq.valid
+  io.uncache.req.bits := Mux(mmioReq.valid, mmioReq.bits, ncReq.bits)
+
   // CBO op type check can be delayed for 1 cycle,
   // as uncache op will not start in s_idle
   val cboMmioAddr = get_block_addr(paddrModule.io.rdata(0))
   val deqCanDoCbo = GatedRegNext(LSUOpType.isCbo(uop(deqPtr).fuOpType) && allocated(deqPtr) && addrvalid(deqPtr))
   when (deqCanDoCbo) {
     // disable uncache channel
-    mmioReq.valid := false.B
-    ncReq.valid := false.B
+    io.uncache.req.valid := false.B
 
     when (io.cmoOpReq.fire) {
       mmioState := s_resp
@@ -980,36 +1031,17 @@ class StoreQueue(implicit p: Parameters) extends XSModule
   commitCount := PopCount(commitVec)
   cmtPtrExt := cmtPtrExt.map(_ + commitCount)
 
-  // committed stores will not be cancelled and can be sent to lower level.
-  // remove retired insts from sq, add retired store to sbuffer
-
-  // [1] Store NC: Read data to uncache
-  // TODO: CAN NOT deal with vector nc now!
-  val rptr0 = rdataPtrExt(0).value
-  ncReq.valid := nc(rptr0) && allocated(rptr0) && committed(rptr0) && !mmio(rptr0) && !isVec(rptr0)
-  ncReq.bits := DontCare
-  ncReq.bits.cmd  := MemoryOpConstants.M_XWR
-  ncReq.bits.addr := paddrModule.io.rdata(0) // data(deqPtr) -> rdata(0)
-  ncReq.bits.data := shiftDataToLow(paddrModule.io.rdata(0), dataModule.io.rdata(0).data)
-  ncReq.bits.mask := shiftMaskToLow(paddrModule.io.rdata(0), dataModule.io.rdata(0).mask)
-  ncReq.bits.atomic := atomic(GatedRegNext(rdataPtrExtNext(0)).value)
-  ncReq.bits.nc := true.B
-  ncReq.bits.id := rdataPtrExt(0).value
-  
-  mmioReq.ready := io.uncache.req.ready
-  ncReq.ready := io.uncache.req.ready && !mmioReq.valid
-  io.uncache.req.valid := mmioReq.valid || ncReq.valid
-  io.uncache.req.bits := Mux(mmioReq.valid, mmioReq.bits, ncReq.bits)
-  
-  when (io.uncache.resp.fire && io.uncache.resp.bits.nc) {
-    val ptr = io.uncache.resp.bits.id
-    allocated(ptr) := false.B
-    XSDebug("nc fire: ptr %d\n", ptr)
-  }
-
-  // [2] Store Cache: Read data from data module
-  // As store queue grows larger and larger, time needed to read data from data
-  // module keeps growing higher. Now we give data read a whole cycle.
+  /**
+   * committed stores will not be cancelled and can be sent to lower level.
+   * 
+   * 1. Store NC: Read data to uncache
+   *    implement as above
+   * 
+   * 2. Store Cache: Read data from data module
+   *    remove retired insts from sq, add retired store to sbuffer.
+   *    as store queue grows larger and larger, time needed to read data from data
+   *    module keeps growing higher. Now we give data read a whole cycle.
+   */
   for (i <- 0 until EnsbufferWidth) {
     val ptr = rdataPtrExt(i).value
     val mmioStall = if(i == 0) mmio(rdataPtrExt(0).value) else (mmio(rdataPtrExt(i).value) || mmio(rdataPtrExt(i-1).value))
