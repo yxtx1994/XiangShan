@@ -82,7 +82,7 @@ class LoadToLsqIO(implicit p: Parameters) extends XSBundle {
   val uncache         = Flipped(DecoupledIO(new MemExuOutput))
   val ld_raw_data     = Input(new LoadDataFromLQBundle)
   // uncache-nc
-  val nc_ldin = Flipped(Decoupled(new LsPipelineBundle))
+  val nc_ldin = Flipped(DecoupledIO(new LsPipelineBundle))
   val forward         = new PipeLoadForwardQueryIO
   val stld_nuke_query = new LoadNukeQueryIO
   val ldld_nuke_query = new LoadNukeQueryIO
@@ -798,7 +798,7 @@ class LoadUnit(implicit p: Parameters) extends XSModule
 
   // mmio
   io.lsq.uncache.ready := s0_mmio_fire
-  io.lsq.nc_ldin.ready := s0_nc_fire
+  io.lsq.nc_ldin.ready := s0_src_ready_vec(nc_idx) && s0_can_go
 
   // load flow source ready
   // cache missed load has highest priority
