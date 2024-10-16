@@ -821,11 +821,12 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   io.dcache.replacementUpdated := Mux(s0_src_select_vec(lsq_rep_idx) || s0_src_select_vec(super_rep_idx), io.replay.bits.replacementUpdated, false.B)
 
   // load wakeup
-  // TODO: vector load wakeup? frm_mabuf wakeup? nc wakeup?
+  // TODO: vector load wakeup? frm_mabuf wakeup?
   val s0_wakeup_selector = Seq(
     s0_src_valid_vec(super_rep_idx),
     s0_src_valid_vec(fast_rep_idx),
     s0_mmio_fire,
+    s0_nc_fire,
     s0_src_valid_vec(lsq_rep_idx),
     s0_src_valid_vec(int_iss_idx)
   )
@@ -833,17 +834,18 @@ class LoadUnit(implicit p: Parameters) extends XSModule
     io.replay.bits.uop,
     io.fast_rep_in.bits.uop,
     io.lsq.uncache.bits.uop,
+    io.lsq.nc_ldin.bits.uop,
     io.replay.bits.uop,
     io.ldin.bits.uop,
   )
   val s0_wakeup_uop = ParallelPriorityMux(s0_wakeup_selector, s0_wakeup_format)
-  io.wakeup.valid := s0_fire && !s0_sel_src.isvec && !s0_sel_src.frm_mabuf && !s0_sel_src.isnc && (
+  io.wakeup.valid := s0_fire && !s0_sel_src.isvec && !s0_sel_src.frm_mabuf && (
     s0_src_valid_vec(super_rep_idx) || 
     s0_src_valid_vec(fast_rep_idx) || 
     s0_src_valid_vec(lsq_rep_idx) || 
     (s0_src_valid_vec(int_iss_idx) && !s0_sel_src.prf && 
     !s0_src_valid_vec(vec_iss_idx) && !s0_src_valid_vec(high_pf_idx))
-  ) || s0_mmio_fire
+  ) || s0_mmio_fire || s0_nc_fire
   io.wakeup.bits := s0_wakeup_uop
 
   // prefetch.i(Zicbop)
@@ -1248,7 +1250,7 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   val s2_data_fwded = s2_dcache_miss && (s2_full_fwd || s2_cache_tag_error)
 
   val s2_vp_match_fail = (io.lsq.forward.matchInvalid || io.sbuffer.matchInvalid) && s2_troublem
-  val s2_safe_wakeup = !s2_out.rep_info.need_rep && !s2_mmio && (!s2_in.nc || s2_nc_with_data) && !s2_mis_align && !s2_exception // don't need to replay and is not a mmio\misalign\nc no data
+  val s2_safe_wakeup = !s2_out.rep_info.need_rep && !s2_mmio && (!s2_in.nc || s2_nc_with_data) && !s2_mis_align && !s2_exception // don't need to replay and is not a mmio\misalign no data
   val s2_safe_writeback = s2_exception || s2_safe_wakeup || s2_vp_match_fail
 
   // ld-ld violation require
