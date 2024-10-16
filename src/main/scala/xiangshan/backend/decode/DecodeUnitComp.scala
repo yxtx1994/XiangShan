@@ -186,6 +186,8 @@ class DecodeUnitComp()(implicit p : Parameters) extends XSModule with DecodeUnit
     dst.firstUop := false.B
     dst.lastUop := false.B
     dst.vlsInstr := false.B
+    // when vm is 1, no need read v0 as mask
+    dst.srcType(3) := Mux(latchedInst.vpu.vm, SrcType.no, latchedInst.srcType(3))
   }
 
   csBundle(0).firstUop := true.B
