@@ -1286,7 +1286,6 @@ class LoadUnit(implicit p: Parameters) extends XSModule
 
   //
   s2_out                     := s2_in
-  s2_out.data                := 0.U // data will be generated in load s3
   s2_out.uop.fpWen           := s2_in.uop.fpWen
   s2_out.nc                  := s2_in.nc
   s2_out.mmio                := s2_mmio
@@ -1570,6 +1569,9 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   ))
   val s3_ld_data_frm_mmio = rdataHelper(s3_ld_raw_data_frm_mmio.uop, s3_picked_data_frm_mmio)
 
+  // data from xxx_with_data, e.g. nc_with_data
+  val s3_ld_data_frm_nc = s3_in.data
+
   // data from dcache hit
   val s3_ld_raw_data_frm_cache = Wire(new LoadDataFromDcacheBundle)
   s3_ld_raw_data_frm_cache.respDcacheData       := io.dcache.resp.bits.data
@@ -1639,7 +1641,11 @@ class LoadUnit(implicit p: Parameters) extends XSModule
   // io.lsq.uncache.ready := !s3_valid
   val s3_outexception = ExceptionNO.selectByFu(s3_out.bits.uop.exceptionVec, LduCfg).asUInt.orR && s3_vecActive
   io.ldout.bits        := s3_ld_wb_meta
-  io.ldout.bits.data   := Mux(s3_valid, s3_ld_data_frm_cache, s3_ld_data_frm_mmio)
+  io.ldout.bits.data   := Mux(
+    !s3_valid, s3_ld_data_frm_mmio,
+    Mux(s3_nc_with_data, s3_ld_data_frm_nc, s3_ld_data_frm_cache)
+  )
+
   io.ldout.valid       := (s3_mmio.valid ||
                           (s3_out.valid && !s3_vecout.isvec && !s3_mis_align && !s3_frm_mabuf))
   io.ldout.bits.uop.exceptionVec := ExceptionNO.selectByFu(s3_ld_wb_meta.uop.exceptionVec, LduCfg)
