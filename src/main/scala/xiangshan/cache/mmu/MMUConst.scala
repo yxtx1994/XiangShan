@@ -59,7 +59,7 @@ case class L2TLBParameters
   // l1
   l1nSets: Int = 8,
   l1nWays: Int = 4,
-  l1ReservedBits: Int = 10,
+  l1ReservedBits: Int = 3,
   l1Replacer: Option[String] = Some("setplru"),
   // l0
   l0nSets: Int = 32,
@@ -82,9 +82,9 @@ case class L2TLBParameters
   // prefetch
   enablePrefetch: Boolean = true,
   // ecc
-  ecc: Option[String] = Some("secded"),
+  ecc: Option[String] = Some("parity"),
   // enable ecc
-  enablePTWECC: Boolean = false
+  enablePTWECC: Boolean = true
 )
 
 trait HasTlbConst extends HasXSParameter {
