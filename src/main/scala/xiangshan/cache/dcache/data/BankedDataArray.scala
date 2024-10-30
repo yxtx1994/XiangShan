@@ -1012,7 +1012,7 @@ class BankedDataArray(implicit p: Parameters) extends AbstractBankedDataArray {
             ecc_bank.io.w.req.bits.apply(
               setIdx = cacheOpSetAddr,
               data = io.cacheOp.req.bits.write_data_ecc,
-              waymask = cacheOpWayMask
+              waymask = cacheOpWayMask(DCacheWays - 1, 0)
             )
             cacheOpShouldResp := true.B
           case None =>
