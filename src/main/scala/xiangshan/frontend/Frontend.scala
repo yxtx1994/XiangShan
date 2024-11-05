@@ -186,12 +186,23 @@ class FrontendInlinedImp(outer: FrontendInlined) extends LazyModuleImp(outer)
   val checkTargetIdx = Wire(Vec(DecodeWidth, UInt(log2Up(FtqSize).W)))
   val checkTarget    = Wire(Vec(DecodeWidth, UInt(VAddrBits.W)))
 
+  def ftqPtrInc(ptr: UInt): UInt = {
+    val result = WireInit(0.U)
+    when(ptr === (FtqSize - 1).U){
+      result := 0.U
+    }.otherwise{
+      result := ptr + 1.U
+    }
+    result
+  }
+
   for (i <- 0 until DecodeWidth) {
     checkTargetIdx(i) := ibuffer.io.out(i).bits.ftqPtr.value
     checkTarget(i) := Mux(
       ftq.io.toBackend.newest_entry_ptr.value === checkTargetIdx(i),
       ftq.io.toBackend.newest_entry_target,
-      checkPcMem(checkTargetIdx(i) + 1.U).startAddr
+      // checkPcMem(checkTargetIdx(i) + 1.U).startAddr
+      checkPcMem(ftqPtrInc(checkTargetIdx(i))).startAddr
     )
   }
 
@@ -236,7 +247,7 @@ class FrontendInlinedImp(outer: FrontendInlined) extends LazyModuleImp(outer)
       when(ibuffer.io.out(i).fire && ibuffer.io.out(i).bits.pd.isBr && ibuffer.io.out(i).bits.pred_taken) {
         when(ibuffer.io.out(i + 1).fire) {
           // not last br, check now
-          XSError(checkTargetIdx(i) + 1.U =/= checkTargetIdx(i + 1), "taken br should have consecutive ftqPtr\n")
+          XSError(ftqPtrInc(checkTargetIdx(i)) =/= checkTargetIdx(i + 1), "taken br should have consecutive ftqPtr\n")
         }.otherwise {
           // last br, record its info
           prevTakenValid  := true.B
@@ -252,7 +263,7 @@ class FrontendInlinedImp(outer: FrontendInlined) extends LazyModuleImp(outer)
       prevTakenFtqIdx := checkTargetIdx(DecodeWidth - 1)
     }
     when(prevTakenValid && ibuffer.io.out(0).fire) {
-      XSError(prevTakenFtqIdx + 1.U =/= checkTargetIdx(0), "taken br should have consecutive ftqPtr\n")
+      XSError(ftqPtrInc(prevTakenFtqIdx) =/= checkTargetIdx(0), "taken br should have consecutive ftqPtr\n")
       prevTakenValid := false.B
     }
     when(needFlush) {
