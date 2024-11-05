@@ -188,9 +188,9 @@ class FrontendInlinedImp(outer: FrontendInlined) extends LazyModuleImp(outer)
 
   def ftqPtrInc(ptr: UInt): UInt = {
     val result = WireInit(0.U)
-    when(ptr === (FtqSize - 1).U){
+    when(ptr === (FtqSize - 1).U) {
       result := 0.U
-    }.otherwise{
+    }.otherwise {
       result := ptr + 1.U
     }
     result
