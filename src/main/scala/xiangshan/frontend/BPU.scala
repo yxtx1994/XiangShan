@@ -367,7 +367,7 @@ class Predictor(implicit p: Parameters) extends XSModule with HasBPUConst with H
   // predictors.io.out.ready := io.bpu_to_ftq.resp.ready
 
   val redirect_req    = io.ftq_to_bpu.redirect
-  val do_redirect_dup = dup_seq(RegNextWithEnable(redirect_req))
+  val do_redirect_dup = dup_seq(redirect_req)
 
   // Pipeline logic
   s2_redirect_dup.map(_ := false.B)
