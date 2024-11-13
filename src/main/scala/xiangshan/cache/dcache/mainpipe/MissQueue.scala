@@ -185,6 +185,8 @@ class MissEntry(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheModule {
       val r = ValidIO(new MissEntryReadRefillBufferIO)
       val resp = Flipped(ValidIO(new RefillBufferToMissEntry))
     }
+    val unsafe = Input(Bool())
+    val safe_mshr_vec = Input(UInt(cfg.nMissEntries.W))
   })
 
   assert(!RegNext(io.primary_valid && !io.primary_ready))
@@ -502,7 +504,7 @@ class MissEntry(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheModule {
   io.mem_finish.valid := !s_grantack && w_grantfirst
   io.mem_finish.bits := grantack
 
-  io.replace_pipe_req.valid := !s_replace_req
+  io.replace_pipe_req.valid := !s_replace_req && (!io.unsafe || io.safe_mshr_vec(io.id))
   val replace = io.replace_pipe_req.bits
   replace := DontCare
   replace.miss := false.B
@@ -658,6 +660,8 @@ class MissQueue(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheModule wi
       val r = ValidIO(new MissEntryReadRefillBufferIO)
       val resp = Flipped(ValidIO(new RefillBufferToMissEntry))
     }
+    val unsafe = Input(Bool())
+    val safe_mshr_vec = Input(UInt(cfg.nMissEntries.W))
   })
   
   // 128KBL1: FIXME: provide vaddr for l2
@@ -761,6 +765,8 @@ class MissQueue(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheModule wi
 
       e.io.refillBufferReady := io.refillBufferReady
       e.io.refill_buffer.resp <> io.refill_buffer.resp
+      e.io.unsafe := io.unsafe
+      e.io.safe_mshr_vec := io.safe_mshr_vec
   }
 
   io.req.ready := accept

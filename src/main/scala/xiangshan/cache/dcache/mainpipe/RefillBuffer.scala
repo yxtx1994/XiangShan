@@ -50,6 +50,7 @@ class RefillBufferEntry(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheM
             val resp = ValidIO(new RefillBufferToMissEntry)
         }
         val consumed = Output(Bool())
+        val safe_mshr_vec = Output(UInt(cfg.nMissEntries.W))
     })
 
     val req = RegInit(0.U.asTypeOf(new RefillPipeReq))
@@ -63,6 +64,8 @@ class RefillBufferEntry(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheM
     when(refillBufferState =/= s_idle && io.sbuffer_data.valid && io.sbuffer_data.bits.mshr_id === req.miss_id) {
         s_recv_sbuffer := false.B
     }
+
+    io.safe_mshr_vec := Fill(cfg.nMissEntries, refillBufferState >= s_sleep) & UIntToOH(req.miss_id)
 
     io.mshr_read.resp.valid := refillBufferState === s_sleep && io.mshr_read.r.valid && io.mshr_read.r.bits.mshr_id === req.miss_id
     io.mshr_read.resp.bits.data := req.data.asUInt
@@ -201,6 +204,7 @@ class RefillBuffer(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheModule
             val r = Flipped(ValidIO(new MissEntryReadRefillBufferIO))
             val resp = ValidIO(new RefillBufferToMissEntry)
         }
+        val safe_mshr_vec = Output(UInt(cfg.nMissEntries.W))
     })
 
     io := DontCare
@@ -286,6 +290,8 @@ class RefillBuffer(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheModule
     }})
 
     assert(RegNext(PopCount(entries.map(_.io.mshr_read.resp.valid)) <= 1.U))
+
+    io.safe_mshr_vec := RegNext(entries.map(_.io.safe_mshr_vec).reduce(_ | _))
 
     // perf 
     val validCount = PopCount(VecInit(state_idle_vec.map(!_)))

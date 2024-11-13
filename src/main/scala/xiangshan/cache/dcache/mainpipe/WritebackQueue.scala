@@ -141,6 +141,7 @@ class WritebackEntry(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheModu
 
     val probe_ttob_check_req = Flipped(ValidIO(new ProbeToBCheckReq))
     val probe_ttob_check_resp = ValidIO(new ProbeToBCheckResp)
+    val entry_valid = Output(Bool())
   })
 
   val s_invalid :: s_sleep :: s_release_req :: s_release_resp :: Nil = Enum(4)
@@ -155,6 +156,8 @@ class WritebackEntry(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheModu
   val state_dup_0 = RegInit(s_invalid)
   val state_dup_1 = RegInit(s_invalid)
   val state_dup_for_mp = RegInit(VecInit(Seq.fill(nDupWbReady)(s_invalid)))
+
+  io.entry_valid := state =/= s_invalid
 
   // internal regs
   // remaining beats
@@ -547,6 +550,7 @@ class WritebackQueue(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheModu
 
     val miss_req = Flipped(Valid(UInt()))
     val block_miss_req = Output(Bool())
+    val valid_vec = Output(Vec(cfg.nReleaseEntries, Bool()))
   })
 
   require(cfg.nReleaseEntries > cfg.nMissEntries)
@@ -613,6 +617,7 @@ class WritebackQueue(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheModu
   io.req_ready_dup.zipWithIndex.foreach { case (rdy, i) =>
     rdy := Cat(entries.map(_.io.primary_ready_dup(i))).orR
   }
+  io.valid_vec := entries.map(_.io.entry_valid)
 
   io.probe_ttob_check_resp.valid := RegNext(io.probe_ttob_check_req.valid) // for debug only
   io.probe_ttob_check_resp.bits.toN := VecInit(entries.map(e => e.io.probe_ttob_check_resp.bits.toN)).asUInt.orR

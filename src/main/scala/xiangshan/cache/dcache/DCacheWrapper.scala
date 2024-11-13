@@ -786,6 +786,24 @@ class DCacheImp(outer: DCache) extends LazyModuleImp(outer) with HasDCacheParame
   io.error <> RegNext(Mux1H(errors.map(e => RegNext(e.valid) -> RegNext(e))))
 
   //----------------------------------------
+  // deadlock detect and resolve logic
+  val s_safe :: s_unsafe :: Nil = Enum(2)
+  val dcache_state = RegInit(s_safe)
+
+  val replace_max_req_cnt = RegNext(PopCount(mainPipe.io.replace_req_vec ++ wb.io.valid_vec))
+  when(replace_max_req_cnt >= (cfg.nReleaseEntries - 2).U) {
+    dcache_state := s_unsafe
+  }.otherwise {
+    dcache_state := s_safe
+  }
+
+  missQueue.io.unsafe := dcache_state === s_unsafe
+  missQueue.io.safe_mshr_vec := refillBuffer.io.safe_mshr_vec
+
+  XSPerfAccumulate("dcache_state_unsafe", dcache_state === s_unsafe)
+  XSPerfAccumulate("dcache_state_safe", dcache_state === s_safe)
+
+  //----------------------------------------
   // meta array
 
   // read / write coh meta

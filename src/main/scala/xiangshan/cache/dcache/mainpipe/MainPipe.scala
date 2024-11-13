@@ -166,6 +166,7 @@ class MainPipe(implicit p: Parameters) extends DCacheModule with HasPerfEvents {
 
     // ecc error
     val error = Output(new L1CacheErrorInfo())
+    val replace_req_vec = Output(Vec(3, Bool()))
   })
 
   // meta array is made of regs, so meta write or read should always be ready
@@ -1600,6 +1601,10 @@ class MainPipe(implicit p: Parameters) extends DCacheModule with HasPerfEvents {
   io.status.s3.valid := s3_valid && !s3_req_replace_dup(7)
   io.status.s3.bits.set := s3_idx_dup(5)
   io.status.s3.bits.way_en := s3_way_en
+
+  io.replace_req_vec(0) := s1_valid && s1_req.replace
+  io.replace_req_vec(1) := s2_valid && s2_req.replace
+  io.replace_req_vec(2) := s3_valid && s3_req.replace
 
   for ((s, i) <- io.status_dup.zipWithIndex) {
     s.s1.valid := s1_valid_dup_for_status(i)
