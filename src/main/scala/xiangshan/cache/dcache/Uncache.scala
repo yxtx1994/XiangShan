@@ -147,6 +147,7 @@ class UncacheImp(outer: Uncache)extends LazyModuleImp(outer)
   with HasXSParameter
   with HasPerfEvents
 {
+  private val INDEX_WIDTH = log2Up(UncacheBufferSize)
   println(s"Uncahe Buffer Size: $UncacheBufferSize entries")
   val io = IO(new UncacheIO)
 
@@ -182,7 +183,9 @@ class UncacheImp(outer: Uncache)extends LazyModuleImp(outer)
   
   def sizeMap[T <: Data](f: Int => T) = VecInit((0 until UncacheBufferSize).map(f))
 
-
+  val q0_entry = Wire(new UncacheEntry)
+  val q0_canSentIdx = Wire(UInt(INDEX_WIDTH.W))
+  val q0_canSent = Wire(Bool())
   /******************************************************************
    * uState for non-outstanding
    ******************************************************************/
@@ -213,9 +216,15 @@ class UncacheImp(outer: Uncache)extends LazyModuleImp(outer)
 
   /******************************************************************
    * Enter Buffer
+   *  Version 0 (better timing)
+   *    e0 judge: alloc/merge write vec
+   *    e1 alloc
+   * 
+   *  Version 1 (better performance)
+   *    solved in one cycle for achieving the original performance.
    ******************************************************************/
 
-  /** s0 judge: alloc/merge 
+  /**
     TODO lyq: how to merge
     1. same addr
     2. same cmd
@@ -224,28 +233,26 @@ class UncacheImp(outer: Uncache)extends LazyModuleImp(outer)
     1. load cann't be merged
     2. how to merge store and response precisely
   */
-  val e1_alloc = Wire(Vec(UncacheBufferSize, Bool()))
 
-  val e0_invalids = sizeMap(i => !states(i).isValid() && !e1_alloc(i))
+  val e0_invalids = sizeMap(i => !states(i).isValid())
   val e0_invalid_oh = VecInit(PriorityEncoderOH(e0_invalids)).asUInt
   val e0_fire = req.fire
+  val e0_req = req.bits
+
   req_ready := e0_invalid_oh.orR
   
-  /* s1 alloc */
-  val e1_valid = RegNext(e0_fire)
-  val e1_invalid_oh = RegEnable(e0_invalid_oh, e0_fire)
-  val e1_req = RegEnable(req.bits, e0_fire)
   for (i <- 0 until UncacheBufferSize) {
-    e1_alloc(i) := e1_valid && e1_invalid_oh(i)
-    when(e1_alloc(i)){
-      entries(i).set(e1_req)
+    val alloc = e0_fire && e0_invalid_oh(i)
+    when(alloc){
+      entries(i).set(e0_req)
       states(i).setValid(true.B)
       
-      // e1 should judge whether wait same block
+      // judge whether wait same block: e0 & q0
       val waitSameVec = sizeMap(j => 
-        e1_req.addr === entries(j).addr && states(j).isValid() && states(j).isInflight()
+        e0_req.addr === entries(j).addr && states(j).isValid() && states(j).isInflight()
       )
-      when (waitSameVec.reduce(_ || _)) {
+      val waitQ0 = e0_req.addr === q0_entry.addr && q0_canSent
+      when (waitSameVec.reduce(_ || _) || waitQ0) {
         states(i).setWaitSame(true.B)
       }
     }
@@ -254,57 +261,58 @@ class UncacheImp(outer: Uncache)extends LazyModuleImp(outer)
 
   /******************************************************************
    * Uncache Req
+   *  Version 0 (better timing)
+   *    q0: choose which one is sent
+   *    q0: sent
+   * 
+   *  Version 1 (better performance)
+   *    solved in one cycle for achieving the original performance.
+   *    NOTE: "Enter Buffer" & "Uncache Req" not a continuous pipeline,
+   *          because there is no guarantee that mem_aquire will be always ready.
    ******************************************************************/
-
-  /* q0: choose which one is sent */
-  val q1_canSentIdx = Wire(UInt())
-  val q1_canSent = Wire(Bool())
 
   val q0_canSentVec = sizeMap(i => 
     // (io.enableOutstanding || uState === s_refill_req) && // FIXME lyq: comment for debug
-    states(i).can2Uncache() && 
-    !(i.U === q1_canSentIdx && q1_canSent)
+    states(i).can2Uncache()
   )
-  val (q0_canSentIdx, q0_canSent) = PriorityEncoderWithFlag(q0_canSentVec)
+  val q0_res = PriorityEncoderWithFlag(q0_canSentVec)
+  q0_canSentIdx := q0_res._1
+  q0_canSent := q0_res._2
+  q0_entry := entries(q0_canSentIdx)
 
-  /* q1: sent  */
-  q1_canSent := RegNext(q0_canSent)
-  q1_canSentIdx := RegEnable(q0_canSentIdx, q0_canSent)
-  val q1_entry = entries(q1_canSentIdx)
-
-  val size = PopCount(q1_entry.mask)
+  val size = PopCount(q0_entry.mask)
   val (lgSize, legal) = PriorityMuxWithFlag(Seq(
     1.U -> 0.U,
     2.U -> 1.U,
     4.U -> 2.U,
     8.U -> 3.U
   ).map(m => (size===m._1) -> m._2))
-  assert(!(q1_canSent && !legal))
+  assert(!(q0_canSent && !legal))
 
-  val q1_load = edge.Get(
-    fromSource      = q1_canSentIdx,
-    toAddress       = q1_entry.addr,
+  val q0_load = edge.Get(
+    fromSource      = q0_canSentIdx,
+    toAddress       = q0_entry.addr,
     lgSize          = lgSize
   )._2
 
-  val q1_store = edge.Put(
-    fromSource      = q1_canSentIdx,
-    toAddress       = q1_entry.addr,
+  val q0_store = edge.Put(
+    fromSource      = q0_canSentIdx,
+    toAddress       = q0_entry.addr,
     lgSize          = lgSize,
-    data            = q1_entry.data,
-    mask            = q1_entry.mask
+    data            = q0_entry.data,
+    mask            = q0_entry.mask
   )._2
 
-  val q1_isStore = q1_entry.cmd === MemoryOpConstants.M_XWR
+  val q0_isStore = q0_entry.cmd === MemoryOpConstants.M_XWR
 
-  mem_acquire.valid := q1_canSent
-  mem_acquire.bits := Mux(q1_isStore, q1_store, q1_load)
+  mem_acquire.valid := q0_canSent
+  mem_acquire.bits := Mux(q0_isStore, q0_store, q0_load)
   when(mem_acquire.fire){
-    states(q1_canSentIdx).setInflight(true.B)
+    states(q0_canSentIdx).setInflight(true.B)
 
-    // q1 should judge whether wait same block
+    // q0 should judge whether wait same block
     (0 until UncacheBufferSize).map(j => 
-      when(q1_entry.addr === entries(j).addr && states(j).isValid() && !states(j).isWaitReturn()){
+      when(q0_entry.addr === entries(j).addr && states(j).isValid() && !states(j).isWaitReturn()){
         states(j).setWaitSame(true.B)
       }
     )
