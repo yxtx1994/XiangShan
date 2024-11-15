@@ -294,8 +294,8 @@ class FTBEntryGen(implicit p: Parameters) extends XSModule with HasBackendRedire
     init_entry.tailSlot.setLowerStatByTarget(io.start_addr, Mux(cfi_is_jalr, io.target, pd.jalTarget), isShare = false)
   }
 
-  val pc_add_24 = io.start_addr(carryPos - 1,0) +& 24.U
-  val jmpPft = getLower(io.start_addr) +& pd.jmpOffset +& Mux(pd.rvcMask(pd.jmpOffset), 1.U, 2.U)
+  val pc_add_24 = io.start_addr(carryPos - 1, 0) +& 24.U
+  val jmpPft    = getLower(io.start_addr) +& pd.jmpOffset +& Mux(pd.rvcMask(pd.jmpOffset), 1.U, 2.U)
   init_entry.pftAddr := Mux(entry_has_jmp && !last_jmp_rvi, jmpPft, getLower(pc_add_24))
   init_entry.carry   := Mux(entry_has_jmp && !last_jmp_rvi, jmpPft(carryPos - instOffsetBits), pc_add_24(carryPos))
   init_entry.isJalr  := new_jmp_is_jalr
