@@ -117,7 +117,7 @@ class FauFTB(implicit p: Parameters) extends BasePredictor with FauFTBParams {
   io.fauftb_entry_hit_out := s1_hit && fauftb_enable
 
   // Illegal check for FTB entry reading
-  val s1_pc_startLower = Cat(0.U(1.W), s1_pc_dup(0)(instOffsetBits + log2Ceil(PredictWidth) - 1, instOffsetBits))
+  val s1_pc_startLower = Cat(0.U(1.W), s1_pc_dup(0)(instOffsetBits + log2Up(PredictWidth) - 1, instOffsetBits))
   val uftb_entry_endLowerwithCarry = Cat(s1_hit_fauftbentry.carry, s1_hit_fauftbentry.pftAddr)
   val fallThroughErr               = s1_pc_startLower + PredictWidth.U >= uftb_entry_endLowerwithCarry
   when(io.s1_fire(0) && s1_hit) {

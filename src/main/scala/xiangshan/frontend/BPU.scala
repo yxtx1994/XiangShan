@@ -108,7 +108,7 @@ trait BPUUtils extends HasXSParameter {
   }
 
   def getFallThroughAddr(start: UInt, carry: Bool, pft: UInt) = {
-    val higher = start.head(VAddrBits - log2Ceil(PredictWidth) - instOffsetBits)
+    val higher = start.head(VAddrBits - log2Up(PredictWidth) - instOffsetBits)
     Cat(Mux(carry, higher + 1.U, higher), pft, 0.U(instOffsetBits.W))
   }
 
@@ -593,7 +593,7 @@ class Predictor(implicit p: Parameters) extends XSModule with HasBPUConst with H
     val lastBrPosOH = Vec(numDup, Vec(numBr + 1, Bool()))
     val taken       = Vec(numDup, Bool())
     val takenMask   = Vec(numDup, Vec(numBr, Bool()))
-    val cfiIndex    = Vec(numDup, UInt(log2Ceil(PredictWidth).W))
+    val cfiIndex    = Vec(numDup, UInt(log2Up(PredictWidth).W))
   }
 
   def preds_needs_redirect_vec_dup(x: PreviousPredInfo, y: BranchPredictionBundle) = {

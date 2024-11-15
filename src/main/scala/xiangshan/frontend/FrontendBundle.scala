@@ -27,7 +27,7 @@ import xiangshan.frontend.icache._
 
 class FrontendTopDownBundle(implicit p: Parameters) extends XSBundle {
   val reasons    = Vec(TopDownCounters.NumStallReasons.id, Bool())
-  val stallWidth = UInt(log2Ceil(PredictWidth).W)
+  val stallWidth = UInt(log2Up(PredictWidth).W)
 }
 
 class FetchRequestBundle(implicit p: Parameters) extends XSBundle with HasICacheParameters {
@@ -38,7 +38,7 @@ class FetchRequestBundle(implicit p: Parameters) extends XSBundle with HasICache
   val nextStartAddr = UInt(VAddrBits.W)
   // slow path
   val ftqIdx    = new FtqPtr
-  val ftqOffset = ValidUndirectioned(UInt(log2Ceil(PredictWidth).W))
+  val ftqOffset = ValidUndirectioned(UInt(log2Up(PredictWidth).W))
 
   val topdown_info = new FrontendTopDownBundle
 
@@ -47,16 +47,7 @@ class FetchRequestBundle(implicit p: Parameters) extends XSBundle with HasICache
   def fromFtqPcBundle(b: Ftq_RF_Components) = {
     this.startAddr     := b.startAddr
     this.nextlineStart := b.nextLineAddr
-    // when (b.fallThruError) {
-    //   val nextBlockHigherTemp = Mux(startAddr(log2Ceil(PredictWidth)+instOffsetBits), b.nextLineAddr, b.startAddr)
-    //   val nextBlockHigher = nextBlockHigherTemp(VAddrBits-1, log2Ceil(PredictWidth)+instOffsetBits+1)
-    //   this.nextStartAddr :=
-    //     Cat(nextBlockHigher,
-    //       startAddr(log2Ceil(PredictWidth)+instOffsetBits) ^ 1.U(1.W),
-    //       startAddr(log2Ceil(PredictWidth)+instOffsetBits-1, instOffsetBits),
-    //       0.U(instOffsetBits.W)
-    //     )
-    // }
+
     this
   }
   override def toPrintable: Printable =
@@ -96,9 +87,9 @@ class PredecodeWritebackBundle(implicit p: Parameters) extends XSBundle {
   val pc         = Vec(PredictWidth, UInt(VAddrBits.W))
   val pd         = Vec(PredictWidth, new PreDecodeInfo) // TODO: redefine Predecode
   val ftqIdx     = new FtqPtr
-  val ftqOffset  = UInt(log2Ceil(PredictWidth).W)
-  val misOffset  = ValidUndirectioned(UInt(log2Ceil(PredictWidth).W))
-  val cfiOffset  = ValidUndirectioned(UInt(log2Ceil(PredictWidth).W))
+  val ftqOffset  = UInt(log2Up(PredictWidth).W)
+  val misOffset  = ValidUndirectioned(UInt(log2Up(PredictWidth).W))
+  val cfiOffset  = ValidUndirectioned(UInt(log2Up(PredictWidth).W))
   val target     = UInt(VAddrBits.W)
   val jalTarget  = UInt(VAddrBits.W)
   val instrRange = Vec(PredictWidth, Bool())
@@ -244,7 +235,7 @@ class FetchToIBuffer(implicit p: Parameters) extends XSBundle {
   val enqEnable            = UInt(PredictWidth.W)
   val pd                   = Vec(PredictWidth, new PreDecodeInfo)
   val foldpc               = Vec(PredictWidth, UInt(MemPredPCWidth.W))
-  val ftqOffset            = Vec(PredictWidth, ValidUndirectioned(UInt(log2Ceil(PredictWidth).W)))
+  val ftqOffset            = Vec(PredictWidth, ValidUndirectioned(UInt(log2Up(PredictWidth).W)))
   val exceptionFromBackend = Vec(PredictWidth, Bool())
   val exceptionType        = Vec(PredictWidth, UInt(ExceptionType.width.W))
   val crossPageIPFFix      = Vec(PredictWidth, Bool())
@@ -544,7 +535,7 @@ class FullBranchPrediction(val isNotS3: Boolean)(implicit p: Parameters) extends
 
   val targets         = Vec(totalSlot, UInt(VAddrBits.W))
   val jalr_target     = UInt(VAddrBits.W) // special path for indirect predictors
-  val offsets         = Vec(totalSlot, UInt(log2Ceil(PredictWidth).W))
+  val offsets         = Vec(totalSlot, UInt(log2Up(PredictWidth).W))
   val fallThroughAddr = UInt(VAddrBits.W)
   val fallThroughErr  = Bool()
   val multiHit        = Bool()
@@ -631,12 +622,12 @@ class FullBranchPrediction(val isNotS3: Boolean)(implicit p: Parameters) extends
   def hit_taken_on_jalr = hit_taken_on_jmp && is_jalr
 
   def cfiIndex = {
-    val cfiIndex = Wire(ValidUndirectioned(UInt(log2Ceil(PredictWidth).W)))
+    val cfiIndex = Wire(ValidUndirectioned(UInt(log2Up(PredictWidth).W)))
     cfiIndex.valid := real_slot_taken_mask().asUInt.orR
     // when no takens, set cfiIndex to PredictWidth-1
     cfiIndex.bits :=
       ParallelPriorityMux(real_slot_taken_mask(), offsets) |
-        Fill(log2Ceil(PredictWidth), (!real_slot_taken_mask().asUInt.orR).asUInt)
+        Fill(log2Up(PredictWidth), (!real_slot_taken_mask().asUInt.orR).asUInt)
     cfiIndex
   }
 
@@ -660,7 +651,7 @@ class FullBranchPrediction(val isNotS3: Boolean)(implicit p: Parameters) extends
     is_br_sharing        := entry.tailSlot.valid && entry.tailSlot.sharing
     predCycle.map(_ := GTimer())
 
-    val startLower        = Cat(0.U(1.W), pc(instOffsetBits + log2Ceil(PredictWidth) - 1, instOffsetBits))
+    val startLower        = Cat(0.U(1.W), pc(instOffsetBits + log2Up(PredictWidth) - 1, instOffsetBits))
     val endLowerwithCarry = Cat(entry.carry, entry.pftAddr)
     fallThroughErr  := startLower >= endLowerwithCarry || endLowerwithCarry > (startLower + PredictWidth.U)
     fallThroughAddr := Mux(fallThroughErr, pc + (FetchWidth * 4).U, entry.getFallThrough(pc, last_stage_entry))
@@ -751,7 +742,7 @@ class BranchPredictionUpdate(implicit p: Parameters) extends XSBundle with HasBP
   val spec_info = new SpeculativeInfo
   val ftb_entry = new FTBEntry()
 
-  val cfi_idx           = ValidUndirectioned(UInt(log2Ceil(PredictWidth).W))
+  val cfi_idx           = ValidUndirectioned(UInt(log2Up(PredictWidth).W))
   val br_taken_mask     = Vec(numBr, Bool())
   val br_committed      = Vec(numBr, Bool()) // High only when br valid && br committed
   val jmp_taken         = Bool()

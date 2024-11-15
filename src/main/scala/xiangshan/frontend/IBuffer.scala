@@ -55,7 +55,7 @@ class IBufEntry(implicit p: Parameters) extends XSBundle {
   val pd                   = new PreDecodeInfo
   val pred_taken           = Bool()
   val ftqPtr               = new FtqPtr
-  val ftqOffset            = UInt(log2Ceil(PredictWidth).W)
+  val ftqOffset            = UInt(log2Up(PredictWidth).W)
   val exceptionType        = IBufferExceptionType()
   val exceptionFromBackend = Bool()
   val triggered            = TriggerAction()
