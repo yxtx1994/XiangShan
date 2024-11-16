@@ -42,7 +42,7 @@ class CompressUnit(implicit p: Parameters) extends XSModule{
       else Seq.fill(RenameWidth)(0).patch(idx - cntL(idx), Seq.fill(size)(1), size)
     }
 
-    println("[Rename.Compress]" +
+    logger.trace(
       " i: "        + keyCandidate +
       " key: "      + key.tail.dropRight(1) +
       " needRobs: " + needRobs +
