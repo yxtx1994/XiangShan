@@ -1004,7 +1004,7 @@ class BankedDataArray(implicit p: Parameters) extends AbstractBankedDataArray {
       when(io.cacheOp_req_dup(dupIdx).valid && CacheInstrucion.isWriteData(io.cacheOp_req_bits_opCode_dup(dupIdx))) {
         val data_bank = data_banks(divIdx)(bankIdx)
         data_bank.io.w.en := cacheOpDivAddr === divIdx.U
-        data_bank.io.w.way_en := cacheOpWayMask
+        data_bank.io.w.way_en := cacheOpWayMask(3, 0)
         data_bank.io.w.addr := cacheOpSetAddr
         data_bank.io.w.data := io.cacheOp.req.bits.write_data_vec(bankIdx)
         cacheOpShouldResp := true.B
@@ -1021,7 +1021,7 @@ class BankedDataArray(implicit p: Parameters) extends AbstractBankedDataArray {
             ecc_bank.io.w.req.bits.apply(
               setIdx = cacheOpSetAddr,
               data = io.cacheOp.req.bits.write_data_ecc,
-              waymask = cacheOpWayMask
+              waymask = cacheOpWayMask(3, 0)
             )
             cacheOpShouldResp := true.B
           case None =>
