@@ -270,13 +270,11 @@ class UncacheImp(outer: Uncache)extends LazyModuleImp(outer)
       - st->ld forward
       - st->st block
   */
-  val e0_existSameVec = sizeMap(j => 
-e0_req.addr === entries(j).addr && states(j).isValid()
-  )
-  val e0_invalidVec = sizeMap(i => !states(i).isValid() && !e0_existSameVec(i))
+  val e0_existSame = sizeMap(j => e0_req.addr === entries(j).addr && states(j).isValid()).asUInt.orR
+  val e0_invalidVec = sizeMap(i => !states(i).isValid())
   val (e0_allocIdx, e0_canAlloc) = PriorityEncoderWithFlag(e0_invalidVec)
-  val e0_alloc = e0_canAlloc && e0_fire
-  req_ready := e0_invalidVec.asUInt.orR && !do_uarch_drain
+  val e0_alloc = e0_canAlloc && !e0_existSame && e0_fire
+  req_ready := e0_invalidVec.asUInt.orR && !e0_existSame && !do_uarch_drain
   
   when (e0_alloc) {
     entries(e0_allocIdx).set(e0_req)
