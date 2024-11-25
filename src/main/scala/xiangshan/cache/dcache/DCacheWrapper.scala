@@ -22,7 +22,7 @@ import chisel3.util._
 import coupledL2.VaddrField
 import coupledL2.IsKeywordField
 import coupledL2.IsKeywordKey
-import freechips.rocketchip.diplomacy.{IdRange, LazyModule, LazyModuleImp, TransferSizes}
+import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.tilelink._
 import freechips.rocketchip.util.BundleFieldBase
 import huancun.{AliasField, PrefetchField}
@@ -57,7 +57,8 @@ case class DCacheParameters
   alwaysReleaseData: Boolean = false,
   isKeywordBitsOpt: Option[Boolean] = Some(true),
   enableDataEcc: Boolean = false,
-  enableTagEcc: Boolean = false
+  enableTagEcc: Boolean = false,
+  cacheCtrlAddressOpt: Option[AddressSet] = None,
 ) extends L1CacheParameters {
   // if sets * blockBytes > 4KB(page size),
   // cache alias will happen,
@@ -163,6 +164,12 @@ trait HasDCacheParameters extends HasL1CacheParameters with HasL1PrefetchSourceP
   val DCacheAboveIndexOffset = DCacheSetOffset + log2Up(DCacheSets)
   val DCacheTagOffset = DCacheAboveIndexOffset min DCacheSameVPAddrLength
   val DCacheLineOffset = DCacheSetOffset
+
+  // L1 DCache controller
+  val cacheCtrlParamsOpt  = OptionWrapper(
+                              cacheParams.cacheCtrlAddressOpt.nonEmpty,
+                              L1CacheCtrlParams(cacheParams.cacheCtrlAddressOpt.get)
+                            )
 
   // uncache
   val uncacheIdxBits = log2Up(VirtualLoadQueueMaxStoreQueueSize + 1)
@@ -896,6 +903,7 @@ class DCache()(implicit p: Parameters) extends LazyModule with HasDCacheParamete
   )
 
   val clientNode = TLClientNode(Seq(clientParameters))
+  val cacheCtrlOpt = cacheCtrlParamsOpt.map(params => LazyModule(new CtrlUnit(params)))
 
   lazy val module = new DCacheImp(this)
 }
@@ -987,6 +995,29 @@ class DCacheImp(outer: DCache) extends LazyModuleImp(outer) with HasDCacheParame
   mainPipe.io.replace_block := missQueue.io.replace_block
   mainPipe.io.sms_agt_evict_req <> io.sms_agt_evict_req
   io.memSetPattenDetected := missQueue.io.memSetPattenDetected
+
+  outer.cacheCtrlOpt.map(mod => mod.module.io_pseudoError.foreach { case x => x.ready := false.B })
+  mainPipe.io.pseudo_error.valid := false.B
+  mainPipe.io.pseudo_error.bits  := DontCare
+  ldu.map(mod => { mod.io.pseudo_error.valid := false.B; mod.io.pseudo_error.bits := DontCare; })
+  bankedDataArray.io.pseudo_error.valid := false.B
+  bankedDataArray.io.pseudo_error.bits  := DontCare
+
+  // pseudo tag ecc error
+  if (outer.cacheCtrlOpt.nonEmpty && EnableTagEcc) {
+    val ctrlUnit = outer.cacheCtrlOpt.head.module
+    ldu.map(mod => mod.io.pseudo_error <> ctrlUnit.io_pseudoError(0))
+    mainPipe.io.pseudo_error <> ctrlUnit.io_pseudoError(0)
+    ctrlUnit.io_pseudoError(0).ready := (mainPipe.io.pseudo_error.ready || ldu.map(_.io.pseudo_error.ready).reduce(_|_))
+  }
+
+  // pseudo data ecc error
+  if (outer.cacheCtrlOpt.nonEmpty && EnableDataEcc) {
+    val ctrlUnit = outer.cacheCtrlOpt.head.module
+    bankedDataArray.io.pseudo_error <> ctrlUnit.io_pseudoError(1)
+    ctrlUnit.io_pseudoError(1).ready := bankedDataArray.io.pseudo_error.ready &&
+                                        (mainPipe.io.pseudo_error.ready || ldu.map(_.io.pseudo_error.ready).reduce(_|_))
+  }
 
   val errors = ldu.map(_.io.error) ++ // load error
     Seq(mainPipe.io.error) // store / misc error
@@ -1114,7 +1145,7 @@ class DCacheImp(outer: DCache) extends LazyModuleImp(outer) with HasDCacheParame
     // refillPipe.io.access_flag_write
   )
   access_flag_write_ports.zip(accessArray.io.write).foreach { case (p, w) => w <> p }
-  
+
   //----------------------------------------
   // tag array
   if(StorePrefetchL1Enabled) {
@@ -1214,12 +1245,14 @@ class DCacheImp(outer: DCache) extends LazyModuleImp(outer) with HasDCacheParame
   bankedDataArray.io.readline <> mainPipe.io.data_readline
   bankedDataArray.io.readline_intend := mainPipe.io.data_read_intend
   mainPipe.io.readline_error_delayed := bankedDataArray.io.readline_error_delayed
+  mainPipe.io.readline_pseudo_error_delayed := bankedDataArray.io.readline_pseudo_error_delayed
   mainPipe.io.data_resp := bankedDataArray.io.readline_resp
 
   (0 until LoadPipelineWidth).map(i => {
     bankedDataArray.io.read(i) <> ldu(i).io.banked_data_read
     bankedDataArray.io.is128Req(i) <> ldu(i).io.is128Req
     bankedDataArray.io.read_error_delayed(i) <> ldu(i).io.read_error_delayed
+    bankedDataArray.io.read_pseudo_error_delayed(i) <> ldu(i).io.read_pseudo_error_delayed
 
     ldu(i).io.banked_data_resp := bankedDataArray.io.read_resp(i)
 
@@ -1416,7 +1449,7 @@ class DCacheImp(outer: DCache) extends LazyModuleImp(outer) with HasDCacheParame
 
   wb.io.miss_req_conflict_check(3) := mainPipe.io.wbq_conflict_check
   mainPipe.io.wbq_block_miss_req   := wb.io.block_miss_req(3)
-  
+
   wb.io.miss_req_conflict_check(4).valid := missReqArb.io.out.valid
   wb.io.miss_req_conflict_check(4).bits  := missReqArb.io.out.bits.addr
   missQueue.io.wbq_block_miss_req := wb.io.block_miss_req(4)
@@ -1480,8 +1513,8 @@ class DCacheImp(outer: DCache) extends LazyModuleImp(outer) with HasDCacheParame
   val mpStatus = mainPipe.io.status
   mainPipe.io.refill_req <> missQueue.io.main_pipe_req
 
-  mainPipe.io.data_write_ready_dup := VecInit(Seq.fill(nDupDataWriteReady)(true.B)) 
-  mainPipe.io.tag_write_ready_dup := VecInit(Seq.fill(nDupDataWriteReady)(true.B)) 
+  mainPipe.io.data_write_ready_dup := VecInit(Seq.fill(nDupDataWriteReady)(true.B))
+  mainPipe.io.tag_write_ready_dup := VecInit(Seq.fill(nDupDataWriteReady)(true.B))
   mainPipe.io.wb_ready_dup := wb.io.req_ready_dup
 
   //----------------------------------------
@@ -1683,14 +1716,25 @@ class AMOHelper() extends ExtModule {
   val rdata  = IO(Output(UInt(64.W)))
 }
 
-class DCacheWrapper()(implicit p: Parameters) extends LazyModule with HasXSParameter {
+class DCacheWrapper()(implicit p: Parameters) extends LazyModule
+  with HasXSParameter
+  with HasDCacheParameters
+{
   override def shouldBeInlined: Boolean = false
 
   val useDcache = coreParams.dcacheParametersOpt.nonEmpty
   val clientNode = if (useDcache) TLIdentityNode() else null
+  val uncacheNode = OptionWrapper(cacheCtrlParamsOpt.isDefined, TLIdentityNode())
   val dcache = if (useDcache) LazyModule(new DCache()) else null
   if (useDcache) {
     clientNode := dcache.clientNode
+  }
+
+  require(
+    (uncacheNode.isDefined && dcache.cacheCtrlOpt.isDefined) ||
+    (!uncacheNode.isDefined && !dcache.cacheCtrlOpt.isDefined), "uncacheNode and ctrlUnitOpt are not match!")
+  if (uncacheNode.isDefined && dcache.cacheCtrlOpt.isDefined) {
+    dcache.cacheCtrlOpt.get.node := uncacheNode.get
   }
 
   class DCacheWrapperImp(wrapper: LazyModule) extends LazyModuleImp(wrapper) with HasPerfEvents {

@@ -24,6 +24,7 @@ import utility._
 import system._
 import org.chipsalliance.cde.config._
 import freechips.rocketchip.tile.{BusErrorUnit, BusErrorUnitParams, XLen}
+import freechips.rocketchip.diplomacy._
 import xiangshan.frontend.icache.ICacheParameters
 import freechips.rocketchip.devices.debug._
 import freechips.rocketchip.tile.{MaxHartIdBits, XLen}
@@ -35,7 +36,7 @@ import openLLC.{OpenLLCParam}
 import xiangshan._
 import xiangshan.backend.dispatch.DispatchParameters
 import xiangshan.backend.regfile.{IntPregParams, VfPregParams}
-import xiangshan.cache.DCacheParameters
+import xiangshan.cache.{DCacheParameters, L1CacheCtrlParams}
 import xiangshan.cache.mmu.{L2TLBParameters, TLBParameters}
 import device.{EnableJtag, XSDebugModuleParams}
 import huancun._
@@ -128,6 +129,7 @@ class MinimalConfig(n: Int = 1) extends Config(
           nProbeEntries = 4,
           nReleaseEntries = 8,
           nMaxPrefetchEntry = 2,
+          cacheCtrlAddressOpt = Some(AddressSet(0x38022000, 0x7f))
         )),
         // ============ BPU ===============
         EnableLoop = false,
@@ -254,7 +256,8 @@ class MinimalSimConfig(n: Int = 1) extends Config(
 class WithNKBL1D(n: Int, ways: Int = 8) extends Config((site, here, up) => {
   case XSTileKey =>
     val sets = n * 1024 / ways / 64
-    up(XSTileKey).map(_.copy(
+    up(XSTileKey).map(
+      p => p.copy(
       dcacheParametersOpt = Some(DCacheParameters(
         nSets = sets,
         nWays = ways,
@@ -265,6 +268,9 @@ class WithNKBL1D(n: Int, ways: Int = 8) extends Config((site, here, up) => {
         nProbeEntries = 8,
         nReleaseEntries = 18,
         nMaxPrefetchEntry = 6,
+        enableTagEcc = true,
+        enableDataEcc = true,
+        cacheCtrlAddressOpt = Some(AddressSet(0x38022000, 0x7f))
       ))
     ))
 })
@@ -455,23 +461,6 @@ class FpgaDefaultConfig(n: Int = 1) extends Config(
     ++ new BaseConfig(n)).alter((site, here, up) => {
     case DebugOptionsKey => up(DebugOptionsKey).copy(
       AlwaysBasicDiff = false,
-      AlwaysBasicDB = false
-    )
-    case SoCParamsKey => up(SoCParamsKey).copy(
-      L3CacheParamsOpt = Some(up(SoCParamsKey).L3CacheParamsOpt.get.copy(
-        sramClkDivBy2 = false,
-      )),
-    )
-  })
-)
-
-class FpgaDiffDefaultConfig(n: Int = 1) extends Config(
-  (new WithNKBL3(3 * 1024, inclusive = false, banks = 1, ways = 6)
-    ++ new WithNKBL2(2 * 512, inclusive = true, banks = 4)
-    ++ new WithNKBL1D(64, ways = 8)
-    ++ new BaseConfig(n)).alter((site, here, up) => {
-    case DebugOptionsKey => up(DebugOptionsKey).copy(
-      AlwaysBasicDiff = true,
       AlwaysBasicDB = false
     )
     case SoCParamsKey => up(SoCParamsKey).copy(
