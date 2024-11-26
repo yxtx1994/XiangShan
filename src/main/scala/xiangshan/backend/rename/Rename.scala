@@ -354,7 +354,7 @@ class Rename(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHe
     uops(i).dirtyFs := (compressMasksVec(i) & Cat(io.in.map(_.bits.fpWen).reverse)).orR
     // vector instructions' uopSplitType cannot be UopSplitType.SCA_SIM
     uops(i).dirtyVs := (compressMasksVec(i) & Cat(io.in.map{ input =>
-      input.bits.uopSplitType =/= UopSplitType.SCA_SIM && !UopSplitType.isAmocas(input.bits.uopSplitType)
+      input.bits.uopSplitType =/= UopSplitType.SCA_SIM && !UopSplitType.isAMOCAS(input.bits.uopSplitType)
     }.reverse)).orR
     // psrc0,psrc1,psrc2 don't require v0ReadPorts because their srcType can distinguish whether they are V0 or not
     uops(i).psrc(0) := Mux1H(uops(i).srcType(0)(2, 0), Seq(io.intReadPorts(i)(0), io.fpReadPorts(i)(0), io.vecReadPorts(i)(0)))
