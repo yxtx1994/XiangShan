@@ -201,9 +201,9 @@ class UncacheImp(outer: Uncache)extends LazyModuleImp(outer)
   def sizeMap[T <: Data](f: Int => T) = VecInit((0 until UncacheBufferSize).map(f))
   def isStore(e: UncacheEntry): Bool = e.cmd === MemoryOpConstants.M_XWR
   def isStore(x: UInt): Bool = x === MemoryOpConstants.M_XWR
-  def addrMatch(x: UncacheEntry, y: UncacheWordReq): Bool = x.addr === y.addr && (x.mask & y.mask).orR
-  def addrMatch(x: UncacheWordReq, y: UncacheEntry): Bool = x.addr === y.addr && (x.mask & y.mask).orR
-  def addrMatch(x: UncacheEntry, y: UncacheEntry): Bool = x.addr === y.addr && (x.mask & y.mask).orR
+  def addrMatch(x: UncacheEntry, y: UncacheWordReq): Bool = x.addr(PAddrBits - 1, 3) === y.addr(PAddrBits - 1, 3) && (x.mask & y.mask).orR
+  def addrMatch(x: UncacheWordReq, y: UncacheEntry): Bool = x.addr(PAddrBits - 1, 3) === y.addr(PAddrBits - 1, 3) && (x.mask & y.mask).orR
+  def addrMatch(x: UncacheEntry, y: UncacheEntry): Bool = x.addr(PAddrBits - 1, 3) === y.addr(PAddrBits - 1, 3) && (x.mask & y.mask).orR
 
   // drain buffer
   val empty = Wire(Bool())
